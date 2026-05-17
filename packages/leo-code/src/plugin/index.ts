@@ -54,10 +54,13 @@ export interface Interface {
   readonly init: () => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Plugin") {}
+import { kcragPlugin } from "@/context/plugin"
+
+export class Service extends Context.Service<Service, Interface>()("@leo-code/Plugin") {}
 
 // Built-in plugins that are directly imported (not installed from npm)
 const INTERNAL_PLUGINS: PluginInstance[] = [
+  kcragPlugin,
   CodexAuthPlugin,
   CopilotAuthPlugin,
   GitlabAuthPlugin,
