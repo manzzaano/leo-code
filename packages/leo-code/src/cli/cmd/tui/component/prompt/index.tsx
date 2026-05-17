@@ -60,7 +60,7 @@ import { useArgs } from "@tui/context/args"
 import { Flag } from "@leo-code/core/flag/flag"
 import { type WorkspaceStatus } from "../workspace-label"
 import { useCommandPalette } from "../../context/command-palette"
-import { useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
+import { useBindings, useCommandShortcut, useLeaderActive, useLeoCodeKeymap } from "../../keymap"
 import { useTuiConfig } from "../../context/tui-config"
 
 export type PromptProps = {
@@ -153,7 +153,7 @@ export function Prompt(props: PromptProps) {
   const history = usePromptHistory()
   const stash = usePromptStash()
   const command = useCommandPalette()
-  const keymap = useOpencodeKeymap()
+  const keymap = useLeoCodeKeymap()
   const agentShortcut = useCommandShortcut("agent.cycle")
   const paletteShortcut = useCommandShortcut("command.palette.show")
   const renderer = useRenderer()

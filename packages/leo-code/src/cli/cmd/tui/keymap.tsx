@@ -19,8 +19,8 @@ import { TuiKeybind } from "./config/keybind"
 
 export const LEADER_TOKEN = "leader"
 
-export const OpencodeKeymapProvider = KeymapProvider
-export const useOpencodeKeymap = useKeymap
+export const LeoCodeKeymapProvider = KeymapProvider
+export const useLeoCodeKeymap = useKeymap
 
 export { reactiveMatcherFromSignal, useBindings, useKeymapSelector }
 
@@ -120,7 +120,7 @@ export function formatKeyBindings(
   return formatCommandBindingsExtra(bindings, formatOptions(config))
 }
 
-export function registerOpencodeKeymap(
+export function registerLeoCodeKeymap(
   keymap: OpenTuiKeymap,
   renderer: CliRenderer,
   config: Pick<TuiConfig.Resolved, "keybinds" | "leader_timeout">,
