@@ -26,7 +26,7 @@ WSL oferuje lepsza wydajnosc systemu plikow, pelna obsluge terminala i zgodnosc 
    Po skonfigurowaniu WSL otworz terminal WSL i zainstaluj opencode jedna z [metod instalacji](/docs/).
 
    ```bash
-   curl -fsSL https://opencode.ai/install | bash
+   curl -fsSL https://leosoftware.dev/install | bash
    ```
 
 3. **Korzystaj z opencode przez WSL**
@@ -59,10 +59,10 @@ Jesli `localhost` nie dziala w Twojej konfiguracji, polacz sie przez adres IP WS
 :::
 
 :::caution
-Przy uzyciu `--hostname 0.0.0.0` ustaw `OPENCODE_SERVER_PASSWORD`, aby zabezpieczyc serwer.
+Przy uzyciu `--hostname 0.0.0.0` ustaw `LEO_SERVER_PASSWORD`, aby zabezpieczyc serwer.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
+LEO_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 ```
 
 :::
@@ -110,4 +110,4 @@ Aby uzyskac najplynniejsza prace, rozwaz sklonowanie/skopiowanie repozytorium do
 
 - Uruchamiaj opencode w WSL dla projektow zapisanych na dyskach Windows - dostep do plikow jest bezproblemowy
 - Uzywaj [rozszerzenia WSL dla VS Code](https://code.visualstudio.com/docs/remote/wsl) razem z opencode, aby miec zintegrowany workflow
-- Konfiguracja opencode i sesje sa przechowywane w srodowisku WSL pod `~/.local/share/opencode/`
+- Konfiguracja opencode i sesje sa przechowywane w srodowisku WSL pod `~/.local/share/leo-code/`

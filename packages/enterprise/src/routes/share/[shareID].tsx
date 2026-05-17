@@ -1,31 +1,31 @@
-import { Message, Model, Part, Session, SessionStatus, SnapshotFileDiff, UserMessage } from "@opencode-ai/sdk/v2"
-import { SessionTurn } from "@opencode-ai/ui/session-turn"
-import { SessionReview } from "@opencode-ai/ui/session-review"
-import { DataProvider } from "@opencode-ai/ui/context"
-import { FileComponentProvider } from "@opencode-ai/ui/context/file"
-import { WorkerPoolProvider } from "@opencode-ai/ui/context/worker-pool"
+import { Message, Model, Part, Session, SessionStatus, SnapshotFileDiff, UserMessage } from "@leo-code/sdk/v2"
+import { SessionTurn } from "@leo-code/ui/session-turn"
+import { SessionReview } from "@leo-code/ui/session-review"
+import { DataProvider } from "@leo-code/ui/context"
+import { FileComponentProvider } from "@leo-code/ui/context/file"
+import { WorkerPoolProvider } from "@leo-code/ui/context/worker-pool"
 import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, createSignal, ErrorBoundary, For, Match, Show, Switch } from "solid-js"
 import { Share } from "~/core/share"
-import { Logo, Mark } from "@opencode-ai/ui/logo"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { iife } from "@opencode-ai/core/util/iife"
-import { Binary } from "@opencode-ai/core/util/binary"
-import { NamedError } from "@opencode-ai/core/util/error"
+import { Logo, Mark } from "@leo-code/ui/logo"
+import { IconButton } from "@leo-code/ui/icon-button"
+import { ProviderIcon } from "@leo-code/ui/provider-icon"
+import { iife } from "@leo-code/core/util/iife"
+import { Binary } from "@leo-code/core/util/binary"
+import { NamedError } from "@leo-code/core/util/error"
 import { DateTime } from "luxon"
 import { createStore } from "solid-js/store"
 import NotFound from "../[...404]"
-import { Tabs } from "@opencode-ai/ui/tabs"
-import { MessageNav } from "@opencode-ai/ui/message-nav"
-import { FileSSR } from "@opencode-ai/ui/file-ssr"
+import { Tabs } from "@leo-code/ui/tabs"
+import { MessageNav } from "@leo-code/ui/message-nav"
+import { FileSSR } from "@leo-code/ui/file-ssr"
 import { clientOnly } from "@solidjs/start"
 import { Meta, Title } from "@solidjs/meta"
 import { Base64 } from "js-base64"
 import { getRequestEvent } from "solid-js/web"
 
 const ClientOnlyWorkerPoolProvider = clientOnly(() =>
-  import("@opencode-ai/ui/pierre/worker").then((m) => ({
+  import("@leo-code/ui/pierre/worker").then((m) => ({
     default: (props: { children: any }) => (
       <WorkerPoolProvider pools={m.getWorkerPools()}>{props.children}</WorkerPoolProvider>
     ),
@@ -274,7 +274,7 @@ export default function () {
                         <div class="relative bg-background-stronger w-screen h-screen overflow-hidden flex flex-col">
                           <header class="h-12 px-6 py-2 flex items-center justify-between self-stretch bg-background-base border-b border-border-weak-base">
                             <div class="">
-                              <a href="https://opencode.ai">
+                              <a href="https://leosoftware.dev">
                                 <Mark />
                               </a>
                             </div>
@@ -288,7 +288,7 @@ export default function () {
                               />
                               <IconButton
                                 as={"a"}
-                                href="https://opencode.ai/discord"
+                                href="https://leosoftware.dev/discord"
                                 target="_blank"
                                 icon="discord"
                                 variant="ghost"

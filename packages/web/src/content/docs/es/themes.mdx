@@ -65,7 +65,7 @@ Puede seleccionar un tema abriendo la selección de tema con el comando `/theme`
 
 ```json title="tui.json" {3}
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://leosoftware.dev/tui.json",
   "theme": "tokyonight"
 }
 ```
@@ -83,7 +83,7 @@ OpenCode admite un sistema de temas flexible basado en JSON que permite a los us
 Los temas se cargan desde varios directorios en el siguiente orden, donde los directorios posteriores anulan los anteriores:
 
 1. **Temas integrados**: están integrados en el binario
-2. **Directorio de configuración de usuario**: definido en `~/.config/opencode/themes/*.json` o `$XDG_CONFIG_HOME/opencode/themes/*.json`
+2. **Directorio de configuración de usuario**: definido en `~/.config/leo-code/themes/*.json` o `$XDG_CONFIG_HOME/leo-code/themes/*.json`
 3. **Directorio raíz del proyecto**: definido en `<project-root>/.opencode/themes/*.json`
 4. **Directorio de trabajo actual** - Definido en `./.opencode/themes/*.json`
 
@@ -98,8 +98,8 @@ Para crear un tema personalizado, cree un archivo JSON en uno de los directorios
 Para temas para todo el usuario:
 
 ```bash no-frame
-mkdir -p ~/.config/opencode/themes
-vim ~/.config/opencode/themes/my-theme.json
+mkdir -p ~/.config/leo-code/themes
+vim ~/.config/leo-code/themes/my-theme.json
 ```
 
 Y para temas específicos del proyecto.
@@ -144,7 +144,7 @@ A continuación se muestra un ejemplo de un tema personalizado:
 
 ```json title="my-theme.json"
 {
-  "$schema": "https://opencode.ai/theme.json",
+  "$schema": "https://leosoftware.dev/theme.json",
   "defs": {
     "nord0": "#2E3440",
     "nord1": "#3B4252",

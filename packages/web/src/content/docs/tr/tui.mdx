@@ -1,13 +1,13 @@
 ---
 title: TUI
-description: OpenCode terminal kullanıcı arayüzünü kullanma.
+description: leo/code terminal kullanıcı arayüzünü kullanma.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode, projelerinizde LLM ile çalışmak için etkileşimli bir terminal arayüzü (TUI) sunar.
+leo/code, projelerinizde LLM ile çalışmak için etkileşimli bir terminal arayüzü (TUI) sunar.
 
-OpenCode'u çalıştırdığınızda mevcut dizin için TUI başlar.
+leo/code'u çalıştırdığınızda mevcut dizin için TUI başlar.
 
 ```bash
 opencode
@@ -57,7 +57,7 @@ Komut çıktısı bir araç sonucu olarak konuşmaya eklenir.
 
 ## Komutlar
 
-OpenCode TUI kullanırken `/` ve ardından komut adını yazarak hızlı eylemler çalıştırabilirsiniz. Örneğin:
+leo/code TUI kullanırken `/` ve ardından komut adını yazarak hızlı eylemler çalıştırabilirsiniz. Örneğin:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ Komutların çoğu, lider tuşu `ctrl+x` olan bir kısayola da sahiptir. [Daha f
 
 ### connect
 
-OpenCode'a bir sağlayıcı ekler. Mevcut sağlayıcıları seçip API anahtarları eklemenizi sağlar.
+leo/code'a bir sağlayıcı ekler. Mevcut sağlayıcıları seçip API anahtarları eklemenizi sağlar.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ Mesaj yazmak için harici editör açar. `EDITOR` ortam değişkeninde ayarlı e
 
 ### exit
 
-OpenCode'dan çıkar. _Takma adlar_: `/quit`, `/q`
+leo/code'dan çıkar. _Takma adlar_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -357,8 +357,8 @@ TUI davranışını `tui.json` (veya `tui.jsonc`) aracılığıyla özelleştire
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
-  "theme": "opencode",
+  "$schema": "https://leosoftware.dev/tui.json",
+  "theme": "leo-code",
   "keybinds": {
     "leader": "ctrl+x"
   },
@@ -380,7 +380,7 @@ Bu, sunucu/çalışma zamanı davranışını yapılandıran `opencode.json` dos
 - `scroll_speed` - Kaydırma komutlarını kullanırken TUI'nin ne kadar hızlı kaydırılacağını kontrol eder (minimum: `0.001`, ondalık değerleri destekler). Varsayılan değer `3`'tür. **Not: `scroll_acceleration.enabled` `true` olarak ayarlanmışsa bu yok sayılır.**
 - `diff_style` - Fark (diff) oluşturmayı kontrol eder. `"auto"` terminal genişliğine uyum sağlar, `"stacked"` her zaman tek sütunlu bir düzen gösterir.
 
-Özel bir TUI yapılandırma yolu yüklemek için `OPENCODE_TUI_CONFIG` kullanın.
+Özel bir TUI yapılandırma yolu yüklemek için `LEO_TUI_CONFIG` kullanın.
 
 ---
 

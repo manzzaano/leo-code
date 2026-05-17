@@ -25,7 +25,7 @@ Możesz zainstalować uprawnienia globalnie (za pomocą `*`) i znajdującego si�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "permission": {
     "*": "ask",
     "bash": "allow",
@@ -38,7 +38,7 @@ Możesz także zainstalować wszystkie uprawnienia na raz:
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "permission": "allow"
 }
 ```
@@ -51,7 +51,7 @@ Można skorzystać z różnych działań, które zależą od danych użytkowych.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "permission": {
     "bash": {
       "*": "ask",
@@ -96,7 +96,7 @@ Na przykład umożliwia dostęp do wszystkiego pod `~/projects/personal/`:
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "permission": {
     "external_directory": {
       "~/projects/personal/**": "allow"
@@ -109,7 +109,7 @@ Każdy dopuszczony tutaj katalog jest dziedziczy tych samych ustawień, co dost�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "permission": {
     "external_directory": {
       "~/projects/personal/**": "allow"
@@ -189,7 +189,7 @@ Bardziej szczegółowe przykłady dopasowywania wzorców można znaleźć w sekc
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "permission": {
     "bash": {
       "*": "ask",
@@ -217,7 +217,7 @@ Bardziej szczegółowe przykłady dopasowywania wzorców można znaleźć w sekc
 
 Możesz także mieć pozwolenie na agenta w Markdown:
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/leo-code/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent

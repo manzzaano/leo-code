@@ -52,9 +52,9 @@ Focus on the failing tests and suggest fixes.
 
 OpenCode [config](/docs/config)의 `command` 옵션을 사용합니다.
 
-```json title="opencode.jsonc" {4-12}
+```json title="leo-code.jsonc" {4-12}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "command": {
     // This becomes the name of the command
     "test": {
@@ -81,10 +81,10 @@ OpenCode [config](/docs/config)의 `command` 옵션을 사용합니다.
 
 Markdown 파일로도 명령을 정의할 수 있습니다. 아래 경로 중 하나에 두면 됩니다.
 
-- 전역: `~/.config/opencode/commands/`
+- 전역: `~/.config/leo-code/commands/`
 - 프로젝트별: `.opencode/commands/`
 
-```markdown title="~/.config/opencode/commands/test.md"
+```markdown title="~/.config/leo-code/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build

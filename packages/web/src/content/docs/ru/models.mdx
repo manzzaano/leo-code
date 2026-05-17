@@ -53,7 +53,7 @@ opencode использует [AI SDK](https://ai-sdk.dev/) и [Models.dev](http
 
 ```json title="opencode.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "model": "lmstudio/google/gemma-3n-e4b"
 }
 ```
@@ -68,9 +68,9 @@ opencode использует [AI SDK](https://ai-sdk.dev/) и [Models.dev](http
 
 Вы можете глобально настроить параметры модели через файл config.
 
-```jsonc title="opencode.jsonc" {7-12,19-24}
+```jsonc title="leo-code.jsonc" {7-12,19-24}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -107,11 +107,11 @@ opencode использует [AI SDK](https://ai-sdk.dev/) и [Models.dev](http
 
 Вы также можете определить собственные варианты, расширяющие встроенные. Варианты позволяют настраивать разные параметры для одной и той же модели без создания повторяющихся записей:
 
-```jsonc title="opencode.jsonc" {6-21}
+```jsonc title="leo-code.jsonc" {6-21}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "provider": {
-    "opencode": {
+    "leo-code": {
       "models": {
         "gpt-5": {
           "variants": {
@@ -172,9 +172,9 @@ opencode поставляется с вариантами по умолчани�
 
 Вы можете переопределить существующие варианты или добавить свои собственные:
 
-```jsonc title="opencode.jsonc" {7-18}
+```jsonc title="leo-code.jsonc" {7-18}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -211,7 +211,7 @@ opencode поставляется с вариантами по умолчани�
 
    ```json title="opencode.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://leosoftware.dev/config.json",
      "model": "anthropic/claude-sonnet-4-20250514"
    }
    ```

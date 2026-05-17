@@ -54,7 +54,7 @@
   "share.error_api_url_not_found": "API URL introuvable",
   "share.error_connection_failed": "La connexion a échoué",
   "share.opencode_version": "version d'opencode",
-  "share.opencode_name": "opencode",
+  "share.opencode_name": "leo-code",
   "share.models": "Modèles",
   "share.cost": "Coût",
   "share.input_tokens": "Tokens d'entrée",

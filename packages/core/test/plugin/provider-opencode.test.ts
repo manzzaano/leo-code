@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import { DateTime, Effect, Layer, Option } from "effect"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { Location } from "@opencode-ai/core/location"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { PluginV2 } from "@opencode-ai/core/plugin"
-import { OpencodePlugin } from "@opencode-ai/core/plugin/provider/opencode"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Catalog } from "@leo-code/core/catalog"
+import { Location } from "@leo-code/core/location"
+import { ModelV2 } from "@leo-code/core/model"
+import { PluginV2 } from "@leo-code/core/plugin"
+import { OpencodePlugin } from "@leo-code/core/plugin/provider/opencode"
+import { ProviderV2 } from "@leo-code/core/provider"
 import { it, model, provider, withEnv } from "./provider-helper"
 
 const cost = (input: number, output = 0) => [{ input, output, cache: { read: 0, write: 0 } }]
@@ -13,15 +13,15 @@ const locationLayer = Layer.succeed(Location.Service, Location.Service.of({ dire
 
 describe("OpencodePlugin", () => {
   it.effect("uses a public key and cancels paid models without credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+    withEnv({ LEO_API_KEY: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         yield* plugin.add(OpencodePlugin)
-        const updated = yield* plugin.trigger("provider.update", {}, { provider: provider("opencode"), cancel: false })
+        const updated = yield* plugin.trigger("provider.update", {}, { provider: provider("leo-code"), cancel: false })
         const paid = yield* plugin.trigger(
           "model.update",
           {},
-          { model: model("opencode", "paid", { cost: cost(1) }), cancel: false },
+          { model: model("leo-code", "paid", { cost: cost(1) }), cancel: false },
         )
         expect(updated.provider.options.aisdk.provider.apiKey).toBe("public")
         expect(paid.cancel).toBe(true)
@@ -30,15 +30,15 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("keeps free models without credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+    withEnv({ LEO_API_KEY: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         yield* plugin.add(OpencodePlugin)
-        yield* plugin.trigger("provider.update", {}, { provider: provider("opencode"), cancel: false })
+        yield* plugin.trigger("provider.update", {}, { provider: provider("leo-code"), cancel: false })
         const free = yield* plugin.trigger(
           "model.update",
           {},
-          { model: model("opencode", "free", { cost: cost(0) }), cancel: false },
+          { model: model("leo-code", "free", { cost: cost(0) }), cancel: false },
         )
         expect(free.cancel).toBe(false)
       }),
@@ -46,31 +46,31 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("treats output-only cost as free without credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+    withEnv({ LEO_API_KEY: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         yield* plugin.add(OpencodePlugin)
-        yield* plugin.trigger("provider.update", {}, { provider: provider("opencode"), cancel: false })
+        yield* plugin.trigger("provider.update", {}, { provider: provider("leo-code"), cancel: false })
         const outputOnly = yield* plugin.trigger(
           "model.update",
           {},
-          { model: model("opencode", "output-only", { cost: cost(0, 1) }), cancel: false },
+          { model: model("leo-code", "output-only", { cost: cost(0, 1) }), cancel: false },
         )
         expect(outputOnly.cancel).toBe(false)
       }),
     ),
   )
 
-  it.effect("uses OPENCODE_API_KEY as credentials", () =>
-    withEnv({ OPENCODE_API_KEY: "secret" }, () =>
+  it.effect("uses LEO_API_KEY as credentials", () =>
+    withEnv({ LEO_API_KEY: "secret" }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         yield* plugin.add(OpencodePlugin)
-        const updated = yield* plugin.trigger("provider.update", {}, { provider: provider("opencode"), cancel: false })
+        const updated = yield* plugin.trigger("provider.update", {}, { provider: provider("leo-code"), cancel: false })
         const paid = yield* plugin.trigger(
           "model.update",
           {},
-          { model: model("opencode", "paid", { cost: cost(1) }), cancel: false },
+          { model: model("leo-code", "paid", { cost: cost(1) }), cancel: false },
         )
         expect(updated.provider.options.aisdk.provider.apiKey).toBeUndefined()
         expect(paid.cancel).toBe(false)
@@ -79,19 +79,19 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("uses configured provider env vars as credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined, CUSTOM_OPENCODE_API_KEY: "secret" }, () =>
+    withEnv({ LEO_API_KEY: undefined, CUSTOM_LEO_API_KEY: "secret" }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         yield* plugin.add(OpencodePlugin)
         const updated = yield* plugin.trigger(
           "provider.update",
           {},
-          { provider: provider("opencode", { env: ["CUSTOM_OPENCODE_API_KEY"] }), cancel: false },
+          { provider: provider("leo-code", { env: ["CUSTOM_LEO_API_KEY"] }), cancel: false },
         )
         const paid = yield* plugin.trigger(
           "model.update",
           {},
-          { model: model("opencode", "paid", { cost: cost(1) }), cancel: false },
+          { model: model("leo-code", "paid", { cost: cost(1) }), cancel: false },
         )
         expect(updated.provider.options.aisdk.provider.apiKey).toBeUndefined()
         expect(paid.cancel).toBe(false)
@@ -100,7 +100,7 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("uses configured apiKey as credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+    withEnv({ LEO_API_KEY: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         yield* plugin.add(OpencodePlugin)
@@ -108,7 +108,7 @@ describe("OpencodePlugin", () => {
           "provider.update",
           {},
           {
-            provider: provider("opencode", {
+            provider: provider("leo-code", {
               options: {
                 headers: {},
                 body: {},
@@ -124,7 +124,7 @@ describe("OpencodePlugin", () => {
         const paid = yield* plugin.trigger(
           "model.update",
           {},
-          { model: model("opencode", "paid", { cost: cost(1) }), cancel: false },
+          { model: model("leo-code", "paid", { cost: cost(1) }), cancel: false },
         )
         expect(updated.provider.options.aisdk.provider.apiKey).toBe("configured")
         expect(paid.cancel).toBe(false)
@@ -133,19 +133,19 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("uses auth-enabled providers as credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+    withEnv({ LEO_API_KEY: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         yield* plugin.add(OpencodePlugin)
         const updated = yield* plugin.trigger(
           "provider.update",
           {},
-          { provider: provider("opencode", { enabled: { via: "auth", service: "opencode" } }), cancel: false },
+          { provider: provider("leo-code", { enabled: { via: "auth", service: "leo-code" } }), cancel: false },
         )
         const paid = yield* plugin.trigger(
           "model.update",
           {},
-          { model: model("opencode", "paid", { cost: cost(1) }), cancel: false },
+          { model: model("leo-code", "paid", { cost: cost(1) }), cancel: false },
         )
         expect(updated.provider.options.aisdk.provider.apiKey).toBeUndefined()
         expect(paid.cancel).toBe(false)
@@ -154,7 +154,7 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("ignores non-opencode providers and models", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+    withEnv({ LEO_API_KEY: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         yield* plugin.add(OpencodePlugin)

@@ -20,7 +20,7 @@ Existem duas maneiras de carregar plugins.
 Coloque arquivos JavaScript ou TypeScript no diretório de plugins.
 
 - `.opencode/plugins/` - Plugins em nível de projeto
-- `~/.config/opencode/plugins/` - Plugins globais
+- `~/.config/leo-code/plugins/` - Plugins globais
 
 Os arquivos nesses diretórios são carregados automaticamente na inicialização.
 
@@ -32,7 +32,7 @@ Especifique pacotes npm no seu arquivo de configuração.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
 }
 ```
@@ -45,7 +45,7 @@ Navegue pelos plugins disponíveis no [ecossistema](/docs/ecosystem#plugins).
 
 ### Como os plugins são instalados
 
-**Plugins npm** são instalados automaticamente usando Bun na inicialização. Pacotes e suas dependências são armazenados em cache em `~/.cache/opencode/node_modules/`.
+**Plugins npm** são instalados automaticamente usando Bun na inicialização. Pacotes e suas dependências são armazenados em cache em `~/.cache/leo-code/node_modules/`.
 
 **Plugins locais** são carregados diretamente do diretório de plugins. Para usar pacotes externos, você deve criar um `package.json` dentro do seu diretório de configuração (veja [Dependências](#dependencies)), ou publicar o plugin no npm e [adicioná-lo à sua configuração](/docs/config#plugins).
 
@@ -55,9 +55,9 @@ Navegue pelos plugins disponíveis no [ecossistema](/docs/ecosystem#plugins).
 
 Os plugins são carregados de todas as fontes e todos os hooks são executados em sequência. A ordem de carregamento é:
 
-1. Configuração global (`~/.config/opencode/opencode.json`)
+1. Configuração global (`~/.config/leo-code/opencode.json`)
 2. Configuração do projeto (`opencode.json`)
-3. Diretório de plugins global (`~/.config/opencode/plugins/`)
+3. Diretório de plugins global (`~/.config/leo-code/plugins/`)
 4. Diretório de plugins do projeto (`.opencode/plugins/`)
 
 Pacotes npm duplicados com o mesmo nome e versão são carregados uma vez. No entanto, um plugin local e um plugin npm com nomes semelhantes são carregados separadamente.
@@ -127,7 +127,7 @@ A função do plugin recebe:
 Para plugins TypeScript, você pode importar tipos do pacote de plugin:
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@leo-code/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -224,7 +224,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
     event: async ({ event }) => {
       // Send notification on session completion
       if (event.type === "session.idle") {
-        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+        await $`osascript -e 'display notification "Session completed!" with title "leo-code"'`
       }
     },
   }
@@ -279,7 +279,7 @@ export const InjectEnvPlugin = async () => {
 Plugins também podem adicionar ferramentas personalizadas ao opencode:
 
 ```ts title=".opencode/plugins/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+import { type Plugin, tool } from "@leo-code/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -330,7 +330,7 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-Níveis: `debug`, `info`, `warn`, `error`. Veja a [documentação do SDK](https://opencode.ai/docs/sdk) para detalhes.
+Níveis: `debug`, `info`, `warn`, `error`. Veja a [documentação do SDK](https://leosoftware.dev/docs/sdk) para detalhes.
 
 ---
 
@@ -339,7 +339,7 @@ Níveis: `debug`, `info`, `warn`, `error`. Veja a [documentação do SDK](https:
 Personalize o contexto incluído quando uma sessão é compactada:
 
 ```ts title=".opencode/plugins/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@leo-code/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -363,7 +363,7 @@ O hook `experimental.session.compacting` é acionado antes que o LLM gere um res
 Você também pode substituir o prompt de compactação completamente definindo `output.prompt`:
 
 ```ts title=".opencode/plugins/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@leo-code/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {

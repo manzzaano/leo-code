@@ -11,7 +11,7 @@ Aby debugować problemy z opencode, zacznij od sprawdzenia dzienników i danych 
 
 Pliki logów są zapisywane w:
 
-- **macOS/Linux**: `~/.local/share/opencode/log/`
+- **macOS/Linux**: `~/.local/share/leo-code/log/`
 - **Windows**: Naciśnij `WIN+R` i wklej `%USERPROFILE%\.local\share\opencode\log`
 
 Nazwy plików dziennika zawierają znaczniki czasu (np. `2025-01-09T123456.log`) i przechowywanych jest 10 ostatnich plików dziennika.
@@ -24,7 +24,7 @@ Możesz ustawić poziom dziennika za pomocą opcji wiersza poleceń `--log-level
 
 opencode przechowuje dane sesji i inne dane aplikacji na dysku pod adresem:
 
-- **macOS/Linux**: `~/.local/share/opencode/`
+- **macOS/Linux**: `~/.local/share/leo-code/`
 - **Windows**: Naciśnij `WIN+R` i wklej `%USERPROFILE%\.local\share\opencode`
 
 Ten katalog zawiera:
@@ -45,7 +45,7 @@ opencode Desktop uruchamia w tle lokalny serwer opencode (sidecar `opencode-cli`
 
 - Całkowicie zakończ i uruchom ponownie aplikację.
 - Jeśli aplikacja wyświetli ekran błędu, kliknij **Uruchom ponownie** i skopiuj szczegóły błędu.
-- Tylko macOS: menu `OpenCode` -> **Załaduj ponownie przeglądarkę internetową** (pomaga, jeśli interfejs użytkownika jest pusty/zawieszony).
+- Tylko macOS: menu `leo/code` -> **Załaduj ponownie przeglądarkę internetową** (pomaga, jeśli interfejs użytkownika jest pusty/zawieszony).
 
 ---
 
@@ -57,15 +57,15 @@ Jeśli aplikacja komputerowa ulega awarii podczas uruchamiania, zawiesza się lu
 
 Otwórz globalny plik konfiguracyjny i poszukaj klucza `plugin`.
 
-- **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (lub `~/.config/opencode/opencode.json`)
-- **macOS/Linux** (starsze instalacje): `~/.local/share/opencode/opencode.jsonc`
-- **Windows**: Naciśnij `WIN+R` i wklej `%USERPROFILE%\.config\opencode\opencode.jsonc`
+- **macOS/Linux**: `~/.config/leo-code/leo-code.jsonc` (lub `~/.config/leo-code/opencode.json`)
+- **macOS/Linux** (starsze instalacje): `~/.local/share/leo-code/leo-code.jsonc`
+- **Windows**: Naciśnij `WIN+R` i wklej `%USERPROFILE%\.config\opencode\leo-code.jsonc`
 
 Jeśli masz skonfigurowane wtyczki, tymczasowo je wyłącz, usuwając klucz lub ustawiając go na pustą tablicę:
 
 ```jsonc
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "plugin": [],
 }
 ```
@@ -75,7 +75,7 @@ Jeśli masz skonfigurowane wtyczki, tymczasowo je wyłącz, usuwając klucz lub 
 opencode może także ładować lokalne wtyczki z dysku. Tymczasowo usuń je (lub zmień nazwę folderu) i uruchom ponownie aplikację komputerową:
 
 - **Wtyczki globalne**
-  - **macOS/Linux**: `~/.config/opencode/plugins/`
+  - **macOS/Linux**: `~/.config/leo-code/plugins/`
   - **Windows**: Naciśnij `WIN+R` i wklej `%USERPROFILE%\.config\opencode\plugins`
 - **Wtyczki projektowe** (tylko jeśli używasz konfiguracji dla poszczególnych projektów)
   - `<your-project>/.opencode/plugins/`
@@ -115,9 +115,9 @@ Jeśli Twój `opencode.json(c)` zawiera sekcję `server`, tymczasowo usuń ją i
 
 #### Sprawdź zmienne środowiskowe
 
-Jeśli w swoim środowisku masz ustawiony `OPENCODE_PORT`, aplikacja komputerowa spróbuje użyć tego portu dla serwera lokalnego.
+Jeśli w swoim środowisku masz ustawiony `LEO_PORT`, aplikacja komputerowa spróbuje użyć tego portu dla serwera lokalnego.
 
-- usuń `OPENCODE_PORT` (lub wybierz wolny port) i uruchom ponownie.
+- usuń `LEO_PORT` (lub wybierz wolny port) i uruchom ponownie.
 
 ---
 
@@ -177,7 +177,7 @@ Jeśli masz problemy z opencode:
 
    Najlepszym sposobem zgłaszania błędów lub zgłaszania żądań funkcji jest skorzystanie z naszego repozytorium GitHub:
 
-   [**github.com/anomalyco/opencode/issues**](https://github.com/anomalyco/opencode/issues)
+   [**github.com/anomalyco/leo-code/issues**](https://github.com/anomalyco/leo-code/issues)
 
    Przed utworzeniem nowego problemu przeszukaj istniejące i sprawdź, czy Twój problem nie został już zgłoszony.
 
@@ -185,7 +185,7 @@ Jeśli masz problemy z opencode:
 
    Aby uzyskać pomoc w czasie rzeczywistym i dyskusję społeczności, dołącz do naszego serwera Discord:
 
-   [**opencode.ai/discord**](https://opencode.ai/discord)
+   [**leosoftware.dev/discord**](https://leosoftware.dev/discord)
 
 ---
 

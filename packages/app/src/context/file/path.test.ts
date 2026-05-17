@@ -86,12 +86,12 @@ describe("encodeFilePath", () => {
 
   describe("macOS paths", () => {
     test("should handle macOS absolute path", () => {
-      const macPath = "/Users/kelvin/Projects/opencode/README.md"
+      const macPath = "/Users/kelvin/Projects/leo-code/README.md"
       const result = encodeFilePath(macPath)
       const fileUrl = `file://${result}`
 
       expect(() => new URL(fileUrl)).not.toThrow()
-      expect(result).toBe("/Users/kelvin/Projects/opencode/README.md")
+      expect(result).toBe("/Users/kelvin/Projects/leo-code/README.md")
     })
 
     test("should handle macOS path with spaces", () => {
@@ -116,7 +116,7 @@ describe("encodeFilePath", () => {
       const url = new URL(fileUrl)
       expect(url.protocol).toBe("file:")
       expect(url.pathname).toContain("README.bs.md")
-      expect(result).toBe("/D:/dev/projects/opencode/README.bs.md")
+      expect(result).toBe("/D:/dev/projects/leo-code/README.bs.md")
     })
 
     test("should handle mixed separator path (Windows + Unix)", () => {
@@ -126,7 +126,7 @@ describe("encodeFilePath", () => {
       const fileUrl = `file://${result}`
 
       expect(() => new URL(fileUrl)).not.toThrow()
-      expect(result).toBe("/D:/dev/projects/opencode/README.bs.md")
+      expect(result).toBe("/D:/dev/projects/leo-code/README.bs.md")
     })
 
     test("should handle Windows path with spaces", () => {

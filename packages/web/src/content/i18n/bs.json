@@ -54,7 +54,7 @@
   "share.error_api_url_not_found": "API URL nije pronađen",
   "share.error_connection_failed": "Povezivanje nije uspjelo",
   "share.opencode_version": "OpenCode verzija",
-  "share.opencode_name": "OpenCode",
+  "share.opencode_name": "leo/code",
   "share.models": "Modeli",
   "share.cost": "Cijena",
   "share.input_tokens": "Ulazni tokeni",

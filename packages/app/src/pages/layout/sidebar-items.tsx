@@ -1,10 +1,10 @@
-import type { Session } from "@opencode-ai/sdk/v2/client"
-import { Avatar } from "@opencode-ai/ui/avatar"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Spinner } from "@opencode-ai/ui/spinner"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { getFilename } from "@opencode-ai/core/util/path"
+import type { Session } from "@leo-code/sdk/v2/client"
+import { Avatar } from "@leo-code/ui/avatar"
+import { Icon } from "@leo-code/ui/icon"
+import { IconButton } from "@leo-code/ui/icon-button"
+import { Spinner } from "@leo-code/ui/spinner"
+import { Tooltip } from "@leo-code/ui/tooltip"
+import { getFilename } from "@leo-code/core/util/path"
 import { A, useParams } from "@solidjs/router"
 import { type Accessor, createMemo, For, type JSX, Match, Show, Switch } from "solid-js"
 import { useGlobalSync } from "@/context/global-sync"
@@ -17,10 +17,10 @@ import { sessionTitle } from "@/utils/session-title"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
 import { childSessionOnPath, hasProjectPermissions } from "./helpers"
 
-const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
+const LEO_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
 export function getProjectAvatarSource(id?: string, icon?: { color?: string; url?: string; override?: string }) {
-  if (id === OPENCODE_PROJECT_ID) return "https://opencode.ai/favicon.svg"
+  if (id === LEO_PROJECT_ID) return "https://leosoftware.dev/favicon.svg"
   if (icon?.override) return icon?.override
   if (icon?.color) return undefined
   return icon?.url

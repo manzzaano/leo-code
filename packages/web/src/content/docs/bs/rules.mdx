@@ -62,24 +62,24 @@ Stavite `AGENTS.md` u korijen projekta za pravila specificna za taj projekat. Pr
 
 ### Globalno
 
-Mozete imati i globalna pravila u `~/.config/opencode/AGENTS.md`. Ona se primjenjuju u svim opencode sesijama.
+Mozete imati i globalna pravila u `~/.config/leo-code/AGENTS.md`. Ona se primjenjuju u svim opencode sesijama.
 
 Posto se ovo ne commituje u Git niti dijeli s timom, najbolje je da ovdje cuvate licna pravila koja LLM treba pratiti.
 
 ### Kompatibilnost s Claude Code
 
-Za korisnike koji prelaze sa Claude Code, OpenCode podrzava i Claude konvencije datoteka kao rezervu:
+Za korisnike koji prelaze sa Claude Code, leo/code podrzava i Claude konvencije datoteka kao rezervu:
 
 - **Pravila projekta**: `CLAUDE.md` u direktoriju projekta (koristi se ako ne postoji `AGENTS.md`)
-- **Globalna pravila**: `~/.claude/CLAUDE.md` (koristi se ako ne postoji `~/.config/opencode/AGENTS.md`)
+- **Globalna pravila**: `~/.claude/CLAUDE.md` (koristi se ako ne postoji `~/.config/leo-code/AGENTS.md`)
 - **Skills**: `~/.claude/skills/` — pogledajte [Agent Skills](/docs/skills/) za detalje
 
 Da iskljucite kompatibilnost sa Claude Code, postavite jednu od ovih varijabli okruzenja:
 
 ```bash
-export OPENCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
-export OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
-export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
+export LEO_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
+export LEO_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
+export LEO_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 ```
 
 ---
@@ -89,22 +89,22 @@ export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 Kada se opencode pokrene, trazi datoteke pravila ovim redoslijedom:
 
 1. **Lokalne datoteke** pretrazivanjem prema gore od trenutnog direktorija (`AGENTS.md`, `CLAUDE.md`)
-2. **Globalna datoteka** na `~/.config/opencode/AGENTS.md`
+2. **Globalna datoteka** na `~/.config/leo-code/AGENTS.md`
 3. **Claude Code datoteka** na `~/.claude/CLAUDE.md` (osim ako je iskljucena)
 
-Prva pronadena datoteka pobjeduje u svakoj kategoriji. Na primjer, ako imate i `AGENTS.md` i `CLAUDE.md`, koristi se samo `AGENTS.md`. Isto tako, `~/.config/opencode/AGENTS.md` ima prednost nad `~/.claude/CLAUDE.md`.
+Prva pronadena datoteka pobjeduje u svakoj kategoriji. Na primjer, ako imate i `AGENTS.md` i `CLAUDE.md`, koristi se samo `AGENTS.md`. Isto tako, `~/.config/leo-code/AGENTS.md` ima prednost nad `~/.claude/CLAUDE.md`.
 
 ---
 
 ## Prilagođena uputstva
 
-Mozete navesti prilagodene datoteke uputstava u `opencode.json` ili globalnom `~/.config/opencode/opencode.json`. Tako vi i tim ponovo koristite postojeca pravila bez dupliranja u AGENTS.md.
+Mozete navesti prilagodene datoteke uputstava u `opencode.json` ili globalnom `~/.config/leo-code/opencode.json`. Tako vi i tim ponovo koristite postojeca pravila bez dupliranja u AGENTS.md.
 
 Primjer:
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
 }
 ```
@@ -113,7 +113,7 @@ Mozete koristiti i udaljene URL-ove za ucitavanje uputstava sa weba.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "instructions": ["https://raw.githubusercontent.com/my-org/shared-rules/main/style.md"]
 }
 ```
@@ -134,7 +134,7 @@ Preporuceni pristup je da koristite `instructions` polje u `opencode.json`:
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "instructions": ["docs/development-standards.md", "test/testing-guidelines.md", "packages/*/AGENTS.md"]
 }
 ```

@@ -54,7 +54,7 @@
   "share.error_api_url_not_found": "ไม่พบ API URL",
   "share.error_connection_failed": "การเชื่อมต่อล้มเหลว",
   "share.opencode_version": "เวอร์ชัน opencode",
-  "share.opencode_name": "opencode",
+  "share.opencode_name": "leo-code",
   "share.models": "โมเดล",
   "share.cost": "ค่าใช้จ่าย",
   "share.input_tokens": "โทเค็นอินพุต",

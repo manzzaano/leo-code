@@ -20,7 +20,7 @@ There are two ways to load plugins.
 Place JavaScript or TypeScript files in the plugin directory.
 
 - `.opencode/plugins/` - Project-level plugins
-- `~/.config/opencode/plugins/` - Global plugins
+- `~/.config/leo-code/plugins/` - Global plugins
 
 Files in these directories are automatically loaded at startup.
 
@@ -32,7 +32,7 @@ Specify npm packages in your config file.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
 }
 ```
@@ -45,7 +45,7 @@ Browse available plugins in the [ecosystem](/docs/ecosystem#plugins).
 
 ### How plugins are installed
 
-**npm plugins** are installed automatically using Bun at startup. Packages and their dependencies are cached in `~/.cache/opencode/node_modules/`.
+**npm plugins** are installed automatically using Bun at startup. Packages and their dependencies are cached in `~/.cache/leo-code/node_modules/`.
 
 **Local plugins** are loaded directly from the plugin directory. To use external packages, you must create a `package.json` within your config directory (see [Dependencies](#dependencies)), or publish the plugin to npm and [add it to your config](/docs/config#plugins).
 
@@ -55,9 +55,9 @@ Browse available plugins in the [ecosystem](/docs/ecosystem#plugins).
 
 Plugins are loaded from all sources and all hooks run in sequence. The load order is:
 
-1. Global config (`~/.config/opencode/opencode.json`)
+1. Global config (`~/.config/leo-code/opencode.json`)
 2. Project config (`opencode.json`)
-3. Global plugin directory (`~/.config/opencode/plugins/`)
+3. Global plugin directory (`~/.config/leo-code/plugins/`)
 4. Project plugin directory (`.opencode/plugins/`)
 
 Duplicate npm packages with the same name and version are loaded once. However, a local plugin and an npm plugin with similar names are both loaded separately.
@@ -128,7 +128,7 @@ The plugin function receives:
 For TypeScript plugins, you can import types from the plugin package:
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@leo-code/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -225,7 +225,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
     event: async ({ event }) => {
       // Send notification on session completion
       if (event.type === "session.idle") {
-        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+        await $`osascript -e 'display notification "Session completed!" with title "leo-code"'`
       }
     },
   }
@@ -280,7 +280,7 @@ export const InjectEnvPlugin = async () => {
 Plugins can also add custom tools to opencode:
 
 ```ts title=".opencode/plugins/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+import { type Plugin, tool } from "@leo-code/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -331,7 +331,7 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-Levels: `debug`, `info`, `warn`, `error`. See [SDK documentation](https://opencode.ai/docs/sdk) for details.
+Levels: `debug`, `info`, `warn`, `error`. See [SDK documentation](https://leosoftware.dev/docs/sdk) for details.
 
 ---
 
@@ -340,7 +340,7 @@ Levels: `debug`, `info`, `warn`, `error`. See [SDK documentation](https://openco
 Customize the context included when a session is compacted:
 
 ```ts title=".opencode/plugins/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@leo-code/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -364,7 +364,7 @@ The `experimental.session.compacting` hook fires before the LLM generates a cont
 You can also replace the compaction prompt entirely by setting `output.prompt`:
 
 ```ts title=".opencode/plugins/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@leo-code/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {

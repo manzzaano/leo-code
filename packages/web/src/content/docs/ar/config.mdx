@@ -1,21 +1,21 @@
 ---
 title: الإعدادات
-description: استخدام ملف إعدادات OpenCode بصيغة JSON.
+description: استخدام ملف إعدادات leo/code بصيغة JSON.
 ---
 
-يمكنك ضبط OpenCode باستخدام ملف إعدادات بصيغة JSON.
+يمكنك ضبط leo/code باستخدام ملف إعدادات بصيغة JSON.
 
 ---
 
 ## التنسيق
 
-يدعم OpenCode تنسيقي **JSON** و**JSONC** (JSON مع تعليقات).
+يدعم leo/code تنسيقي **JSON** و**JSONC** (JSON مع تعليقات).
 
-```jsonc title="opencode.jsonc"
+```jsonc title="leo-code.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   // إعدادات السمة
-  "theme": "opencode",
+  "theme": "leo-code",
   "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
 }
@@ -34,7 +34,7 @@ description: استخدام ملف إعدادات OpenCode بصيغة JSON.
 
 تُدمَج ملفات الإعدادات معًا ولا تُستبدَل. يتم جمع الإعدادات من مواقع الإعدادات التالية. تتجاوز الإعدادات اللاحقة الإعدادات السابقة فقط عند تعارض المفاتيح. أما الإعدادات غير المتعارضة فتبقى محفوظة من جميع الملفات.
 
-على سبيل المثال، إذا كان الإعداد العام يضبط `theme: "opencode"` و`autoupdate: true`، وكان إعداد المشروع يضبط `model: "anthropic/claude-sonnet-4-5"`، فستتضمن الإعدادات النهائية الخيارات الثلاثة جميعها.
+على سبيل المثال، إذا كان الإعداد العام يضبط `theme: "leo-code"` و`autoupdate: true`، وكان إعداد المشروع يضبط `model: "anthropic/claude-sonnet-4-5"`، فستتضمن الإعدادات النهائية الخيارات الثلاثة جميعها.
 
 ---
 
@@ -43,11 +43,11 @@ description: استخدام ملف إعدادات OpenCode بصيغة JSON.
 تُحمَّل مصادر الإعدادات بهذا الترتيب (المصادر اللاحقة تتجاوز السابقة):
 
 1. **الإعدادات البعيدة** (من `.well-known/opencode`) - الإعدادات الافتراضية على مستوى المؤسسة
-2. **الإعدادات العامة** (`~/.config/opencode/opencode.json`) - تفضيلات المستخدم
-3. **إعدادات مخصصة** (`OPENCODE_CONFIG` env var) - تجاوزات مخصصة
+2. **الإعدادات العامة** (`~/.config/leo-code/opencode.json`) - تفضيلات المستخدم
+3. **إعدادات مخصصة** (`LEO_CONFIG` env var) - تجاوزات مخصصة
 4. **إعدادات المشروع** (`opencode.json` داخل المشروع) - إعدادات خاصة بالمشروع
 5. **أدلة `.opencode`** - الوكلاء، الأوامر، الإضافات
-6. **إعدادات ضمنية** (`OPENCODE_CONFIG_CONTENT` env var) - تجاوزات وقت التشغيل
+6. **إعدادات ضمنية** (`LEO_CONFIG_CONTENT` env var) - تجاوزات وقت التشغيل
 
 هذا يعني أن إعدادات المشروع يمكنها تجاوز الإعدادات العامة، وأن الإعدادات العامة يمكنها تجاوز الإعدادات الافتراضية البعيدة على مستوى المؤسسة.
 
@@ -95,7 +95,7 @@ description: استخدام ملف إعدادات OpenCode بصيغة JSON.
 
 ### عام
 
-ضع إعدادات OpenCode العامة في `~/.config/opencode/opencode.json`. استخدم الإعدادات العامة للتفضيلات على مستوى المستخدم مثل السمات، والمزوّدين، أو اختصارات المفاتيح.
+ضع إعدادات leo/code العامة في `~/.config/leo-code/opencode.json`. استخدم الإعدادات العامة للتفضيلات على مستوى المستخدم مثل السمات، والمزوّدين، أو اختصارات المفاتيح.
 
 تتجاوز الإعدادات العامة القيم الافتراضية البعيدة الخاصة بالمؤسسة.
 
@@ -109,7 +109,7 @@ description: استخدام ملف إعدادات OpenCode بصيغة JSON.
 ضع إعدادات المشروع الخاصة في جذر مشروعك.
 :::
 
-عند تشغيل OpenCode، يبحث عن ملف إعدادات في الدليل الحالي أو يصعد حتى أقرب دليل Git.
+عند تشغيل leo/code، يبحث عن ملف إعدادات في الدليل الحالي أو يصعد حتى أقرب دليل Git.
 
 ومن الآمن أيضًا تضمينه في Git، كما يستخدم نفس المخطط الخاص بالإعدادات العامة.
 
@@ -117,10 +117,10 @@ description: استخدام ملف إعدادات OpenCode بصيغة JSON.
 
 ### مسار مخصص
 
-حدّد مسار ملف إعدادات مخصصًا باستخدام متغير البيئة `OPENCODE_CONFIG`.
+حدّد مسار ملف إعدادات مخصصًا باستخدام متغير البيئة `LEO_CONFIG`.
 
 ```bash
-export OPENCODE_CONFIG=/path/to/my/custom-config.json
+export LEO_CONFIG=/path/to/my/custom-config.json
 opencode run "Hello world"
 ```
 
@@ -130,12 +130,12 @@ opencode run "Hello world"
 
 ### دليل مخصص
 
-حدّد دليل إعدادات مخصصًا باستخدام متغير البيئة `OPENCODE_CONFIG_DIR`.
+حدّد دليل إعدادات مخصصًا باستخدام متغير البيئة `LEO_CONFIG_DIR`.
 سيتم البحث داخل هذا الدليل عن الوكلاء والأوامر والأوضاع والإضافات تمامًا مثل
 الدليل القياسي `.opencode`، ويجب أن يتبع نفس البنية.
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+export LEO_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
@@ -145,7 +145,7 @@ opencode run "Hello world"
 
 ## المخطط
 
-يحتوي ملف الإعدادات على مخطط مُعرَّف في [**`opencode.ai/config.json`**](https://opencode.ai/config.json).
+يحتوي ملف الإعدادات على مخطط مُعرَّف في [**`leosoftware.dev/config.json`**](https://leosoftware.dev/config.json).
 
 يفترض أن يتمكن محررك من التحقق والإكمال التلقائي اعتمادًا على هذا المخطط.
 
@@ -157,7 +157,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "tui": {
     "scroll_speed": 3,
     "scroll_acceleration": {
@@ -184,7 +184,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "server": {
     "port": 4096,
     "hostname": "0.0.0.0",
@@ -199,7 +199,7 @@ opencode run "Hello world"
 
 - `port` - المنفذ الذي سيتم الاستماع عليه.
 - `hostname` - اسم المضيف الذي سيتم الاستماع عليه. عند تفعيل `mdns` وعدم ضبط اسم مضيف، تكون القيمة الافتراضية `0.0.0.0`.
-- `mdns` - تفعيل اكتشاف الخدمة عبر mDNS. يتيح ذلك للأجهزة الأخرى على الشبكة اكتشاف خادم OpenCode.
+- `mdns` - تفعيل اكتشاف الخدمة عبر mDNS. يتيح ذلك للأجهزة الأخرى على الشبكة اكتشاف خادم leo/code.
 - `mdnsDomain` - اسم نطاق مخصص لخدمة mDNS. القيمة الافتراضية هي `opencode.local`. مفيد لتشغيل عدة نُسخ على نفس الشبكة.
 - `cors` - أصول إضافية مسموح بها لـ CORS عند استخدام خادم HTTP من عميل يعتمد على المتصفح. يجب أن تكون القيم أصولًا كاملة (البروتوكول + المضيف + منفذ اختياري)، مثل `https://app.example.com`.
 
@@ -213,7 +213,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "tools": {
     "write": false,
     "bash": false
@@ -227,24 +227,24 @@ opencode run "Hello world"
 
 ### النماذج
 
-يمكنك ضبط المزوّدين والنماذج التي تريد استخدامها في إعدادات OpenCode عبر الخيارات `provider` و`model` و`small_model`.
+يمكنك ضبط المزوّدين والنماذج التي تريد استخدامها في إعدادات leo/code عبر الخيارات `provider` و`model` و`small_model`.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "provider": {},
   "model": "anthropic/claude-sonnet-4-5",
   "small_model": "anthropic/claude-haiku-4-5"
 }
 ```
 
-يضبط الخيار `small_model` نموذجًا منفصلًا للمهام الخفيفة مثل توليد العناوين. افتراضيًا يحاول OpenCode استخدام نموذج أقل تكلفة إذا كان متاحًا لدى مزوّدك، وإلا فسيعود إلى النموذج الرئيسي.
+يضبط الخيار `small_model` نموذجًا منفصلًا للمهام الخفيفة مثل توليد العناوين. افتراضيًا يحاول leo/code استخدام نموذج أقل تكلفة إذا كان متاحًا لدى مزوّدك، وإلا فسيعود إلى النموذج الرئيسي.
 
 قد تتضمن خيارات المزوّد `timeout` و`setCacheKey`:
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -273,7 +273,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "provider": {
     "amazon-bedrock": {
       "options": {
@@ -300,11 +300,11 @@ opencode run "Hello world"
 
 ### السمات
 
-يمكنك ضبط السمة التي تريد استخدامها في إعدادات OpenCode عبر الخيار `theme`.
+يمكنك ضبط السمة التي تريد استخدامها في إعدادات leo/code عبر الخيار `theme`.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "theme": ""
 }
 ```
@@ -317,9 +317,9 @@ opencode run "Hello world"
 
 يمكنك ضبط وكلاء متخصصين لمهام محددة عبر الخيار `agent`.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="leo-code.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
@@ -335,7 +335,7 @@ opencode run "Hello world"
 }
 ```
 
-يمكنك أيضًا تعريف الوكلاء باستخدام ملفات markdown في `~/.config/opencode/agents/` أو `.opencode/agents/`. [تعرف على المزيد هنا](/docs/agents).
+يمكنك أيضًا تعريف الوكلاء باستخدام ملفات markdown في `~/.config/leo-code/agents/` أو `.opencode/agents/`. [تعرف على المزيد هنا](/docs/agents).
 
 ---
 
@@ -345,12 +345,12 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "default_agent": "plan"
 }
 ```
 
-يجب أن يكون الوكيل الافتراضي وكيلًا أساسيًا (وليس وكيلًا فرعيًا). يمكن أن يكون وكيلًا مدمجًا مثل `"build"` أو `"plan"`، أو [وكيلًا مخصصًا](/docs/agents) قمت بتعريفه. إذا لم يكن الوكيل المحدد موجودًا أو كان وكيلًا فرعيًا، فسيعود OpenCode إلى `"build"` مع تحذير.
+يجب أن يكون الوكيل الافتراضي وكيلًا أساسيًا (وليس وكيلًا فرعيًا). يمكن أن يكون وكيلًا مدمجًا مثل `"build"` أو `"plan"`، أو [وكيلًا مخصصًا](/docs/agents) قمت بتعريفه. إذا لم يكن الوكيل المحدد موجودًا أو كان وكيلًا فرعيًا، فسيعود leo/code إلى `"build"` مع تحذير.
 
 ينطبق هذا الإعداد على جميع الواجهات: TUI وCLI (`opencode run`) وتطبيق سطح المكتب وGitHub Action.
 
@@ -362,7 +362,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "share": "manual"
 }
 ```
@@ -381,9 +381,9 @@ opencode run "Hello world"
 
 يمكنك ضبط أوامر مخصصة للمهام المتكررة عبر الخيار `command`.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="leo-code.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "command": {
     "test": {
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
@@ -399,7 +399,7 @@ opencode run "Hello world"
 }
 ```
 
-يمكنك أيضًا تعريف الأوامر باستخدام ملفات markdown في `~/.config/opencode/commands/` أو `.opencode/commands/`. [تعرف على المزيد هنا](/docs/commands).
+يمكنك أيضًا تعريف الأوامر باستخدام ملفات markdown في `~/.config/leo-code/commands/` أو `.opencode/commands/`. [تعرف على المزيد هنا](/docs/commands).
 
 ---
 
@@ -409,7 +409,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "keybinds": {}
 }
 ```
@@ -420,11 +420,11 @@ opencode run "Hello world"
 
 ### التحديث التلقائي
 
-سيقوم OpenCode بتنزيل أي تحديثات جديدة تلقائيًا عند بدء التشغيل. يمكنك تعطيل ذلك عبر الخيار `autoupdate`.
+سيقوم leo/code بتنزيل أي تحديثات جديدة تلقائيًا عند بدء التشغيل. يمكنك تعطيل ذلك عبر الخيار `autoupdate`.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "autoupdate": false
 }
 ```
@@ -440,7 +440,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -468,7 +468,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "permission": {
     "edit": "ask",
     "bash": "ask"
@@ -486,7 +486,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "compaction": {
     "auto": true,
     "prune": true
@@ -506,7 +506,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "watcher": {
     "ignore": ["node_modules/**", "dist/**", ".git/**"]
   }
@@ -523,7 +523,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "mcp": {}
 }
 ```
@@ -534,13 +534,13 @@ opencode run "Hello world"
 
 ### الإضافات
 
-[الإضافات](/docs/plugins) توسّع OpenCode بأدوات وخُطافات وتكاملات مخصصة.
+[الإضافات](/docs/plugins) توسّع leo/code بأدوات وخُطافات وتكاملات مخصصة.
 
-ضع ملفات الإضافات في `.opencode/plugins/` أو `~/.config/opencode/plugins/`. يمكنك أيضًا تحميل إضافات من npm عبر الخيار `plugin`.
+ضع ملفات الإضافات في `.opencode/plugins/` أو `~/.config/leo-code/plugins/`. يمكنك أيضًا تحميل إضافات من npm عبر الخيار `plugin`.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
 }
 ```
@@ -555,7 +555,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
 }
 ```
@@ -571,7 +571,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "disabled_providers": ["openai", "gemini"]
 }
 ```
@@ -594,12 +594,12 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "enabled_providers": ["anthropic", "openai"]
 }
 ```
 
-هذا مفيد عندما تريد تقييد OpenCode لاستخدام مزوّدين محددين بدلًا من تعطيلهم واحدًا تلو الآخر.
+هذا مفيد عندما تريد تقييد leo/code لاستخدام مزوّدين محددين بدلًا من تعطيلهم واحدًا تلو الآخر.
 
 :::note
 الخيار `disabled_providers` له أولوية على `enabled_providers`.
@@ -615,7 +615,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "experimental": {}
 }
 ```
@@ -638,8 +638,8 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}",
+  "$schema": "https://leosoftware.dev/config.json",
+  "model": "{env:LEO_MODEL}",
   "provider": {
     "anthropic": {
       "models": {},
@@ -661,7 +661,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "instructions": ["./custom-instructions.md"],
   "provider": {
     "openai": {

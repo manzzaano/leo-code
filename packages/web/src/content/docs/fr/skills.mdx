@@ -14,7 +14,7 @@ Créez un dossier par nom de compétence et insérez-y un `SKILL.md`.
 OpenCode recherche ces emplacements :
 
 - Configuration du projet : `.opencode/skills/<name>/SKILL.md`
-- Configuration globale : `~/.config/opencode/skills/<name>/SKILL.md`
+- Configuration globale : `~/.config/leo-code/skills/<name>/SKILL.md`
 - Compatible Projet Claude : `.claude/skills/<name>/SKILL.md`
 - Compatible Global Claude : `~/.claude/skills/<name>/SKILL.md`
 - Compatible avec l'agent de projet : `.agents/skills/<name>/SKILL.md`
@@ -27,7 +27,7 @@ OpenCode recherche ces emplacements :
 Pour les chemins locaux du projet, OpenCode remonte de votre répertoire de travail actuel jusqu'à ce qu'il atteigne l'arbre de travail git.
 Il charge tout `skills/*/SKILL.md` correspondant dans `.opencode/` et tout `.claude/skills/*/SKILL.md` ou `.agents/skills/*/SKILL.md` correspondant en cours de route.
 
-Les définitions globales sont également chargées à partir de `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` et `~/.agents/skills/*/SKILL.md`.
+Les définitions globales sont également chargées à partir de `~/.config/leo-code/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` et `~/.agents/skills/*/SKILL.md`.
 
 ---
 

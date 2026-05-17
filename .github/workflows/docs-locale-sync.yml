@@ -29,8 +29,8 @@ jobs:
         id: committer
         uses: ./.github/actions/setup-git-committer
         with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+          opencode-app-id: ${{ vars.LEO_APP_ID }}
+          opencode-app-secret: ${{ secrets.LEO_APP_SECRET }}
 
       - name: Compute changed English docs
         id: changes
@@ -48,15 +48,15 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Install OpenCode
+      - name: Install leo/code
         if: steps.changes.outputs.has_changes == 'true'
-        run: curl -fsSL https://opencode.ai/install | bash
+        run: curl -fsSL https://leosoftware.dev/install | bash
 
-      - name: Sync locale docs with OpenCode
+      - name: Sync locale docs with leo/code
         if: steps.changes.outputs.has_changes == 'true'
         env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          OPENCODE_CONFIG_CONTENT: |
+          LEO_API_KEY: ${{ secrets.LEO_API_KEY }}
+          LEO_CONFIG_CONTENT: |
             {
               "permission": {
                 "*": "deny",

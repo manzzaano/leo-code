@@ -14,7 +14,7 @@ Kreirajte jedan folder po nazivu skill-a i stavite `SKILL.md` unutar njega.
 OpenCode pretrazuje ove lokacije:
 
 - Konfiguracija projekta: `.opencode/skills/<name>/SKILL.md`
-- Globalna konfiguracija: `~/.config/opencode/skills/<name>/SKILL.md`
+- Globalna konfiguracija: `~/.config/leo-code/skills/<name>/SKILL.md`
 - Claude kompatibilno u projektu: `.claude/skills/<name>/SKILL.md`
 - Globalno Claude kompatibilno: `~/.claude/skills/<name>/SKILL.md`
 - Agent kompatibilno u projektu: `.agents/skills/<name>/SKILL.md`
@@ -27,7 +27,7 @@ OpenCode pretrazuje ove lokacije:
 Za projektne lokalne putanje, OpenCode ide prema gore od trenutnog radnog direktorija dok ne dode do git worktree-ja.
 Usput ucitava sve odgovarajuce `skills/*/SKILL.md` u `.opencode/` i odgovarajuce `.claude/skills/*/SKILL.md` ili `.agents/skills/*/SKILL.md`.
 
-Globalne definicije se takoder ucitavaju iz `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` i `~/.agents/skills/*/SKILL.md`.
+Globalne definicije se takoder ucitavaju iz `~/.config/leo-code/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` i `~/.agents/skills/*/SKILL.md`.
 
 ---
 

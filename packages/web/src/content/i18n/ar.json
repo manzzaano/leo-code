@@ -54,7 +54,7 @@
   "share.error_api_url_not_found": "لم يتم العثور على API URL",
   "share.error_connection_failed": "فشل الاتصال",
   "share.opencode_version": "إصدار opencode",
-  "share.opencode_name": "opencode",
+  "share.opencode_name": "leo-code",
   "share.models": "النماذج",
   "share.cost": "التكلفة",
   "share.input_tokens": "رموز الإدخال",

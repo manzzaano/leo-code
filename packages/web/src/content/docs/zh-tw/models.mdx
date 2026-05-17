@@ -52,7 +52,7 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 
 ```json title="opencode.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "model": "lmstudio/google/gemma-3n-e4b"
 }
 ```
@@ -67,9 +67,9 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 
 您可以透過設定檔全域設定模型的選項。
 
-```jsonc title="opencode.jsonc" {7-12,19-24}
+```jsonc title="leo-code.jsonc" {7-12,19-24}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -106,11 +106,11 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 
 您也可以定義擴展內建變體的自訂變體。變體允許您為同一個模型設定不同的選項，而無需建立重複的項目：
 
-```jsonc title="opencode.jsonc" {6-21}
+```jsonc title="leo-code.jsonc" {6-21}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "provider": {
-    "opencode": {
+    "leo-code": {
       "models": {
         "gpt-5": {
           "variants": {
@@ -171,9 +171,9 @@ OpenCode 為許多提供商提供了預設變體：
 
 您可以覆寫現有變體或新增自己的變體：
 
-```jsonc title="opencode.jsonc" {7-18}
+```jsonc title="leo-code.jsonc" {7-18}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -210,7 +210,7 @@ OpenCode 啟動時，會按以下優先順序載入模型：
 
    ```json title="opencode.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://leosoftware.dev/config.json",
      "model": "anthropic/claude-sonnet-4-20250514"
    }
    ```

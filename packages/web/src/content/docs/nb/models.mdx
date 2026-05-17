@@ -53,7 +53,7 @@ OpenCode-konfigurasjon.
 
 ```json title="opencode.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "model": "lmstudio/google/gemma-3n-e4b"
 }
 ```
@@ -68,9 +68,9 @@ Hvis du har konfigurert en [egendefinert leverandør](/docs/providers#custom), e
 
 Du kan konfigurere en modells alternativer globalt gjennom konfigurasjonen.
 
-```jsonc title="opencode.jsonc" {7-12,19-24}
+```jsonc title="leo-code.jsonc" {7-12,19-24}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -107,11 +107,11 @@ Du kan også konfigurere disse alternativene for alle agenter du bruker. Agentko
 
 Du kan også definere tilpassede varianter som utvider de innebygde. Varianter lar deg konfigurere forskjellige innstillinger for samme modell uten å opprette dupliserte oppføringer:
 
-```jsonc title="opencode.jsonc" {6-21}
+```jsonc title="leo-code.jsonc" {6-21}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "provider": {
-    "opencode": {
+    "leo-code": {
       "models": {
         "gpt-5": {
           "variants": {
@@ -172,9 +172,9 @@ Denne listen er ikke uttømmende. Mange andre leverandører har også innebygde 
 
 Du kan overstyre eksisterende varianter eller legge til dine egne:
 
-```jsonc title="opencode.jsonc" {7-18}
+```jsonc title="leo-code.jsonc" {7-18}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -211,7 +211,7 @@ Når OpenCode starter opp, ser den etter modeller i følgende prioriterte rekkef
 
    ```json title="opencode.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://leosoftware.dev/config.json",
      "model": "anthropic/claude-sonnet-4-20250514"
    }
    ```

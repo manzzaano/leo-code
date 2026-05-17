@@ -54,7 +54,7 @@
   "share.error_api_url_not_found": "找不到 API URL",
   "share.error_connection_failed": "連線失敗",
   "share.opencode_version": "OpenCode 版本",
-  "share.opencode_name": "opencode",
+  "share.opencode_name": "leo-code",
   "share.models": "模型",
   "share.cost": "成本",
   "share.input_tokens": "輸入 Tokens",

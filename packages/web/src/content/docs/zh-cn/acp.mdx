@@ -30,8 +30,8 @@ ACP 是一个开放协议，用于标准化代码编辑器与 AI 编码代理之
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "opencode",
+    "leo/code": {
+      "command": "leo-code",
       "args": ["acp"]
     }
   }
@@ -51,9 +51,9 @@ ACP 是一个开放协议，用于标准化代码编辑器与 AI 编码代理之
         {
           "agent": {
             "custom": {
-              "name": "OpenCode",
+              "name": "leo/code",
               "command": {
-                "command": "opencode",
+                "command": "leo-code",
                 "args": ["acp"]
               }
             }
@@ -74,7 +74,7 @@ ACP 是一个开放协议，用于标准化代码编辑器与 AI 编码代理之
 ```json title="acp.json"
 {
   "agent_servers": {
-    "OpenCode": {
+    "leo/code": {
       "command": "/absolute/path/bin/opencode",
       "args": ["acp"]
     }
@@ -82,7 +82,7 @@ ACP 是一个开放协议，用于标准化代码编辑器与 AI 编码代理之
 }
 ```
 
-打开方式：在 AI Chat 代理选择器中选择新的 'OpenCode' 代理。
+打开方式：在 AI Chat 代理选择器中选择新的 'leo/code' 代理。
 
 ---
 
@@ -93,8 +93,8 @@ ACP 是一个开放协议，用于标准化代码编辑器与 AI 编码代理之
 ```lua
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["leo-code"] = {
+      command = "leo-code",
       args = { "acp" }
     }
   }
@@ -106,11 +106,11 @@ ACP 是一个开放协议，用于标准化代码编辑器与 AI 编码代理之
 ```lua {6-8}
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["leo-code"] = {
+      command = "leo-code",
       args = { "acp" },
       env = {
-        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+        LEO_API_KEY = os.getenv("LEO_API_KEY")
       }
     }
   }
@@ -128,7 +128,7 @@ require("codecompanion").setup({
   interactions = {
     chat = {
       adapter = {
-        name = "opencode",
+        name = "leo-code",
         model = "claude-sonnet-4",
       },
     },
@@ -138,7 +138,7 @@ require("codecompanion").setup({
 
 此配置将 CodeCompanion 设置为使用 OpenCode 作为聊天的 ACP 代理。
 
-如果需要传递环境变量（如 `OPENCODE_API_KEY`），请参阅 CodeCompanion.nvim 文档中的[配置适配器：环境变量](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)了解详细信息。
+如果需要传递环境变量（如 `LEO_API_KEY`），请参阅 CodeCompanion.nvim 文档中的[配置适配器：环境变量](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)了解详细信息。
 
 ## 支持
 

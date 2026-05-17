@@ -53,7 +53,7 @@ opencode konfiguracja
 
 ```json title="opencode.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "model": "lmstudio/google/gemma-3n-e4b"
 }
 ```
@@ -68,9 +68,9 @@ Jeśli skonfigurowałeś [dostawcę zwykłegogo] (./providers#custom), `provider
 
 Można globalnie skorzystać z opcji modelu poprzez plik config.
 
-```jsonc title="opencode.jsonc" {7-12,19-24}
+```jsonc title="leo-code.jsonc" {7-12,19-24}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -107,11 +107,11 @@ Można także skorzystać z opcji dla dowolnych agentów, których używa się. 
 
 Można również zastosować alternatywne warianty, które wykluczają. Warianty konfiguracji ustawień konfiguracyjnych dla tego samego modelu bez tworzenia duplikatów wpisów:
 
-```jsonc title="opencode.jsonc" {6-21}
+```jsonc title="leo-code.jsonc" {6-21}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "provider": {
-    "opencode": {
+    "leo-code": {
       "models": {
         "gpt-5": {
           "variants": {
@@ -172,9 +172,9 @@ Lista ta nie jest kompletna. Wielu innych dostawców oferuje także opcję odchy
 
 Można uwzględnić warianty lub dodać własne:
 
-```jsonc title="opencode.jsonc" {7-18}
+```jsonc title="leo-code.jsonc" {7-18}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -211,7 +211,7 @@ Po uruchomieniu opencode sprawdzanie modeli w następującej kolejności:
 
    ```json title="opencode.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://leosoftware.dev/config.json",
      "model": "anthropic/claude-sonnet-4-20250514"
    }
    ```

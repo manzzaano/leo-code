@@ -30,8 +30,8 @@ ACP로 OpenCode를 사용하려면, 편집기에서 `opencode acp` 명령을 실
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "opencode",
+    "leo/code": {
+      "command": "leo-code",
       "args": ["acp"]
     }
   }
@@ -51,9 +51,9 @@ ACP로 OpenCode를 사용하려면, 편집기에서 `opencode acp` 명령을 실
         {
           "agent": {
             "custom": {
-              "name": "OpenCode",
+              "name": "leo/code",
               "command": {
-                "command": "opencode",
+                "command": "leo-code",
                 "args": ["acp"]
               }
             }
@@ -74,7 +74,7 @@ ACP로 OpenCode를 사용하려면, 편집기에서 `opencode acp` 명령을 실
 ```json title="acp.json"
 {
   "agent_servers": {
-    "OpenCode": {
+    "leo/code": {
       "command": "/absolute/path/bin/opencode",
       "args": ["acp"]
     }
@@ -82,7 +82,7 @@ ACP로 OpenCode를 사용하려면, 편집기에서 `opencode acp` 명령을 실
 }
 ```
 
-열려면 AI Chat agent selector에서 새 `OpenCode` agent를 선택하세요.
+열려면 AI Chat agent selector에서 새 `leo/code` agent를 선택하세요.
 
 ---
 
@@ -93,8 +93,8 @@ ACP로 OpenCode를 사용하려면, 편집기에서 `opencode acp` 명령을 실
 ```lua
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["leo-code"] = {
+      command = "leo-code",
       args = { "acp" }
     }
   }
@@ -106,11 +106,11 @@ ACP로 OpenCode를 사용하려면, 편집기에서 `opencode acp` 명령을 실
 ```lua {6-8}
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["leo-code"] = {
+      command = "leo-code",
       args = { "acp" },
       env = {
-        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+        LEO_API_KEY = os.getenv("LEO_API_KEY")
       }
     }
   }
@@ -128,7 +128,7 @@ require("codecompanion").setup({
   interactions = {
     chat = {
       adapter = {
-        name = "opencode",
+        name = "leo-code",
         model = "claude-sonnet-4",
       },
     },
@@ -138,7 +138,7 @@ require("codecompanion").setup({
 
 이 config는 chat에서 OpenCode를 ACP agent로 사용하도록 CodeCompanion을 설정합니다.
 
-환경 변수(`OPENCODE_API_KEY` 등)를 전달해야 한다면 CodeCompanion.nvim documentation의 [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)를 참고하세요.
+환경 변수(`LEO_API_KEY` 등)를 전달해야 한다면 CodeCompanion.nvim documentation의 [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)를 참고하세요.
 
 ## 지원
 

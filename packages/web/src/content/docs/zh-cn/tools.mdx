@@ -3,7 +3,7 @@ title: 工具
 description: 管理 LLM 可以使用的工具。
 ---
 
-工具允许 LLM 在您的代码库中执行操作。OpenCode 自带一组内置工具，您也可以通过[自定义工具](/docs/custom-tools)或 [MCP 服务器](/docs/mcp-servers)来扩展它。
+工具允许 LLM 在您的代码库中执行操作。leo/code 自带一组内置工具，您也可以通过[自定义工具](/docs/custom-tools)或 [MCP 服务器](/docs/mcp-servers)来扩展它。
 
 默认情况下，所有工具都是**启用**的，且无需权限即可运行。您可以通过[权限](/docs/permissions)来控制工具的行为。
 
@@ -15,7 +15,7 @@ description: 管理 LLM 可以使用的工具。
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "permission": {
     "edit": "deny",
     "bash": "ask",
@@ -28,7 +28,7 @@ description: 管理 LLM 可以使用的工具。
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "permission": {
     "mymcp_*": "ask"
   }
@@ -41,7 +41,7 @@ description: 管理 LLM 可以使用的工具。
 
 ## 内置工具
 
-以下是 OpenCode 中所有可用的内置工具。
+以下是 leo/code 中所有可用的内置工具。
 
 ---
 
@@ -51,7 +51,7 @@ description: 管理 LLM 可以使用的工具。
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "permission": {
     "bash": "allow"
   }
@@ -68,7 +68,7 @@ description: 管理 LLM 可以使用的工具。
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -85,7 +85,7 @@ description: 管理 LLM 可以使用的工具。
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -106,7 +106,7 @@ description: 管理 LLM 可以使用的工具。
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "permission": {
     "read": "allow"
   }
@@ -123,7 +123,7 @@ description: 管理 LLM 可以使用的工具。
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "permission": {
     "grep": "allow"
   }
@@ -140,7 +140,7 @@ description: 管理 LLM 可以使用的工具。
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "permission": {
     "glob": "allow"
   }
@@ -156,12 +156,12 @@ description: 管理 LLM 可以使用的工具。
 与已配置的 LSP 服务器交互，获取代码智能功能，如定义跳转、引用查找、悬停信息和调用层次结构。
 
 :::note
-该工具仅在设置 `OPENCODE_EXPERIMENTAL_LSP_TOOL=true`（或 `OPENCODE_EXPERIMENTAL=true`）时可用。
+该工具仅在设置 `LEO_EXPERIMENTAL_LSP_TOOL=true`（或 `LEO_EXPERIMENTAL=true`）时可用。
 :::
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "permission": {
     "lsp": "allow"
   }
@@ -180,7 +180,7 @@ description: 管理 LLM 可以使用的工具。
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -201,7 +201,7 @@ description: 管理 LLM 可以使用的工具。
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "permission": {
     "skill": "allow"
   }
@@ -216,7 +216,7 @@ description: 管理 LLM 可以使用的工具。
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "permission": {
     "todowrite": "allow"
   }
@@ -237,7 +237,7 @@ description: 管理 LLM 可以使用的工具。
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "permission": {
     "webfetch": "allow"
   }
@@ -253,19 +253,19 @@ description: 管理 LLM 可以使用的工具。
 在网络上搜索信息。
 
 :::note
-该工具仅在使用 OpenCode 提供商时，或当 `OPENCODE_ENABLE_EXA` 环境变量设置为任意真值（例如 `true` 或 `1`）时可用。
+该工具仅在使用 leo/code 提供商时，或当 `LEO_ENABLE_EXA` 环境变量设置为任意真值（例如 `true` 或 `1`）时可用。
 
-在启动 OpenCode 时启用：
+在启动 leo/code 时启用：
 
 ```bash
-OPENCODE_ENABLE_EXA=1 opencode
+LEO_ENABLE_EXA=1 opencode
 ```
 
 :::
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "permission": {
     "websearch": "allow"
   }
@@ -288,7 +288,7 @@ OPENCODE_ENABLE_EXA=1 opencode
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "permission": {
     "question": "allow"
   }

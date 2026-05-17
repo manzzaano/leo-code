@@ -9,7 +9,7 @@ describe("terminalWebSocketURL", () => {
       directory: "/tmp/project",
       cursor: 0,
       sameOrigin: false,
-      username: "opencode",
+      username: "leo-code",
       password: "secret",
     })
 
@@ -26,7 +26,7 @@ describe("terminalWebSocketURL", () => {
       directory: "/tmp/project",
       cursor: 10,
       sameOrigin: true,
-      username: "opencode",
+      username: "leo-code",
       password: "secret",
     })
 
@@ -41,7 +41,7 @@ describe("terminalWebSocketURL", () => {
       directory: "/tmp/project",
       cursor: 10,
       sameOrigin: true,
-      username: "opencode",
+      username: "leo-code",
       password: "secret",
       authToken: true,
     })

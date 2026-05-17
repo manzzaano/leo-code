@@ -20,7 +20,7 @@ description: 編寫自己的外掛來擴展 OpenCode。
 將 JavaScript 或 TypeScript 檔案放置在外掛目錄中。
 
 - `.opencode/plugins/` - 專案級外掛
-- `~/.config/opencode/plugins/` - 全域外掛
+- `~/.config/leo-code/plugins/` - 全域外掛
 
 這些目錄中的檔案會在啟動時自動載入。
 
@@ -32,7 +32,7 @@ description: 編寫自己的外掛來擴展 OpenCode。
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
 }
 ```
@@ -45,7 +45,7 @@ description: 編寫自己的外掛來擴展 OpenCode。
 
 ### 外掛的安裝方式
 
-**npm 外掛**在啟動時使用 Bun 自動安裝。套件及其相依套件會快取在 `~/.cache/opencode/node_modules/` 中。
+**npm 外掛**在啟動時使用 Bun 自動安裝。套件及其相依套件會快取在 `~/.cache/leo-code/node_modules/` 中。
 
 **本地外掛**直接從外掛目錄載入。如果需要使用外部套件，您必須在設定目錄中建立 `package.json`（參見[相依套件](#dependencies)），或者將外掛發布到 npm 並[將其新增到設定中](/docs/config#plugins)。
 
@@ -55,9 +55,9 @@ description: 編寫自己的外掛來擴展 OpenCode。
 
 外掛從所有來源載入，所有鉤子按順序執行。載入順序為：
 
-1. 全域設定 (`~/.config/opencode/opencode.json`)
+1. 全域設定 (`~/.config/leo-code/opencode.json`)
 2. 專案設定 (`opencode.json`)
-3. 全域外掛目錄 (`~/.config/opencode/plugins/`)
+3. 全域外掛目錄 (`~/.config/leo-code/plugins/`)
 4. 專案外掛目錄 (`.opencode/plugins/`)
 
 名稱和版本相同的重複 npm 套件只會載入一次。但本地外掛和名稱相似的 npm 外掛會分別獨立載入。
@@ -127,7 +127,7 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 對於 TypeScript 外掛，您可以從外掛套件中匯入類型：
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@leo-code/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -224,7 +224,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
     event: async ({ event }) => {
       // Send notification on session completion
       if (event.type === "session.idle") {
-        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+        await $`osascript -e 'display notification "Session completed!" with title "leo-code"'`
       }
     },
   }
@@ -279,7 +279,7 @@ export const InjectEnvPlugin = async () => {
 外掛還可以為 OpenCode 新增自訂工具：
 
 ```ts title=".opencode/plugins/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+import { type Plugin, tool } from "@leo-code/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -330,7 +330,7 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-日誌層級：`debug`、`info`、`warn`、`error`。詳情請參閱 [SDK 文件](https://opencode.ai/docs/sdk)。
+日誌層級：`debug`、`info`、`warn`、`error`。詳情請參閱 [SDK 文件](https://leosoftware.dev/docs/sdk)。
 
 ---
 
@@ -339,7 +339,7 @@ export const MyPlugin = async ({ client }) => {
 自訂工作階段壓縮時包含的上下文：
 
 ```ts title=".opencode/plugins/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@leo-code/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -363,7 +363,7 @@ Include any state that should persist across compaction:
 您還可以透過設定 `output.prompt` 來完全替換壓縮提示詞：
 
 ```ts title=".opencode/plugins/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@leo-code/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {

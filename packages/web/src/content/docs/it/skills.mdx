@@ -14,7 +14,7 @@ Crea una cartella per ogni nome di skill e metti un `SKILL.md` al suo interno.
 OpenCode cerca in queste posizioni:
 
 - Config di progetto: `.opencode/skills/<name>/SKILL.md`
-- Config globale: `~/.config/opencode/skills/<name>/SKILL.md`
+- Config globale: `~/.config/leo-code/skills/<name>/SKILL.md`
 - Progetto compatibile con Claude: `.claude/skills/<name>/SKILL.md`
 - Globale compatibile con Claude: `~/.claude/skills/<name>/SKILL.md`
 - Progetto compatibile con agent: `.agents/skills/<name>/SKILL.md`
@@ -27,7 +27,7 @@ OpenCode cerca in queste posizioni:
 Per i percorsi locali al progetto, OpenCode risale dalla directory di lavoro corrente finche' non raggiunge il worktree git.
 Carica qualsiasi `skills/*/SKILL.md` corrispondente in `.opencode/` e qualsiasi `.claude/skills/*/SKILL.md` o `.agents/skills/*/SKILL.md` corrispondente lungo il percorso.
 
-Le definizioni globali vengono caricate anche da `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` e `~/.agents/skills/*/SKILL.md`.
+Le definizioni globali vengono caricate anche da `~/.config/leo-code/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` e `~/.agents/skills/*/SKILL.md`.
 
 ---
 

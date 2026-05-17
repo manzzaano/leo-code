@@ -11,7 +11,7 @@ opencode ile ilgili bir sorunu ayiklamak icin once loglari ve diskte tuttugu yer
 
 Log dosyalari su konuma yazilir:
 
-- **macOS/Linux**: `~/.local/share/opencode/log/`
+- **macOS/Linux**: `~/.local/share/leo-code/log/`
 - **Windows**: `WIN+R` tuslayip `%USERPROFILE%\.local\share\opencode\log` yapistirin
 
 Log dosyalari zaman damgasiyla adlandirilir (ornegin `2025-01-09T123456.log`) ve en yeni 10 log dosyasi tutulur.
@@ -24,7 +24,7 @@ Daha ayrintili ayiklama bilgisi icin `--log-level` komut satiri secenegini kulla
 
 opencode, oturum verilerini ve diger uygulama verilerini diskte su konumda saklar:
 
-- **macOS/Linux**: `~/.local/share/opencode/`
+- **macOS/Linux**: `~/.local/share/leo-code/`
 - **Windows**: `WIN+R` tuslayip `%USERPROFILE%\.local\share\opencode` yapistirin
 
 Bu dizin sunlari icerir:
@@ -57,15 +57,15 @@ Desktop uygulamasi acilista cokuyorsa, takiliyorsa veya garip davranislar goster
 
 Global config dosyanizi acin ve `plugin` anahtarini arayin.
 
-- **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (veya `~/.config/opencode/opencode.json`)
-- **macOS/Linux** (eski kurulumlar): `~/.local/share/opencode/opencode.jsonc`
-- **Windows**: `WIN+R` tuslayip `%USERPROFILE%\.config\opencode\opencode.jsonc` yapistirin
+- **macOS/Linux**: `~/.config/leo-code/leo-code.jsonc` (veya `~/.config/leo-code/opencode.json`)
+- **macOS/Linux** (eski kurulumlar): `~/.local/share/leo-code/leo-code.jsonc`
+- **Windows**: `WIN+R` tuslayip `%USERPROFILE%\.config\opencode\leo-code.jsonc` yapistirin
 
 Plugin tanimliysa anahtari kaldirarak veya bos bir diziye cekerek gecici olarak devre disi birakin:
 
 ```jsonc
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "plugin": [],
 }
 ```
@@ -75,7 +75,7 @@ Plugin tanimliysa anahtari kaldirarak veya bos bir diziye cekerek gecici olarak 
 opencode diskten yerel plugin de yukleyebilir. Bu dizinleri gecici olarak tasiyin (veya klasoru yeniden adlandirin) ve uygulamayi yeniden baslatin:
 
 - **Global plugins**
-  - **macOS/Linux**: `~/.config/opencode/plugins/`
+  - **macOS/Linux**: `~/.config/leo-code/plugins/`
   - **Windows**: `WIN+R` tuslayip `%USERPROFILE%\.config\opencode\plugins` yapistirin
 - **Project plugins** (sadece proje bazli config kullaniyorsaniz)
   - `<your-project>/.opencode/plugins/`
@@ -115,9 +115,9 @@ Ana ekranda sunucu adina (durum noktali) tiklayarak Server secicisini acin. **De
 
 #### Ortam degiskenlerini kontrol edin
 
-Ortamda `OPENCODE_PORT` ayarliysa desktop uygulamasi yerel sunucu icin o portu kullanmaya calisir.
+Ortamda `LEO_PORT` ayarliysa desktop uygulamasi yerel sunucu icin o portu kullanmaya calisir.
 
-- `OPENCODE_PORT` degerini kaldirin (veya bos bir port secin) ve yeniden baslatin
+- `LEO_PORT` degerini kaldirin (veya bos bir port secin) ve yeniden baslatin
 
 ---
 
@@ -177,7 +177,7 @@ opencode ile ilgili bir sorun yasiyorsaniz:
 
    Hata bildirmek veya ozellik talep etmek icin en iyi yol GitHub depomuzdur:
 
-   [**github.com/anomalyco/opencode/issues**](https://github.com/anomalyco/opencode/issues)
+   [**github.com/anomalyco/leo-code/issues**](https://github.com/anomalyco/leo-code/issues)
 
    Yeni issue acmadan once sorununuzun daha once raporlanip raporlanmadigini kontrol edin.
 
@@ -185,7 +185,7 @@ opencode ile ilgili bir sorun yasiyorsaniz:
 
    Gercek zamanli yardim ve topluluk sohbeti icin Discord sunucumuza katilin:
 
-   [**opencode.ai/discord**](https://opencode.ai/discord)
+   [**leosoftware.dev/discord**](https://leosoftware.dev/discord)
 
 ---
 

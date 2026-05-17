@@ -26,7 +26,7 @@ WSL, daha iyi dosya sistemi performansi, tam terminal destegi ve opencode'un day
    WSL hazir olduktan sonra WSL terminalini acin ve opencode'u [kurulum yontemlerinden](/docs/) biriyle yukleyin.
 
    ```bash
-   curl -fsSL https://opencode.ai/install | bash
+   curl -fsSL https://leosoftware.dev/install | bash
    ```
 
 3. **opencode'u WSL icinden kullanin**
@@ -59,10 +59,10 @@ Kurulumunuzda `localhost` calismiyorsa bunun yerine WSL IP adresini kullanin (WS
 :::
 
 :::caution
-`--hostname 0.0.0.0` kullaniyorsaniz sunucuyu guvene almak icin `OPENCODE_SERVER_PASSWORD` ayarlayin.
+`--hostname 0.0.0.0` kullaniyorsaniz sunucuyu guvene almak icin `LEO_SERVER_PASSWORD` ayarlayin.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
+LEO_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 ```
 
 :::
@@ -110,4 +110,4 @@ En sorunsuz deneyim icin deponuzu WSL dosya sistemine (ornegin `~/code/` altina)
 
 - Windows suruculerinde duran projelerde opencode'u WSL icinde calistirin - dosya erisimi daha sorunsuz olur
 - Butunlesik bir gelistirme akisi icin opencode ile birlikte VS Code [WSL eklentisini](https://code.visualstudio.com/docs/remote/wsl) kullanin
-- opencode konfigurasyonunuz ve oturumlariniz WSL ortaminda `~/.local/share/opencode/` konumunda saklanir
+- opencode konfigurasyonunuz ve oturumlariniz WSL ortaminda `~/.local/share/leo-code/` konumunda saklanir

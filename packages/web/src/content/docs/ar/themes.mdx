@@ -65,7 +65,7 @@ description: اختر سمة مدمجة أو عرّف سمة خاصة بك.
 
 ```json title="opencode.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "theme": "tokyonight"
 }
 ```
@@ -83,7 +83,7 @@ description: اختر سمة مدمجة أو عرّف سمة خاصة بك.
 تُحمَّل السمات من عدة مجلدات بالترتيب التالي، حيث تتجاوز المجلدات اللاحقة المجلدات السابقة:
 
 1. **السمات المدمجة** - تكون مضمنة داخل الملف التنفيذي
-2. **مجلد ضبط المستخدم** - معرّف في `~/.config/opencode/themes/*.json` أو `$XDG_CONFIG_HOME/opencode/themes/*.json`
+2. **مجلد ضبط المستخدم** - معرّف في `~/.config/leo-code/themes/*.json` أو `$XDG_CONFIG_HOME/leo-code/themes/*.json`
 3. **مجلد جذر المشروع** - معرّف في `<project-root>/.opencode/themes/*.json`
 4. **مجلد العمل الحالي** - معرّف في `./.opencode/themes/*.json`
 
@@ -98,8 +98,8 @@ description: اختر سمة مدمجة أو عرّف سمة خاصة بك.
 للسمات على مستوى المستخدم:
 
 ```bash no-frame
-mkdir -p ~/.config/opencode/themes
-vim ~/.config/opencode/themes/my-theme.json
+mkdir -p ~/.config/leo-code/themes
+vim ~/.config/leo-code/themes/my-theme.json
 ```
 
 وللسمات الخاصة بالمشروع:
@@ -144,7 +144,7 @@ vim .opencode/themes/my-theme.json
 
 ```json title="my-theme.json"
 {
-  "$schema": "https://opencode.ai/theme.json",
+  "$schema": "https://leosoftware.dev/theme.json",
   "defs": {
     "nord0": "#2E3440",
     "nord1": "#3B4252",

@@ -147,7 +147,7 @@ _Mode_: `primary`
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "agent": {
     "build": {
       "mode": "primary",
@@ -188,10 +188,10 @@ _Mode_: `primary`
 
 Markdown 파일로도 agent를 정의할 수 있습니다. 다음 위치에 두세요.
 
-- Global: `~/.config/opencode/agents/`
+- Global: `~/.config/leo-code/agents/`
 - Per-project: `.opencode/agents/`
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/leo-code/agents/review.md"
 ---
 description: Reviews code for quality and best practices
 mode: subagent
@@ -376,7 +376,7 @@ OpenCode config의 model ID는 `provider/model-id` 형식을 사용합니다. �
 
 ```json title="opencode.json" {3-6,9-12}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "tools": {
     "write": true,
     "bash": true
@@ -400,7 +400,7 @@ agent별 config는 전역 config를 override합니다.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "agent": {
     "readonly": {
       "tools": {
@@ -427,7 +427,7 @@ permission을 설정해 agent가 수행할 수 있는 action을 제어할 수 �
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "permission": {
     "edit": "deny"
   }
@@ -438,7 +438,7 @@ permission을 설정해 agent가 수행할 수 있는 action을 제어할 수 �
 
 ```json title="opencode.json" {3-5,8-10}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "permission": {
     "edit": "deny"
   },
@@ -454,7 +454,7 @@ permission을 설정해 agent가 수행할 수 있는 action을 제어할 수 �
 
 Markdown agent에서도 permission을 설정할 수 있습니다.
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/leo-code/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent
@@ -475,7 +475,7 @@ Only analyze code and suggest changes.
 
 ```json title="opencode.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -493,7 +493,7 @@ Only analyze code and suggest changes.
 
 ```json title="opencode.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -511,7 +511,7 @@ Only analyze code and suggest changes.
 
 ```json title="opencode.json" {8}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -711,7 +711,7 @@ opencode agent create
 
 ### Documentation agent
 
-```markdown title="~/.config/opencode/agents/docs-writer.md"
+```markdown title="~/.config/leo-code/agents/docs-writer.md"
 ---
 description: Writes and maintains project documentation
 mode: subagent
@@ -733,7 +733,7 @@ Focus on:
 
 ### Security auditor
 
-```markdown title="~/.config/opencode/agents/security-auditor.md"
+```markdown title="~/.config/leo-code/agents/security-auditor.md"
 ---
 description: Performs security audits and identifies vulnerabilities
 mode: subagent
