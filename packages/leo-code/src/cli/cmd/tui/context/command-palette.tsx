@@ -6,7 +6,7 @@ import {
   reactiveMatcherFromSignal,
   type OpenTuiKeymap,
   useKeymapSelector,
-  useOpencodeKeymap,
+  useLeoCodeKeymap,
 } from "../keymap"
 import { useTuiConfig } from "./tui-config"
 
@@ -43,7 +43,7 @@ function isSuggestedPaletteCommand(entry: PaletteCommandEntry) {
 
 export function CommandPaletteProvider(props: ParentProps) {
   const dialog = useDialog()
-  const keymap = useOpencodeKeymap()
+  const keymap = useLeoCodeKeymap()
   const [suspendCount, setSuspendCount] = createSignal(0)
   const entries = useKeymapSelector((keymap: OpenTuiKeymap) =>
     keymap
