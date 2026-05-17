@@ -52,7 +52,7 @@ Per impostarne uno come modello predefinito, puoi impostare la chiave `model` ne
 
 ```json title="opencode.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "model": "lmstudio/google/gemma-3n-e4b"
 }
 ```
@@ -67,9 +67,9 @@ Se hai configurato un [provider personalizzato](/docs/providers#custom), `provid
 
 Puoi configurare globalmente le opzioni di un modello tramite la config.
 
-```jsonc title="opencode.jsonc" {7-12,19-24}
+```jsonc title="leo-code.jsonc" {7-12,19-24}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -106,11 +106,11 @@ Puoi anche configurare queste opzioni per gli agenti che usi. La config dell'age
 
 Puoi anche definire varianti personalizzate che estendono quelle integrate. Le varianti ti permettono di configurare impostazioni diverse per lo stesso modello senza creare voci duplicate:
 
-```jsonc title="opencode.jsonc" {6-21}
+```jsonc title="leo-code.jsonc" {6-21}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "provider": {
-    "opencode": {
+    "leo-code": {
       "models": {
         "gpt-5": {
           "variants": {
@@ -171,9 +171,9 @@ Questa lista non e completa. Anche molti altri provider hanno default integrati.
 
 Puoi sovrascrivere varianti esistenti o aggiungerne di tue:
 
-```jsonc title="opencode.jsonc" {7-18}
+```jsonc title="leo-code.jsonc" {7-18}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -210,7 +210,7 @@ Quando OpenCode si avvia, controlla i modelli in questo ordine di priorita:
 
    ```json title="opencode.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://leosoftware.dev/config.json",
      "model": "anthropic/claude-sonnet-4-20250514"
    }
    ```

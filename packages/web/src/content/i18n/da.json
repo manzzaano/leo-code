@@ -54,7 +54,7 @@
   "share.error_api_url_not_found": "API URL ikke fundet",
   "share.error_connection_failed": "Forbindelsen mislykkedes",
   "share.opencode_version": "opencode-version",
-  "share.opencode_name": "opencode",
+  "share.opencode_name": "leo-code",
   "share.models": "Modeller",
   "share.cost": "Omkostning",
   "share.input_tokens": "Input-tokens",

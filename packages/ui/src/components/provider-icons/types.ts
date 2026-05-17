@@ -33,7 +33,7 @@ export const iconNames = [
   "ovhcloud",
   "openrouter",
   "llmgateway",
-  "opencode",
+  "leo-code",
   "opencode-go",
   "openai",
   "ollama-cloud",

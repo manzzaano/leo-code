@@ -29,8 +29,8 @@ ACP 経由で OpenCode を使用するには、`opencode acp` コマンドを実
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "opencode",
+    "leo/code": {
+      "command": "leo-code",
       "args": ["acp"]
     }
   }
@@ -50,9 +50,9 @@ ACP 経由で OpenCode を使用するには、`opencode acp` コマンドを実
         {
           "agent": {
             "custom": {
-              "name": "OpenCode",
+              "name": "leo/code",
               "command": {
-                "command": "opencode",
+                "command": "leo-code",
                 "args": ["acp"]
               }
             }
@@ -73,7 +73,7 @@ ACP 経由で OpenCode を使用するには、`opencode acp` コマンドを実
 ```json title="acp.json"
 {
   "agent_servers": {
-    "OpenCode": {
+    "leo/code": {
       "command": "/absolute/path/bin/opencode",
       "args": ["acp"]
     }
@@ -92,8 +92,8 @@ ACP 経由で OpenCode を使用するには、`opencode acp` コマンドを実
 ```lua
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["leo-code"] = {
+      command = "leo-code",
       args = { "acp" }
     }
   }
@@ -105,11 +105,11 @@ ACP 経由で OpenCode を使用するには、`opencode acp` コマンドを実
 ```lua {6-8}
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["leo-code"] = {
+      command = "leo-code",
       args = { "acp" },
       env = {
-        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+        LEO_API_KEY = os.getenv("LEO_API_KEY")
       }
     }
   }
@@ -127,7 +127,7 @@ require("codecompanion").setup({
   interactions = {
     chat = {
       adapter = {
-        name = "opencode",
+        name = "leo-code",
         model = "claude-sonnet-4",
       },
     },
@@ -137,7 +137,7 @@ require("codecompanion").setup({
 
 この構成は、OpenCode をチャットの ACP エージェントとして使用するように CodeCompanion をセットアップします。
 
-環境変数 (`OPENCODE_API_KEY` など) を渡す必要がある場合、詳細については、CodeCompanion.nvim ドキュメントの「[アダプターの構成: 環境変数](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)」を参照してください。
+環境変数 (`LEO_API_KEY` など) を渡す必要がある場合、詳細については、CodeCompanion.nvim ドキュメントの「[アダプターの構成: 環境変数](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)」を参照してください。
 
 ## サポート
 

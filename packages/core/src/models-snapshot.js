@@ -17011,11 +17011,11 @@ export const snapshot = {
   },
   "opencode-go": {
     id: "opencode-go",
-    env: ["OPENCODE_API_KEY"],
+    env: ["LEO_API_KEY"],
     npm: "@ai-sdk/openai-compatible",
-    api: "https://opencode.ai/zen/go/v1",
+    api: "https://leosoftware.dev/zen/go/v1",
     name: "OpenCode Go",
-    doc: "https://opencode.ai/docs/zen",
+    doc: "https://leosoftware.dev/docs/zen",
     models: {
       "minimax-m2.7": {
         id: "minimax-m2.7",
@@ -35153,12 +35153,12 @@ export const snapshot = {
     },
   },
   opencode: {
-    id: "opencode",
-    env: ["OPENCODE_API_KEY"],
+    id: "leo-code",
+    env: ["LEO_API_KEY"],
     npm: "@ai-sdk/openai-compatible",
-    api: "https://opencode.ai/zen/v1",
+    api: "https://leosoftware.dev/zen/v1",
     name: "OpenCode Zen",
-    doc: "https://opencode.ai/docs/zen",
+    doc: "https://leosoftware.dev/docs/zen",
     models: {
       "minimax-m2.7": {
         id: "minimax-m2.7",

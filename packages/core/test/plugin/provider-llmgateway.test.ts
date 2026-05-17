@@ -1,8 +1,8 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { PluginV2 } from "@opencode-ai/core/plugin"
-import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
-import { LLMGatewayPlugin } from "@opencode-ai/core/plugin/provider/llmgateway"
+import { PluginV2 } from "@leo-code/core/plugin"
+import { ProviderPlugins } from "@leo-code/core/plugin/provider"
+import { LLMGatewayPlugin } from "@leo-code/core/plugin/provider/llmgateway"
 import { expectPluginRegistered, it, provider } from "./provider-helper"
 
 describe("LLMGatewayPlugin", () => {
@@ -42,9 +42,9 @@ describe("LLMGatewayPlugin", () => {
       )
       expect(result.provider.options.headers).toEqual({
         Existing: "value",
-        "HTTP-Referer": "https://opencode.ai/",
-        "X-Title": "opencode",
-        "X-Source": "opencode",
+        "HTTP-Referer": "https://leosoftware.dev/",
+        "X-Title": "leo-code",
+        "X-Source": "leo-code",
       })
       expect(ignored.provider.options.headers).toEqual({})
     }),

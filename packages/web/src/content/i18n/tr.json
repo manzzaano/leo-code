@@ -54,7 +54,7 @@
   "share.error_api_url_not_found": "API URL bulunamadı",
   "share.error_connection_failed": "Bağlantı başarısız",
   "share.opencode_version": "opencode sürümü",
-  "share.opencode_name": "opencode",
+  "share.opencode_name": "leo-code",
   "share.models": "Modeller",
   "share.cost": "Maliyet",
   "share.input_tokens": "Girdi Token'ları",

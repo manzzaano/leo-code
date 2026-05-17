@@ -54,7 +54,7 @@
   "share.error_api_url_not_found": "API URL ikke funnet",
   "share.error_connection_failed": "Tilkobling mislyktes",
   "share.opencode_version": "opencode versjon",
-  "share.opencode_name": "opencode",
+  "share.opencode_name": "leo-code",
   "share.models": "Modeller",
   "share.cost": "Kostnad",
   "share.input_tokens": "Inndata-tokens",

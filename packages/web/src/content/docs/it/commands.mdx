@@ -50,9 +50,9 @@ Puoi aggiungere comandi personalizzati tramite la config di OpenCode o creando f
 
 Usa l'opzione `command` nella [config](/docs/config) di OpenCode:
 
-```json title="opencode.jsonc" {4-12}
+```json title="leo-code.jsonc" {4-12}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "command": {
     // This becomes the name of the command
     "test": {
@@ -79,10 +79,10 @@ Ora puoi eseguire questo comando nella TUI:
 
 Puoi anche definire comandi usando file markdown. Mettili in:
 
-- Globale: `~/.config/opencode/commands/`
+- Globale: `~/.config/leo-code/commands/`
 - Per progetto: `.opencode/commands/`
 
-```markdown title="~/.config/opencode/commands/test.md"
+```markdown title="~/.config/leo-code/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build

@@ -65,7 +65,7 @@ Du kan velge et tema ved at hente frem temavalg med kommandoen `/theme`. Eller d
 
 ```json title="tui.json" {3}
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://leosoftware.dev/tui.json",
   "theme": "tokyonight"
 }
 ```
@@ -83,7 +83,7 @@ OpenCode støtter et fleksibelt JSON-basert temasystem som lar brugere enkelt la
 Temaer lastes inn fra flere kataloger i følgende rekkefølge der senere kataloger overstyrer tidligere:
 
 1. **Innebygde temaer** - Disse er innebygd i binæren
-2. **Brugerkonfigurasjonskatalog** - Definert i `~/.config/opencode/themes/*.json` eller `$XDG_CONFIG_HOME/opencode/themes/*.json`
+2. **Brugerkonfigurasjonskatalog** - Definert i `~/.config/leo-code/themes/*.json` eller `$XDG_CONFIG_HOME/leo-code/themes/*.json`
 3. **Prosjektrotkatalog** - Definert i `<project-root>/.opencode/themes/*.json`
 4. **Nuværende arbejdskatalog** - Definert i `./.opencode/themes/*.json`
 
@@ -98,8 +98,8 @@ For at lage et brugerdefineret tema, lag en JSON-fil i en av temakatalogene.
 For brugeromfattende temaer:
 
 ```bash no-frame
-mkdir -p ~/.config/opencode/themes
-vim ~/.config/opencode/themes/my-theme.json
+mkdir -p ~/.config/leo-code/themes
+vim ~/.config/leo-code/themes/my-theme.json
 ```
 
 Og for prosjektspesifikke temaer.
@@ -144,7 +144,7 @@ Her er et eksempel på et brugerdefineret tema:
 
 ```json title="my-theme.json"
 {
-  "$schema": "https://opencode.ai/theme.json",
+  "$schema": "https://leosoftware.dev/theme.json",
   "defs": {
     "nord0": "#2E3440",
     "nord1": "#3B4252",

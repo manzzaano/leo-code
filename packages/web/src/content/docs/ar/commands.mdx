@@ -50,9 +50,9 @@ Focus on the failing tests and suggest fixes.
 
 استخدم خيار `command` في [config](/docs/config) الخاص بـ OpenCode:
 
-```json title="opencode.jsonc" {4-12}
+```json title="leo-code.jsonc" {4-12}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://leosoftware.dev/config.json",
   "command": {
     // يصبح هذا اسم الأمر
     "test": {
@@ -79,10 +79,10 @@ Focus on the failing tests and suggest fixes.
 
 يمكنك أيضًا تعريف الأوامر باستخدام ملفات Markdown. ضعها في:
 
-- على مستوى النظام: `~/.config/opencode/commands/`
+- على مستوى النظام: `~/.config/leo-code/commands/`
 - لكل مشروع: `.opencode/commands/`
 
-```markdown title="~/.config/opencode/commands/test.md"
+```markdown title="~/.config/leo-code/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build

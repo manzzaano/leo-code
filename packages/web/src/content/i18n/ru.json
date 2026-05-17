@@ -54,7 +54,7 @@
   "share.error_api_url_not_found": "API URL не найден",
   "share.error_connection_failed": "Не удалось подключиться",
   "share.opencode_version": "версия opencode",
-  "share.opencode_name": "opencode",
+  "share.opencode_name": "leo-code",
   "share.models": "Модели",
   "share.cost": "Стоимость",
   "share.input_tokens": "Входные токены",

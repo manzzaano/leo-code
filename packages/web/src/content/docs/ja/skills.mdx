@@ -14,7 +14,7 @@ description: SKILL.md 定義による再利用可能な動作の定義
 OpenCode は次の場所を検索します。
 
 - プロジェクト設定: `.opencode/skills/<name>/SKILL.md`
-- グローバル設定: `~/.config/opencode/skills/<name>/SKILL.md`
+- グローバル設定: `~/.config/leo-code/skills/<name>/SKILL.md`
 - プロジェクト Claude 互換: `.claude/skills/<name>/SKILL.md`
 - グローバル Claude 互換: `~/.claude/skills/<name>/SKILL.md`
 - プロジェクトエージェント互換: `.agents/skills/<name>/SKILL.md`
@@ -27,7 +27,7 @@ OpenCode は次の場所を検索します。
 プロジェクトのローカルパスの場合、OpenCode は現在の作業ディレクトリから git ワークツリーに到達するまで進みます。
 途中で、一致する `skills/*/SKILL.md` を `.opencode/` に読み込み、一致する `.claude/skills/*/SKILL.md` または `.agents/skills/*/SKILL.md` を読み込みます。
 
-グローバル定義は、`~/.config/opencode/skills/*/SKILL.md`、`~/.claude/skills/*/SKILL.md`、および `~/.agents/skills/*/SKILL.md` からもロードされます。
+グローバル定義は、`~/.config/leo-code/skills/*/SKILL.md`、`~/.claude/skills/*/SKILL.md`、および `~/.agents/skills/*/SKILL.md` からもロードされます。
 
 ---
 

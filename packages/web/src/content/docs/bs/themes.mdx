@@ -65,7 +65,7 @@ Temu mozete izabrati preko selektora tema komandom `/theme`. Ili je možete nave
 
 ```json title="tui.json" {3}
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://leosoftware.dev/tui.json",
   "theme": "tokyonight"
 }
 ```
@@ -83,7 +83,7 @@ OpenCode podrzava fleksibilan sistem tema baziran na JSON-u koji olaksava kreira
 Teme se ucitavaju iz vise direktorija ovim redoslijedom, gdje kasniji direktoriji prepisuju ranije:
 
 1. **Ugradene teme** - Ugradene su u binarni fajl
-2. **Korisnicki config direktorij** - `~/.config/opencode/themes/*.json` ili `$XDG_CONFIG_HOME/opencode/themes/*.json`
+2. **Korisnicki config direktorij** - `~/.config/leo-code/themes/*.json` ili `$XDG_CONFIG_HOME/leo-code/themes/*.json`
 3. **Korijenski direktorij projekta** - `<project-root>/.opencode/themes/*.json`
 4. **Trenutni radni direktorij** - `./.opencode/themes/*.json`
 
@@ -98,8 +98,8 @@ Da kreirate prilagodenu temu, napravite JSON datoteku u jednom od direktorija za
 Za korisnicke teme na nivou sistema:
 
 ```bash no-frame
-mkdir -p ~/.config/opencode/themes
-vim ~/.config/opencode/themes/my-theme.json
+mkdir -p ~/.config/leo-code/themes
+vim ~/.config/leo-code/themes/my-theme.json
 ```
 
 I za teme specificne za projekat.
@@ -144,7 +144,7 @@ Evo primjera prilagodene teme:
 
 ```json title="my-theme.json"
 {
-  "$schema": "https://opencode.ai/theme.json",
+  "$schema": "https://leosoftware.dev/theme.json",
   "defs": {
     "nord0": "#2E3440",
     "nord1": "#3B4252",

@@ -21,7 +21,7 @@ async function signWindows(configuration: { path: string }) {
 }
 
 const channel = (() => {
-  const raw = process.env.OPENCODE_CHANNEL
+  const raw = process.env.LEO_CHANNEL
   if (raw === "dev" || raw === "beta" || raw === "prod") return raw
   return "dev"
 })()
@@ -54,8 +54,8 @@ const getBase = (): Configuration => ({
     sign: true,
   },
   protocols: {
-    name: "OpenCode",
-    schemes: ["opencode"],
+    name: "leo/code",
+    schemes: ["leo-code"],
   },
   win: {
     icon: `resources/icons/icon.ico`,
@@ -95,7 +95,7 @@ function getConfig() {
         ...base,
         appId: "ai.opencode.desktop.beta",
         productName: "OpenCode Beta",
-        protocols: { name: "OpenCode Beta", schemes: ["opencode"] },
+        protocols: { name: "OpenCode Beta", schemes: ["leo-code"] },
         publish: { provider: "github", owner: "anomalyco", repo: "opencode-beta", channel: "latest" },
         rpm: { packageName: "opencode-beta" },
       }
@@ -104,10 +104,10 @@ function getConfig() {
       return {
         ...base,
         appId: "ai.opencode.desktop",
-        productName: "OpenCode",
-        protocols: { name: "OpenCode", schemes: ["opencode"] },
-        publish: { provider: "github", owner: "anomalyco", repo: "opencode", channel: "latest" },
-        rpm: { packageName: "opencode" },
+        productName: "leo/code",
+        protocols: { name: "leo/code", schemes: ["leo-code"] },
+        publish: { provider: "github", owner: "anomalyco", repo: "leo-code", channel: "latest" },
+        rpm: { packageName: "leo-code" },
       }
     }
   }

@@ -14,7 +14,7 @@ Crie uma pasta por nome de habilidade e coloque um `SKILL.md` dentro dela.
 O opencode pesquisa nesses locais:
 
 - Configuração do projeto: `.opencode/skills/<name>/SKILL.md`
-- Configuração global: `~/.config/opencode/skills/<name>/SKILL.md`
+- Configuração global: `~/.config/leo-code/skills/<name>/SKILL.md`
 - Projeto compatível com Claude: `.claude/skills/<name>/SKILL.md`
 - Global compatível com Claude: `~/.claude/skills/<name>/SKILL.md`
 - Projeto compatível com agente: `.agents/skills/<name>/SKILL.md`
@@ -27,7 +27,7 @@ O opencode pesquisa nesses locais:
 Para caminhos locais do projeto, o opencode sobe a partir do seu diretório de trabalho atual até alcançar a árvore de trabalho do git.
 Ele carrega qualquer `skills/*/SKILL.md` correspondente em `.opencode/` e qualquer `.claude/skills/*/SKILL.md` ou `.agents/skills/*/SKILL.md` ao longo do caminho.
 
-As definições globais também são carregadas de `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` e `~/.agents/skills/*/SKILL.md`.
+As definições globais também são carregadas de `~/.config/leo-code/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` e `~/.agents/skills/*/SKILL.md`.
 
 ---
 

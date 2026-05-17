@@ -30,8 +30,8 @@ Aggiungi alla configurazione di [Zed](https://zed.dev) (`~/.config/zed/settings.
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "opencode",
+    "leo/code": {
+      "command": "leo-code",
       "args": ["acp"]
     }
   }
@@ -51,9 +51,9 @@ Puoi anche assegnare una scorciatoia da tastiera modificando `keymap.json`:
         {
           "agent": {
             "custom": {
-              "name": "OpenCode",
+              "name": "leo/code",
               "command": {
-                "command": "opencode",
+                "command": "leo-code",
                 "args": ["acp"]
               }
             }
@@ -74,7 +74,7 @@ Aggiungi al tuo acp.json per [JetBrains IDE](https://www.jetbrains.com/) secondo
 ```json title="acp.json"
 {
   "agent_servers": {
-    "OpenCode": {
+    "leo/code": {
       "command": "/absolute/path/bin/opencode",
       "args": ["acp"]
     }
@@ -82,7 +82,7 @@ Aggiungi al tuo acp.json per [JetBrains IDE](https://www.jetbrains.com/) secondo
 }
 ```
 
-Per aprirlo, seleziona il nuovo agente 'OpenCode' nel selettore agenti di AI Chat.
+Per aprirlo, seleziona il nuovo agente 'leo/code' nel selettore agenti di AI Chat.
 
 ---
 
@@ -93,8 +93,8 @@ Aggiungi alla configurazione di [Avante.nvim](https://github.com/yetone/avante.n
 ```lua
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["leo-code"] = {
+      command = "leo-code",
       args = { "acp" }
     }
   }
@@ -106,11 +106,11 @@ Se devi passare variabili d'ambiente:
 ```lua {6-8}
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["leo-code"] = {
+      command = "leo-code",
       args = { "acp" },
       env = {
-        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+        LEO_API_KEY = os.getenv("LEO_API_KEY")
       }
     }
   }
@@ -128,7 +128,7 @@ require("codecompanion").setup({
   interactions = {
     chat = {
       adapter = {
-        name = "opencode",
+        name = "leo-code",
         model = "claude-sonnet-4",
       },
     },
@@ -138,7 +138,7 @@ require("codecompanion").setup({
 
 Questa config imposta CodeCompanion per usare OpenCode come agente ACP per la chat.
 
-Se devi passare variabili d'ambiente (come `OPENCODE_API_KEY`), vedi [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) nella documentazione di CodeCompanion.nvim.
+Se devi passare variabili d'ambiente (come `LEO_API_KEY`), vedi [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) nella documentazione di CodeCompanion.nvim.
 
 ## Supporto
 
