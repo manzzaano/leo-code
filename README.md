@@ -7,169 +7,199 @@
   <br><br>
 
   <p>
-    <strong>Terminal Agent · Recuperación Estructural de Código</strong><br>
-    <sub>El código no es texto. Es un grafo. Tu agente debería tratarlo como tal.</sub>
+    <strong>Agente de terminal con Recuperación Estructural de Código (KC-RAG)</strong><br>
+    <sub>Fork de opencode — el código es un grafo, no texto plano.</sub>
   </p>
 
   <p>
-    <a href="https://leosoftware.dev/leo-code">
-      <img src="https://img.shields.io/badge/Web-leosoftware.dev/leo--code-1d4ed8?style=flat-square&labelColor=070708">
-    </a>
     <a href="LICENSE">
       <img src="https://img.shields.io/badge/License-MIT-34d399?style=flat-square&labelColor=070708">
     </a>
     <a href="#kc-rag">
       <img src="https://img.shields.io/badge/KC--RAG-Estructural-5B8DEF?style=flat-square&labelColor=070708">
     </a>
-    <a href="#modelos">
-      <img src="https://img.shields.io/badge/Modelos-75%2B-1d4ed8?style=flat-square&labelColor=070708">
+    <a href="#benchmark">
+      <img src="https://img.shields.io/badge/benchmark-v12-1d4ed8?style=flat-square&labelColor=070708">
     </a>
   </p>
 </div>
 
 ---
 
-## El problema
+## Qué es esto
 
-Todos los agentes de terminal recuperan código igual: **chunking por número de caracteres + similitud coseno de embeddings.**
+**leo-code** es un fork de [opencode](https://github.com/sst/opencode) con un plugin KC-RAG integrado. En lugar de dejar que el agente explore el código libremente (abriendo archivos, buscando en el árbol de directorios), leo-code **inyecta el contexto relevante antes de que el modelo vea la pregunta**.
 
-Esto produce tres fallos estructurales:
+El sidecar KC-RAG (`leo-code-mcp`) indexa el repositorio, construye un índice vectorial y devuelve las cápsulas de código más relevantes comprimidas, adaptadas al tipo de tarea. El agente responde con ese contexto ya disponible.
+
+---
+
+## El problema del chunking tradicional
+
+Todos los agentes de código actuales recuperan contexto igual: **chunking por longitud + similitud coseno de embeddings.**
 
 | Fallo | Causa | Consecuencia |
 |-------|-------|-------------|
-| **Cortes a mitad de función** | El chunk de 500 tokens parte `verifyUser()` por la mitad | El LLM ve medio comportamiento |
-| **Aislamiento de dependencias** | Recupera `verifyUser` pero no `hashPassword` (la que realmente llama) | El bug está en la dependencia no recuperada |
-| **Falsos positivos semánticos** | Trae `verifyEmail` porque "verify" + "user" = "verify" + "email" | Contexto irrelevante, tokens desperdiciados |
+| Cortes a mitad de función | El chunk de 500 tokens parte `verifyUser()` | El LLM ve medio comportamiento |
+| Dependencias perdidas | Recupera `verifyUser` pero no `hashPassword` (que es la que falla) | El bug está en una función que no llega al contexto |
+| Falsos positivos semánticos | `verifyEmail` parece relevante para "verify user" | Contexto irrelevante, tokens desperdiciados |
 
-**Resultado**: 70-85% del contexto enviado al LLM es ruido. Se paga en tokens y en calidad.
+**Resultado típico**: 70-85% del contexto enviado al LLM es ruido.
 
 ---
 
-## KC-RAG: la solución
+## KC-RAG: recuperación por subgrafo de dependencias
 
-**KC-RAG no busca texto similar. Recupera el subgrafo de dependencias.**
+KC-RAG no busca texto similar. Recupera el **subgrafo de dependencias** de las cápsulas relevantes.
 
 ```
 Código fuente
-    ↓ tree-sitter + AST
-Cápsulas (función, clase, módulo) con dependencias (LLAMA, IMPORTA, HEREDA)
-    ↓ Qdrant HNSW + BFS expansión + cross-encoder rerank
-Subgrafo conexo de cápsulas relevantes
+    ↓ AST (tree-sitter + Python ast)
+Cápsulas: función, clase, módulo — con metadatos (calls, imports, docstring)
+    ↓ Índice Qdrant HNSW + match exacto por nombre/archivo
+Candidatos relevantes (top 15 semánticos + exact match)
     ↓ Compresión adaptativa por tipo de tarea
-Contexto estructural (~200-2000 tokens)
+Contexto estructural (~400–2000 tokens)
+    ↓ Inyectado en el system prompt por plugin.ts
+El modelo responde directamente sin abrir archivos
 ```
 
-### Qué mide KC-RAG que otros no miden
+### Tipos de tarea y compresión adaptativa
 
-| Métrica | Qué significa | KC-RAG | Chunking tradicional |
-|---------|--------------|--------|---------------------|
-| **Integridad de cápsula** | ¿Se recupera la función completa? | ✅ Nunca se corta | ❌ Cortes a 500 tokens |
-| **Conectividad topológica** | ¿Vienen las dependencias? | ✅ BFS depth 2 | ❌ Fragmentos aislados |
-| **Grounding determinista** | ¿Se puede trazar cada afirmación a una cápsula? | ✅ Python extrae nombres del texto | ❌ Sin trazabilidad |
-| **Presupuesto adaptativo** | ¿El contexto se ajusta al tipo de tarea? | ✅ 200-2000 tokens según tarea | ❌ Tamaño fijo |
-| **Cache estructural** | ¿Se reutiliza el grafo entre consultas? | ✅ Redis L1/L2/L3 | ❌ Sin cache |
+| Tipo | Qué incluye el contexto | Tokens aprox. |
+|------|------------------------|---------------|
+| `code_query` | Primera cápsula con cuerpo completo + firmas del resto | 500–2000 |
+| `refactor` | Función target + todas sus callees + callers | 800–1500 |
+| `search` | Mapa de funciones con indicador ✓doc/✗doc | 300–800 |
+| `no_code` | Solo cápsulas de tipo documento (tarifas, condiciones) | 100–500 |
+| `code_gen` | Estructura de directorios sin cuerpos | 200–600 |
 
 ---
 
-## Instalación
+## Arquitectura
 
-```bash
-curl -fsSL https://leosoftware.dev/leo-code/install | bash
+```
+Usuario → leo-code CLI (TypeScript/opencode)
+              ↓ plugin.ts intercepta la query
+              ↓ POST /context a leo-code-mcp (:9898)
+         KC-RAG Sidecar (FastAPI Python)
+              ↓ Indexer (AST) → Qdrant → Compressor
+              ↓ contexto ~400-2000 tokens
+         plugin.ts inyecta en system prompt
+              ↓
+         Modelo LLM (DeepSeek, Claude, GPT, ...)
+              ↓ responde del contexto KC-RAG
+         Respuesta al usuario
 ```
 
-| Vía | Comando |
-|-----|---------|
-| npm | `npm i -g leo-code@latest` |
-| Python (sidecar) | `pip install leo-code-mcp` |
-| Fuente | `git clone https://github.com/manzzaano/leo-code && cd leo-code && bun install` |
+### Componentes
+
+| Componente | Ubicación | Función |
+|-----------|-----------|---------|
+| `plugin.ts` | `packages/leo-code/src/context/` | Intercepta queries, llama al sidecar, inyecta contexto |
+| `kcrag.ts` | `packages/leo-code/src/context/` | Cliente HTTP del sidecar |
+| `server.py` | `leo-code-mcp/leo_mcp/` | FastAPI: /context, /index, /search, /health |
+| `compressor.py` | `kc-code/kc_code/kc_rag/` | Compresión adaptativa por tipo de tarea |
+| `classifier.py` | `kc-code/kc_code/kc_rag/` | Clasificación automática del tipo de tarea |
 
 ---
 
-## Stack
+## Benchmark
 
-<div align="center">
+Medimos leo-code contra dos baselines en **6 tareas reales sobre el propio código del proyecto**:
 
-| Capa | Tecnología | Función |
-|------|-----------|---------|
-| **Parser** | tree-sitter + AST (Python) | Extraer cápsulas del código fuente |
-| **Vector** | Qdrant HNSW | Búsqueda semántica top-50 |
-| **Grafo** | BFS + edge expansion | Expandir dependencias (LLAMA, IMPORTA, HEREDA) |
-| **Reranker** | BGE cross-encoder | Relevancia conjunta consulta-cápsula |
-| **Compresor** | KC-RAG adaptativo | 200-2000 tokens según tipo de tarea |
-| **Cache** | Redis L1/L2/L3 | Ontología permanente + subgrafos 300s + queries 60s |
-| **Grounding** | Python determinista | Extrae entidades del texto a node_id real |
-| **Modelos** | 75+ proveedores | DeepSeek V4, Claude, GPT, Ollama, OpenRouter... |
+- **LEO**: leo-code con KC-RAG integrado (agente completo)
+- **OC**: DeepSeek API directa sin herramientas ni contexto (baseline mínimo)
+- **KC-API**: DeepSeek API + contexto KC-RAG inyectado, llamada única (sin agente)
+- **NO**: DeepSeek API sin contexto ni herramientas
 
-</div>
+### Resultados v12 (2026-05-18)
 
----
+| Sistema | Tokens totales | Criterios avg | Judge (6 tareas) |
+|---------|---------------|---------------|-----------------|
+| **LEO** | 84.148 | 76.2% | 3/6 |
+| OC (baseline) | 4.259 | 50.5% | 2/6 |
+| **KC-API** | 4.257 | 69.2% | 2/6 |
+| NO (sin contexto) | 1.867 | 51.3% | 3/6 |
 
-## Sistema de diseño
+### Métricas de eficiencia
 
-<div align="center">
+- **TRR** (Token Reduction Rate): `1 − (tokens_leo / tokens_oc)` — cuánto menos tokens usa LEO vs baseline
+- **QPR** (Quality-Per-Resource): `TRR × (criterios_leo / criterios_oc)` — calidad relativa por coste
 
-| Token | Valor | Uso |
-|-------|-------|-----|
-| `--color-bg-base` | `#070708` | Fondo TUI |
-| `--color-accent` | `#1d4ed8` | Cobalto — marca |
-| `--color-accent-muted` | `#5B8DEF` | Logo "/" |
-| `--font-sans` | Space Grotesk | UI |
-| `--font-mono` | JetBrains Mono | Código |
+### Observación clave
 
-</div>
+El modo **KC-API** (inyección directa de contexto KC-RAG + llamada única al LLM, sin agente) obtiene **69% de criterios a solo 4.257 tokens** — casi igual que LEO (76%) pero a **20x menor coste**. La inyección de contexto funciona; el overhead viene del agente usando herramientas adicionales.
+
+El benchmark se ejecuta con `python benchmark/agent_compare.py` desde `leo-code/benchmark/`.
 
 ---
 
-## Empezar
+## Instalación (desde código fuente)
+
+> El paquete npm no está publicado aún. Instalación manual.
 
 ```bash
+# 1. Clonar leo-code
 git clone https://github.com/manzzaano/leo-code.git
 cd leo-code
-bun install && bun run build
-leo-code-mcp &    # Sidecar KC-RAG (auto-arrancado por leo-code)
-leo-code          # Terminal interactivo
+bun install
+
+# 2. Clonar el sidecar KC-RAG
+git clone https://github.com/manzzaano/leo-code-mcp.git
+cd leo-code-mcp
+pip install -e .
+
+# 3. Arrancar el sidecar
+python -m leo_mcp.server  # puerto 9898
+
+# 4. En otro terminal, ejecutar leo-code
+cd leo-code
+bun run packages/leo-code/src/cli/index.ts
 ```
 
-| Comando | Descripción |
-|---------|------------|
-| `leo-code` | Modo interactivo (agente completo) |
-| `leo-code "refactor auth"` | Consulta directa con KC-RAG |
-| `leo-code index .` | Indexar repo para retrieval estructural |
-| `leo-code index . --tree-sitter` | Indexar con tree-sitter multi-lenguaje |
+### Indexar un repositorio
+
+```bash
+curl -X POST http://localhost:9898/index \
+  -H "Content-Type: application/json" \
+  -d '{"repo_path": "/ruta/a/tu/repo", "languages": "python,text"}'
+```
 
 ---
 
-## Lo que KC-RAG hace posible
+## Estado actual
 
-**Antes** (chunking semántico): el LLM recibe 80K tokens de fragmentos de código sueltos. Pasa el 70% del razonamiento filtrando ruido.
+| Componente | Estado |
+|-----------|--------|
+| Plugin KC-RAG (plugin.ts) | ✅ Funcional — inyecta contexto en system prompt |
+| Sidecar (:9898) | ✅ Funcional — /context, /index, /search, /health |
+| Indexación Python (AST) | ✅ Funcional — extrae cápsulas sin LLM |
+| Búsqueda híbrida (exact + semántica) | ✅ Funcional — Qdrant + match por nombre/archivo |
+| Compresión adaptativa | ✅ Funcional — 5 tipos de tarea |
+| Benchmark | ✅ 6 tareas, 4 sistemas, LLM judge |
+| Instrucción PROHIBIDO (no leer archivos) | ⚠️ El agente la ignora — usa herramientas igualmente |
+| Publicación npm | ❌ Pendiente |
+| Indexación incremental (watcher) | ❌ Pendiente |
 
-**Después** (KC-RAG): el LLM recibe ~2K tokens de un subgrafo conexo de cápsulas relevantes. Dedica el 100% a resolver el problema.
+---
 
+## Desarrollo
+
+```bash
+bun install          # instalar dependencias
+bun run build        # compilar todos los packages
+bun run typecheck    # verificar tipos TypeScript
 ```
-Tarea: "refactorizar autenticación para usar async"
 
-SIN KC-RAG:
-  Contexto: chunks de verifyUser, verifyEmail, resetPassword, config, 
-            middleware, types, utils... (80% ruido)
-  Tokens: ~120K
-
-CON KC-RAG:
-  Contexto: verifyUser + hashPassword + checkSession + sus imports directos
-  Tokens: ~2K
-  Grounding: cada afirmación trazable a una cápsula
-```
+Ver `AGENTS.md` para guía de estilo del código TypeScript.
 
 ---
 
 <div align="center">
-  <br>
-  <a href="https://leosoftware.dev/leo-code">
-    <img src="https://img.shields.io/badge/leosoftware.dev/leo--code-1d4ed8?style=for-the-badge&labelColor=070708" alt="leo-code">
-  </a>
-  <br><br>
   <sub>
     Construido por <a href="https://github.com/manzzaano">Ismael Manzano</a> ·
-    <a href="https://leosoftware.dev">leosoftware.dev</a> ·
+    Fork de <a href="https://github.com/sst/opencode">opencode</a> ·
     © 2026 — MIT
   </sub>
 </div>
