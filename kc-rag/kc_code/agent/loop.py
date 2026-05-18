@@ -23,7 +23,8 @@ class AgentLoop:
 
     async def run(self, query: str, repo_path: str = ".",
                   model: str = "deepseek/deepseek-v4-flash",
-                  use_kc_rag: bool = True) -> dict:
+                  use_kc_rag: bool = True,
+                  history: list[dict] | None = None) -> dict:
         """Ejecuta una consulta completa: retrieval → LLM → tools → respuesta."""
         if self.llm is None:
             self.llm = self._init_llm(model)
@@ -31,6 +32,7 @@ class AgentLoop:
         repo_path = os.path.abspath(repo_path)
 
         messages = [{"role": "system", "content": self._system_prompt()}]
+        messages.extend(history or [])
         messages.append({"role": "user", "content": query})
 
         context = ""
