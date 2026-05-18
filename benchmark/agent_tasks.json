@@ -1,0 +1,38 @@
+[
+  {
+    "query": "Explica como funciona bfs_subgraph: sus parametros, el algoritmo BFS, y como evita ciclos",
+    "type": "code_query",
+    "kc_task_type": "code_query",
+    "criterios": ["BFS", "max_depth", "depth", "Cypher", "nodos", "aristas"]
+  },
+  {
+    "query": "Que funciones llama retrieve_subgraph en query/capa2.py",
+    "type": "code_query",
+    "kc_task_type": "refactor",
+    "criterios": ["retrieve_subgraph", "extract_entity_names", "find_nodes", "bfs"]
+  },
+  {
+    "query": "Que condiciones deben cumplirse para obtener cualquier descuento",
+    "type": "domain_query",
+    "kc_task_type": "no_code",
+    "criterios": ["pago", "domiciliado", "condicion", "descuento"]
+  },
+  {
+    "query": "Encuentra todas las funciones en query/ que no tienen docstring",
+    "type": "search",
+    "kc_task_type": "search",
+    "criterios": ["docstring", "funcion", "sin docstring", "capa"]
+  },
+  {
+    "query": "Que modulos importa query/pipeline.py y que hace cada uno",
+    "type": "code_query",
+    "kc_task_type": "code_query",
+    "criterios": ["time", "asyncio", "config", "router", "capa0"]
+  },
+  {
+    "query": "Puede un estudiante de 24 anios acceder a la Tarifa Jubilado",
+    "type": "domain_logic",
+    "kc_task_type": "no_code",
+    "criterios": ["no", "65", "anos", "jubilado"]
+  }
+]

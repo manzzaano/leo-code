@@ -1,0 +1,293 @@
+{
+  "run_timestamp": "2026-05-18T07-39-12",
+  "model": "deepseek-chat",
+  "temperature": 0.2,
+  "runs_per_task": 1,
+  "repo": "C:\\Users\\Ismael\\Desktop\\RAG",
+  "metrics": {
+    "n_tasks": 6,
+    "runs_per_task": 1,
+    "total_tokens": {
+      "leo": 84148,
+      "oc": 4259,
+      "kc": 4257,
+      "no": 1867
+    },
+    "trr_leo_vs_oc": -18.758,
+    "qpr_leo_vs_oc": -28.291,
+    "trr_kc_vs_oc": 0.0,
+    "qpr_kc_vs_oc": 0.001,
+    "latency": {
+      "leo": 78.12,
+      "oc": 49.37,
+      "kc": 21.04,
+      "no": 24.24
+    },
+    "avg_criteria": {
+      "leo": 0.762,
+      "oc": 0.505,
+      "kc": 0.692,
+      "no": 0.513
+    },
+    "judge_ok": {
+      "leo": 3,
+      "oc": 2,
+      "kc": 2,
+      "no": 3
+    }
+  },
+  "results": [
+    {
+      "task": "Explica como funciona bfs_subgraph: sus parametros, el algoritmo BFS, y como evita ciclos",
+      "type": "code_query",
+      "leo": {
+        "tokens": 13289,
+        "tokens_sd": 0,
+        "latency": 15.572,
+        "criteria": 0.17,
+        "judge": false,
+        "last_answer": "Del contexto KC-RAG proporcionado no tengo la función `bfs_subgraph`. Solo tengo:\n\n- `cache_subgraph(entity_id, subgraph, ttl)` — guarda en Redis con clave `subgraph:{entity_id}`.\n- `get_cached_subgra",
+        "mode": "leo",
+        "context_tokens": -1
+      },
+      "oc": {
+        "tokens": 1181,
+        "tokens_sd": 0,
+        "latency": 12.127,
+        "criteria": 0.33,
+        "judge": true,
+        "last_answer": "Te explico detalladamente cómo funciona `bfs_subgraph`, un algoritmo de Búsqueda en Anchura (BFS) modificado para construir subgrafos.\n\n## Parámetros de bfs_subgraph\n\n```python\ndef bfs_subgraph(grafo,",
+        "mode": "oc",
+        "context_tokens": -1
+      },
+      "kc": {
+        "tokens": 774,
+        "tokens_sd": 0,
+        "latency": 6.162,
+        "criteria": 0.5,
+        "judge": true,
+        "last_answer": "# Explicación de `bfs_subgraph`\n\n## Parámetros\n\n```python\ndef bfs_subgraph(entity_id: str, max_depth: int = 2) -> dict\n```\n\n- **`entity_id`**: ID de la entidad raíz desde donde comienza la búsqueda\n- ",
+        "context_tokens": 402
+      },
+      "no": {
+        "tokens": 429,
+        "tokens_sd": 0,
+        "latency": 5.29,
+        "criteria": 0.83,
+        "judge": true,
+        "last_answer": "## `bfs_subgraph` - Explicación\n\n### Parámetros típicos\n```python\ndef bfs_subgraph(graph, start_node, max_depth=None):\n```\n- **graph**: Grafo de entrada (NetworkX, igraph, o dict de adyacencia)\n- **st",
+        "context_tokens": 0
+      }
+    },
+    {
+      "task": "Que funciones llama retrieve_subgraph en query/capa2.py",
+      "type": "refactor",
+      "leo": {
+        "tokens": 13316,
+        "tokens_sd": 0,
+        "latency": 14.512,
+        "criteria": 1.0,
+        "judge": false,
+        "last_answer": "Según el contexto KC-RAG, `retrieve_subgraph` en `query/capa2.py` llama a:\n\n- `_extract_entity_names(query)`  \n- `_detect_relation_filter(query)`  \n- `find_nodes_by_name(name, limit)` (de `graph/trave",
+        "mode": "leo",
+        "context_tokens": -1
+      },
+      "oc": {
+        "tokens": 288,
+        "tokens_sd": 0,
+        "latency": 3.658,
+        "criteria": 0.25,
+        "judge": false,
+        "last_answer": "Basándome en el código de `query/capa2.py`, la función `retrieve_subgraph` llama a las siguientes funciones:\n\n1. **`get_subgraph_edges`** - Para obtener las aristas del subgrafo\n2. **`get_subgraph_nod",
+        "mode": "oc",
+        "context_tokens": -1
+      },
+      "kc": {
+        "tokens": 846,
+        "tokens_sd": 0,
+        "latency": 2.205,
+        "criteria": 1.0,
+        "judge": false,
+        "last_answer": "La función `retrieve_subgraph` en `query/capa2.py` llama a las siguientes funciones:\n\n1. **`_extract_entity_names(query)`** – para extraer nombres de entidades de la consulta.\n2. **`_detect_relation_f",
+        "context_tokens": 1066
+      },
+      "no": {
+        "tokens": 259,
+        "tokens_sd": 0,
+        "latency": 3.143,
+        "criteria": 0.25,
+        "judge": false,
+        "last_answer": "Basándome en el nombre del archivo `query/capa2.py`, la función `retrieve_subgraph` probablemente llama a funciones como:\n\n1. **Funciones de consulta a base de datos/grafo**:\n   - `execute_query()` o ",
+        "context_tokens": 0
+      }
+    },
+    {
+      "task": "Que condiciones deben cumplirse para obtener cualquier descuento",
+      "type": "no_code",
+      "leo": {
+        "tokens": 13328,
+        "tokens_sd": 0,
+        "latency": 10.393,
+        "criteria": 1.0,
+        "judge": true,
+        "last_answer": "Basado en el contexto proporcionado:\n\nLas condiciones acumulables para obtener descuentos son:\n\n- **Condicion_Pago_Domiciliado**: obligatoria para aplicar la Tarifa Empresarial (T07, 18% descuento)\n- ",
+        "mode": "leo",
+        "context_tokens": -1
+      },
+      "oc": {
+        "tokens": 450,
+        "tokens_sd": 0,
+        "latency": 6.015,
+        "criteria": 0.75,
+        "judge": false,
+        "last_answer": "Para obtener cualquier tipo de descuento, generalmente deben cumplirse ciertas condiciones que varían según la empresa, el producto o la promoción. Sin embargo, las condiciones más comunes incluyen:\n\n",
+        "mode": "oc",
+        "context_tokens": -1
+      },
+      "kc": {
+        "tokens": 287,
+        "tokens_sd": 0,
+        "latency": 3.955,
+        "criteria": 0.5,
+        "judge": false,
+        "last_answer": "Para obtener cualquier descuento en Python (o en general), deben cumplirse estas condiciones clave:\n\n1. **Condición booleana evaluable**: Debe existir una expresión que retorne `True` o `False`\n2. **C",
+        "context_tokens": 0
+      },
+      "no": {
+        "tokens": 284,
+        "tokens_sd": 0,
+        "latency": 4.157,
+        "criteria": 0.5,
+        "judge": false,
+        "last_answer": "Para obtener cualquier descuento en Python (o en general), deben cumplirse estas condiciones clave:\n\n1. **Condición booleana evaluable**: Debe existir una expresión que retorne `True` o `False`\n2. **C",
+        "context_tokens": 0
+      }
+    },
+    {
+      "task": "Encuentra todas las funciones en query/ que no tienen docstring",
+      "type": "search",
+      "leo": {
+        "tokens": 17378,
+        "tokens_sd": 0,
+        "latency": 16.068,
+        "criteria": 1.0,
+        "judge": true,
+        "last_answer": "Del contexto KC-RAG, las funciones en `query/` sin docstring son:\n\n- `query.capa0._try_code_lookup`\n- `query.capa0._entity_candidates`\n- `query.capa0.try_resolve` (con ✓doc → **sí tiene**)\n- `query.ca",
+        "mode": "leo",
+        "context_tokens": -1
+      },
+      "oc": {
+        "tokens": 952,
+        "tokens_sd": 0,
+        "latency": 9.616,
+        "criteria": 0.5,
+        "judge": true,
+        "last_answer": "Para encontrar todas las funciones en el directorio `query/` que no tienen docstring, puedes usar varias herramientas. Aquí te muestro algunas opciones:\n\n## Opción 1: Usando grep y awk (Linux/Mac)\n\n``",
+        "mode": "oc",
+        "context_tokens": -1
+      },
+      "kc": {
+        "tokens": 1122,
+        "tokens_sd": 0,
+        "latency": 2.923,
+        "criteria": 0.75,
+        "judge": false,
+        "last_answer": "Basado en el contexto proporcionado, no hay archivos en la carpeta `query/` listados en el resumen. Las funciones sin docstring que aparecen son de archivos en la raíz del repositorio (como `_query_di",
+        "context_tokens": 1363
+      },
+      "no": {
+        "tokens": 435,
+        "tokens_sd": 0,
+        "latency": 4.647,
+        "criteria": 0.5,
+        "judge": true,
+        "last_answer": "Para encontrar todas las funciones en el directorio `query/` que no tienen docstring, puedes usar el siguiente script de Python:\n\n```python\nimport ast\nimport os\nfrom pathlib import Path\n\ndef find_func",
+        "context_tokens": 0
+      }
+    },
+    {
+      "task": "Que modulos importa query/pipeline.py y que hace cada uno",
+      "type": "code_query",
+      "leo": {
+        "tokens": 13596,
+        "tokens_sd": 0,
+        "latency": 12.365,
+        "criteria": 0.4,
+        "judge": false,
+        "last_answer": "Según el contexto KC-RAG, `query/pipeline.py` importa los siguientes módulos:\n\n- **query.router**: `route`, `classify_intent`, `route_parallel` — enrutan la consulta clasificando su intención y determ",
+        "mode": "leo",
+        "context_tokens": -1
+      },
+      "oc": {
+        "tokens": 876,
+        "tokens_sd": 0,
+        "latency": 9.902,
+        "criteria": 0.2,
+        "judge": false,
+        "last_answer": "Basándome en el código típico de un archivo `query/pipeline.py` en proyectos de procesamiento de lenguaje natural o búsqueda, los módulos que suele importar y sus funciones son:\n\n## Módulos comunes im",
+        "mode": "oc",
+        "context_tokens": -1
+      },
+      "kc": {
+        "tokens": 1099,
+        "tokens_sd": 0,
+        "latency": 3.776,
+        "criteria": 0.4,
+        "judge": false,
+        "last_answer": "Basado en el contexto, `query/pipeline.py` importa los siguientes módulos:\n\n1. **`query.router`** - Contiene `route`, `classify_intent` y `route_parallel`. Se encarga de enrutar la consulta según su i",
+        "context_tokens": 1221
+      },
+      "no": {
+        "tokens": 330,
+        "tokens_sd": 0,
+        "latency": 4.776,
+        "criteria": 0.0,
+        "judge": false,
+        "last_answer": "Basado en la estructura típica de `query/pipeline.py` en proyectos de procesamiento de lenguaje o RAG, los módulos comunes importados y sus funciones son:\n\n1. **`os`** - Manejo de rutas de archivos y ",
+        "context_tokens": 0
+      }
+    },
+    {
+      "task": "Puede un estudiante de 24 anios acceder a la Tarifa Jubilado",
+      "type": "no_code",
+      "leo": {
+        "tokens": 13241,
+        "tokens_sd": 0,
+        "latency": 9.213,
+        "criteria": 1.0,
+        "judge": true,
+        "last_answer": "No, no puede. La Tarifa Jubilado (T05) requiere una edad mínima de 65 años. Un estudiante de 24 años no cumple ese requisito.",
+        "mode": "leo",
+        "context_tokens": -1
+      },
+      "oc": {
+        "tokens": 512,
+        "tokens_sd": 0,
+        "latency": 8.052,
+        "criteria": 1.0,
+        "judge": false,
+        "last_answer": "En general, **no es posible** que un estudiante de 24 años acceda a la \"Tarifa Jubilado\" (o tarifa de adulto mayor) en la mayoría de los sistemas de transporte público, ya que este beneficio está dise",
+        "mode": "oc",
+        "context_tokens": -1
+      },
+      "kc": {
+        "tokens": 129,
+        "tokens_sd": 0,
+        "latency": 2.018,
+        "criteria": 1.0,
+        "judge": true,
+        "last_answer": "No, un estudiante de 24 años **no puede acceder** a la Tarifa Jubilado. Esta tarifa está diseñada exclusivamente para personas **jubiladas** (generalmente mayores de 65 años o con pensión por incapaci",
+        "context_tokens": 0
+      },
+      "no": {
+        "tokens": 130,
+        "tokens_sd": 0,
+        "latency": 2.227,
+        "criteria": 1.0,
+        "judge": true,
+        "last_answer": "No, un estudiante de 24 años **no puede acceder** a la Tarifa Jubilado. Esta tarifa está diseñada exclusivamente para personas **jubiladas** (generalmente mayores de 65 años o con pensión por jubilaci",
+        "context_tokens": 0
+      }
+    }
+  ]
+}
