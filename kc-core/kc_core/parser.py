@@ -1,0 +1,352 @@
+"""Parser de código fuente a cápsulas (funciones, clases, módulos).
+
+Soporta Python vía ast.parse() y tree-sitter para multi-lenguaje.
+"""
+
+import ast
+import hashlib
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Optional
+
+
+@dataclass
+class Capsule:
+    id: str
+    type: str  # function, class, module, variable, constant
+    name: str
+    file_path: str
+    start_line: int
+    end_line: int
+    language: str
+    signature: str
+    content: str
+    docstring: Optional[str] = None
+    calls: list[str] = field(default_factory=list)
+    called_by: list[str] = field(default_factory=list)
+    imports: list[str] = field(default_factory=list)
+    properties: dict = field(default_factory=dict)
+
+
+def _make_id(file_path: str, start_line: int, signature: str) -> str:
+    raw = f"{file_path}::{start_line}::{signature}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+
+def extract_from_python(content: str, file_path: str) -> list[Capsule]:
+    """Extrae cápsulas del AST de un archivo Python. 0 dependencias externas."""
+    capsules = []
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        return capsules
+
+    module_name = Path(file_path).name
+
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                capsules.append(Capsule(
+                    id=_make_id(file_path, node.lineno, f"import {alias.name}"),
+                    type="module", name=alias.name, file_path=file_path,
+                    start_line=node.lineno, end_line=node.end_lineno or node.lineno,
+                    language="python", signature=f"import {alias.name}",
+                    content=ast.unparse(node),
+                    imports=[alias.name],
+                ))
+
+        elif isinstance(node, ast.ImportFrom):
+            mod = node.module or ""
+            for alias in node.names:
+                full = f"{mod}.{alias.name}" if mod else alias.name
+                capsules.append(Capsule(
+                    id=_make_id(file_path, node.lineno, f"from {mod} import {alias.name}"),
+                    type="function" if alias.name[0].islower() else "class",
+                    name=full, file_path=file_path,
+                    start_line=node.lineno, end_line=node.end_lineno or node.lineno,
+                    language="python", signature=f"from {mod} import {alias.name}",
+                    content=ast.unparse(node),
+                    imports=[mod] if mod else [],
+                ))
+
+        elif isinstance(node, ast.FunctionDef):
+            params = [a.arg for a in node.args.args]
+            returns = ast.unparse(node.returns) if node.returns else "None"
+            doc = ast.get_docstring(node)
+            lines = (node.end_lineno or node.lineno) - node.lineno + 1
+            sig = f"def {node.name}({', '.join(params)}) -> {returns}"
+
+            calls = []
+            for child in ast.walk(node):
+                if isinstance(child, ast.Call) and isinstance(child.func, ast.Name):
+                    calls.append(child.func.id)
+
+            capsules.append(Capsule(
+                id=_make_id(file_path, node.lineno, sig),
+                type="function", name=node.name, file_path=file_path,
+                start_line=node.lineno, end_line=node.end_lineno or node.lineno,
+                language="python", signature=sig,
+                content=ast.get_source_segment(content, node) or ast.unparse(node),
+                docstring=doc, calls=calls,
+                properties={
+                    "parametros": ", ".join(params),
+                    "tipo_retorno": returns,
+                    "lineas": lines,
+                    "module": module_name,
+                },
+            ))
+
+        elif isinstance(node, ast.ClassDef):
+            bases = [ast.unparse(b) for b in node.bases]
+            methods = [n.name for n in ast.iter_child_nodes(node) if isinstance(n, ast.FunctionDef)]
+            doc = ast.get_docstring(node)
+            lines = (node.end_lineno or node.lineno) - node.lineno + 1
+            sig = f"class {node.name}({', '.join(bases)})" if bases else f"class {node.name}"
+
+            calls = []
+            for child in ast.walk(node):
+                if isinstance(child, ast.Call) and isinstance(child.func, ast.Name):
+                    calls.append(child.func.id)
+
+            capsules.append(Capsule(
+                id=_make_id(file_path, node.lineno, sig),
+                type="class", name=node.name, file_path=file_path,
+                start_line=node.lineno, end_line=node.end_lineno or node.lineno,
+                language="python", signature=sig,
+                content=ast.get_source_segment(content, node) or ast.unparse(node),
+                docstring=doc, calls=calls,
+                properties={
+                    "metodos": ", ".join(methods),
+                    "hereda_de": ", ".join(bases),
+                    "lineas": lines,
+                    "module": module_name,
+                },
+            ))
+
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for t in targets:
+                if isinstance(t, ast.Name):
+                    ctype = "constant" if t.id.isupper() else "variable"
+                    capsules.append(Capsule(
+                        id=_make_id(file_path, node.lineno, f"{ctype} {t.id}"),
+                        type=ctype, name=t.id, file_path=file_path,
+                        start_line=node.lineno, end_line=node.end_lineno or node.lineno,
+                        language="python", signature=f"{t.id} = ...",
+                        content=ast.get_source_segment(content, node) or ast.unparse(node),
+                        properties={"module": module_name},
+                    ))
+
+    return capsules
+
+
+def extract_from_txt(content: str, file_path: str) -> list[Capsule]:
+    """Extrae una cápsula de tipo document de un archivo .txt."""
+    name = Path(file_path).stem
+    first_line = content.strip().split("\n")[0].strip()
+    return [Capsule(
+        id=_make_id(file_path, 1, f"doc:{name}"),
+        type="document",
+        name=name,
+        file_path=file_path,
+        start_line=1,
+        end_line=content.count("\n") + 1,
+        language="text",
+        signature=f"[doc] {name}",
+        content=content.strip(),
+        docstring=content.strip()[:300],
+        properties={"chars": len(content)},
+    )]
+
+
+def extract_from_file(path: str, language: str = "python") -> list[Capsule]:
+    """Extrae cápsulas de un archivo. Selecciona parser según lenguaje."""
+    content = Path(path).read_text(encoding="utf-8")
+    if language == "python":
+        return extract_from_python(content, path)
+    if language == "text":
+        return extract_from_txt(content, path)
+    try:
+        return extract_from_tree_sitter(content, path, language)
+    except Exception:
+        return []
+
+
+_TS_PARSERS: dict[str, tuple] = {}
+
+def _get_ts_parser(language: str):
+    """Obtiene un parser tree-sitter para el lenguaje dado (con caché)."""
+    if language not in _TS_PARSERS:
+        try:
+            from tree_sitter import Language, Parser
+            grammar_map = {
+                "python": "tree_sitter_python",
+            }
+            mod_name = grammar_map.get(language)
+            if mod_name:
+                mod = __import__(mod_name)
+                lang = Language(mod.language())
+                parser = Parser(lang)
+                _TS_PARSERS[language] = (lang, parser)
+            else:
+                return None, None
+        except ImportError:
+            return None, None
+    return _TS_PARSERS.get(language, (None, None))
+
+
+def extract_from_tree_sitter(content: str, file_path: str, language: str = "python") -> list[Capsule]:
+    """Extrae cápsulas usando tree-sitter (multi-lenguaje)."""
+    lang, parser = _get_ts_parser(language)
+    if parser is None:
+        return []
+
+    tree = parser.parse(content.encode())
+    root = tree.root_node
+    capsules = []
+    module_name = Path(file_path).name
+
+    def _range(node) -> tuple[int, int]:
+        return node.start_point[0] + 1, node.end_point[0] + 1
+
+    def _text(node) -> str:
+        return content[node.start_byte:node.end_byte]
+
+    def _find_calls(node) -> list[str]:
+        calls = []
+        for child in node.children:
+            if child.type == "call":
+                func = child.child_by_field_name("function")
+                if func and func.type == "identifier":
+                    calls.append(_text(func))
+            calls.extend(_find_calls(child))
+        return calls
+
+    def _find_imports(node) -> list[str]:
+        imports = []
+        if node.type in ("import_statement", "import_from_statement"):
+            for child in node.children:
+                if child.type in ("dotted_name", "aliased_import"):
+                    imports.append(_text(child).split(" as ")[0])
+                elif child.type == "import_prefix":
+                    pass
+            if node.type == "import_from_statement":
+                mod = node.child_by_field_name("module_name")
+                if mod:
+                    imports.append(_text(mod))
+        for child in node.children:
+            imports.extend(_find_imports(child))
+        return imports
+
+    for node in root.children:
+        if not node.is_named:
+            continue
+
+        start, end = _range(node)
+
+        if node.type == "function_definition":
+            name_node = node.child_by_field_name("name")
+            params_node = node.child_by_field_name("parameters")
+            return_node = node.child_by_field_name("return_type")
+            body = node.child_by_field_name("body")
+            name = _text(name_node) if name_node else "unknown"
+            params = _text(params_node) if params_node else "()"
+            ret_type = _text(return_node) if return_node else "None"
+            sig = f"def {name}{params}"
+            if return_node:
+                sig += f" -> {ret_type}"
+            doc = None
+            if body:
+                for child in body.children:
+                    if child.type == "expression_statement":
+                        expr = child.children[0] if child.children else None
+                        if expr and expr.type == "string":
+                            doc = _text(expr).strip("\"'").split("\n")[0].strip()
+            calls = _find_calls(node) if body else []
+            capsules.append(Capsule(
+                id=_make_id(file_path, start, sig),
+                type="function", name=name, file_path=file_path,
+                start_line=start, end_line=end,
+                language=language, signature=sig,
+                content=_text(node), docstring=doc, calls=calls,
+                properties={
+                    "parametros": params.strip("()"),
+                    "tipo_retorno": ret_type,
+                    "lineas": end - start + 1,
+                    "module": module_name,
+                },
+            ))
+
+        elif node.type == "class_definition":
+            name_node = node.child_by_field_name("name")
+            body = node.child_by_field_name("body")
+            name = _text(name_node) if name_node else "unknown"
+            sig = f"class {name}"
+            doc = None
+            methods = []
+            calls = []
+            if body:
+                for child in body.children:
+                    if child.type == "function_definition":
+                        mname = _text(child.child_by_field_name("name"))
+                        methods.append(mname)
+                for child in body.children:
+                    if child.type == "expression_statement":
+                        expr = child.children[0] if child.children else None
+                        if expr and expr.type == "string" and not doc:
+                            doc = _text(expr).strip("\"'").split("\n")[0].strip()
+                calls = _find_calls(body)
+            capsules.append(Capsule(
+                id=_make_id(file_path, start, sig),
+                type="class", name=name, file_path=file_path,
+                start_line=start, end_line=end,
+                language=language, signature=sig,
+                content=_text(node), docstring=doc, calls=calls,
+                properties={
+                    "metodos": ", ".join(methods),
+                    "lineas": end - start + 1,
+                    "module": module_name,
+                },
+            ))
+
+        elif node.type in ("import_statement", "import_from_statement"):
+            import_names = _find_imports(node)
+            for imp_name in import_names:
+                capsules.append(Capsule(
+                    id=_make_id(file_path, start, f"import {imp_name}"),
+                    type="module", name=imp_name, file_path=file_path,
+                    start_line=start, end_line=end,
+                    language=language, signature=f"import {imp_name}",
+                    content=_text(node), imports=[imp_name],
+                ))
+
+        elif node.type == "expression_statement":
+            for child in node.children:
+                if child.type == "assignment":
+                    lhs = child.child_by_field_name("left")
+                    if lhs and lhs.type == "identifier":
+                        name = _text(lhs)
+                        rct = _text(child.child_by_field_name("right")) if child.child_by_field_name("right") else "..."
+                        ctype = "constant" if name.isupper() else "variable"
+                        capsules.append(Capsule(
+                            id=_make_id(file_path, start, f"{ctype} {name}"),
+                            type=ctype, name=name, file_path=file_path,
+                            start_line=start, end_line=end,
+                            language=language, signature=f"{name} = {rct[:30]}",
+                            content=_text(node).split("\n")[0],
+                            properties={"module": module_name},
+                        ))
+
+    return capsules
+
+
+def build_call_graph(capsules: list[Capsule]) -> None:
+    """Rellena called_by en todas las cápsulas a partir de calls."""
+    name_to_id = {c.name: c.id for c in capsules}
+    for c in capsules:
+        for call_name in c.calls:
+            if call_name in name_to_id:
+                target_id = name_to_id[call_name]
+                for target in capsules:
+                    if target.id == target_id and c.id not in target.called_by:
+                        target.called_by.append(c.id)

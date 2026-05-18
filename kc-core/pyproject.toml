@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=65"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kc-core"
+version = "0.1.0"
+description = "Librería compartida para Tiered KG-RAG y KC-Code: parser de código, grafo de dependencias, compresión de contexto, grounding determinista, cache Redis"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "Ismael Manzano Leon"}]
+
+dependencies = [
+    "redis>=5",
+    "pyyaml>=6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "tree-sitter>=0.23",
+]
+
+[tool.setuptools.packages.find]
+include = ["kc_core*"]
