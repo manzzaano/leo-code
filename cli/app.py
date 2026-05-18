@@ -17,10 +17,13 @@ import click
 from rich.console import Console
 from rich.markdown import Markdown
 
-# Añadir kc-rag y kc-core al sys.path (monorepo: cli/ está en leo-code/)
+# En modo monorepo (dev editable) añadir kc-rag/kc-core al path.
+# En install PyPI esas rutas no existen — los paquetes ya están en site-packages.
 _ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(_ROOT / "kc-rag"))
-sys.path.insert(0, str(_ROOT / "kc-core"))
+for _sub in ("kc-rag", "kc-core"):
+    _p = _ROOT / _sub
+    if _p.exists() and str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 
 console = Console()
 
