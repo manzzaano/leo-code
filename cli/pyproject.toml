@@ -8,6 +8,8 @@ dependencies = [
     "rich>=13",
     "httpx>=0.27",
     "openai>=1.30",
+    "kc-code>=0.1.0",
+    "kc-core>=0.1.0",
 ]
 
 [project.optional-dependencies]
