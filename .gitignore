@@ -1,6 +1,6 @@
 .DS_Store
 
-# Python sidecar + libs (monorepo)
+# Python sidecar + libs + CLI (monorepo)
 sidecar/cache/
 sidecar/**/__pycache__/
 sidecar/*.egg-info/
@@ -8,6 +8,8 @@ kc-rag/**/__pycache__/
 kc-rag/*.egg-info/
 kc-core/**/__pycache__/
 kc-core/*.egg-info/
+cli/**/__pycache__/
+cli/*.egg-info/
 node_modules
 .worktrees
 .sst

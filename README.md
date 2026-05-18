@@ -136,32 +136,55 @@ El benchmark se ejecuta con `python benchmark/agent_compare.py` desde `leo-code/
 
 ---
 
-## Instalación (desde código fuente)
+## Instalación (CLI Python)
 
-> Monorepo único — todo está en este repositorio.
+> Monorepo único — todo está en este repositorio. No se necesita Node/Bun.
 
 ```bash
-# 1. Clonar leo-code (incluye sidecar, kc-rag y kc-core)
+# 1. Clonar leo-code
 git clone https://github.com/manzzaano/leo-code.git
 cd leo-code
-bun install
 
-# 2. Arrancar el sidecar KC-RAG
-$env:PYTHONPATH = "sidecar;kc-rag;kc-core"   # PowerShell
-# export PYTHONPATH=sidecar:kc-rag:kc-core   # bash/zsh
-python -m leo_mcp.server                      # puerto 9898
+# 2. Instalar el CLI y las librerías en modo editable
+pip install -e cli/ -e kc-rag/ -e kc-core/
 
-# 3. En otro terminal, ejecutar leo-code
-bun run packages/leo-code/src/cli/index.ts
+# 3. Variables de entorno (una o más según el proveedor que uses)
+# PowerShell:
+$env:DEEPSEEK_API_KEY = "sk-..."
+$env:ANTHROPIC_API_KEY = "sk-ant-..."   # opcional, solo si usas Claude
+
+# bash/zsh:
+# export DEEPSEEK_API_KEY=sk-...
+# export ANTHROPIC_API_KEY=sk-ant-...
+
+# 4. Uso inmediato (el sidecar KC-RAG arranca automáticamente)
+leo-code ask "Qué hace la función retrieve_subgraph?" --repo /ruta/al/repo
+leo-code chat --repo /ruta/al/repo
+leo-code index /ruta/al/repo
 ```
 
-### Indexar un repositorio
+### Comandos disponibles
 
-```bash
-curl -X POST http://localhost:9898/index \
-  -H "Content-Type: application/json" \
-  -d '{"repo_path": "/ruta/a/tu/repo", "languages": "python,text"}'
 ```
+leo-code ask  <pregunta>           Consulta directa al agente
+leo-code chat                      Modo conversacional multi-turn
+leo-code index <repo>              Indexar repositorio en KC-RAG
+leo-code serve                     Arrancar el sidecar KC-RAG manualmente
+
+Opciones comunes:
+  --repo   -r  Ruta del repositorio (por defecto: directorio actual)
+  --model  -m  Modelo LLM (por defecto: auto-selección por complejidad)
+  --no-rag     Desactivar contexto KC-RAG (baseline directo al LLM)
+```
+
+### Selección de modelos
+
+| Opción `--model` | Descripción |
+|-----------------|-------------|
+| `auto` (por defecto) | Auto-selección: DeepSeek Flash para simple, Claude Sonnet para medio/código |
+| `deepseek/deepseek-chat` | DeepSeek API — económico, buen rendimiento en código |
+| `anthropic/claude-sonnet-4` | Claude Sonnet — mejor para razonamiento complejo |
+| `anthropic/claude-opus-4` | Claude Opus — máxima calidad |
 
 ---
 
@@ -169,27 +192,30 @@ curl -X POST http://localhost:9898/index \
 
 | Componente | Estado |
 |-----------|--------|
-| Plugin KC-RAG (plugin.ts) | ✅ Funcional — inyecta contexto en system prompt |
-| Sidecar (:9898) | ✅ Funcional — /context, /index, /search, /health |
+| CLI Python (`leo-code ask/chat/index`) | ✅ Funcional — sin dependencia de opencode |
+| Sidecar KC-RAG (:9898) | ✅ Funcional — /context, /index, /search, /health |
 | Indexación Python (AST) | ✅ Funcional — extrae cápsulas sin LLM |
 | Búsqueda híbrida (exact + semántica) | ✅ Funcional — Qdrant + match por nombre/archivo |
 | Compresión adaptativa | ✅ Funcional — 5 tipos de tarea |
+| Multi-turn (chat con historial) | ✅ Funcional |
+| AnthropicProvider (Claude) | ✅ Implementado — requiere `pip install anthropic` |
 | Benchmark | ✅ 6 tareas, 4 sistemas, LLM judge |
-| Instrucción PROHIBIDO (no leer archivos) | ⚠️ El agente la ignora — usa herramientas igualmente |
-| Publicación npm | ❌ Pendiente |
 | Indexación incremental (watcher) | ❌ Pendiente |
+| Publicación PyPI | ❌ Pendiente |
 
 ---
 
 ## Desarrollo
 
 ```bash
-bun install          # instalar dependencias
-bun run build        # compilar todos los packages
-bun run typecheck    # verificar tipos TypeScript
+# Instalar en modo editable (cambios en código se reflejan sin reinstalar)
+pip install -e cli/ -e kc-rag/ -e kc-core/
+
+# Tests
+pytest kc-rag/tests/
 ```
 
-Ver `AGENTS.md` para guía de estilo del código TypeScript.
+> `packages/` contiene el fork TypeScript experimental de opencode — no está mantenido activamente.
 
 ---
 
