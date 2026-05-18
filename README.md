@@ -98,9 +98,10 @@ Usuario → leo-code CLI (TypeScript/opencode)
 |-----------|-----------|---------|
 | `plugin.ts` | `packages/leo-code/src/context/` | Intercepta queries, llama al sidecar, inyecta contexto |
 | `kcrag.ts` | `packages/leo-code/src/context/` | Cliente HTTP del sidecar |
-| `server.py` | `leo-code-mcp/leo_mcp/` | FastAPI: /context, /index, /search, /health |
-| `compressor.py` | `kc-code/kc_code/kc_rag/` | Compresión adaptativa por tipo de tarea |
-| `classifier.py` | `kc-code/kc_code/kc_rag/` | Clasificación automática del tipo de tarea |
+| `server.py` | `sidecar/leo_mcp/` | FastAPI: /context, /index, /search, /health |
+| `compressor.py` | `kc-rag/kc_code/kc_rag/` | Compresión adaptativa por tipo de tarea |
+| `classifier.py` | `kc-rag/kc_code/kc_rag/` | Clasificación automática del tipo de tarea |
+| `kc_core/` | `kc-core/kc_core/` | Librería base: Capsule, parser, serialize_context |
 
 ---
 
@@ -137,24 +138,20 @@ El benchmark se ejecuta con `python benchmark/agent_compare.py` desde `leo-code/
 
 ## Instalación (desde código fuente)
 
-> El paquete npm no está publicado aún. Instalación manual.
+> Monorepo único — todo está en este repositorio.
 
 ```bash
-# 1. Clonar leo-code
+# 1. Clonar leo-code (incluye sidecar, kc-rag y kc-core)
 git clone https://github.com/manzzaano/leo-code.git
 cd leo-code
 bun install
 
-# 2. Clonar el sidecar KC-RAG
-git clone https://github.com/manzzaano/leo-code-mcp.git
-cd leo-code-mcp
-pip install -e .
+# 2. Arrancar el sidecar KC-RAG
+$env:PYTHONPATH = "sidecar;kc-rag;kc-core"   # PowerShell
+# export PYTHONPATH=sidecar:kc-rag:kc-core   # bash/zsh
+python -m leo_mcp.server                      # puerto 9898
 
-# 3. Arrancar el sidecar
-python -m leo_mcp.server  # puerto 9898
-
-# 4. En otro terminal, ejecutar leo-code
-cd leo-code
+# 3. En otro terminal, ejecutar leo-code
 bun run packages/leo-code/src/cli/index.ts
 ```
 

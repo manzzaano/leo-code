@@ -27,9 +27,15 @@ Ver `AGENTS.md` para convenciones de código TypeScript.
 
 Para Python (sidecar y benchmark): PEP 8, type hints opcionales, sin comentarios innecesarios.
 
-## Repositorios relacionados
+## Estructura del monorepo
 
-| Repo | Función |
-|------|---------|
-| [manzzaano/leo-code](https://github.com/manzzaano/leo-code) | CLI + plugin KC-RAG (este repo) |
-| [manzzaano/leo-code-mcp](https://github.com/manzzaano/leo-code-mcp) | Sidecar FastAPI KC-RAG |
+```
+leo-code/
+├── packages/leo-code/   ← agente TypeScript (CLI, plugin, herramientas)
+├── sidecar/             ← servidor FastAPI KC-RAG (:9898)
+├── kc-rag/              ← librería KC-RAG (indexer, compressor, vector_store)
+├── kc-core/             ← librería base (Capsule, parser, serialize_context)
+└── benchmark/           ← scripts de evaluación
+```
+
+Todo está en un único repo. No hay repos externos dependientes.
