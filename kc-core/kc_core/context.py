@@ -7,18 +7,37 @@ def serialize_context(nodes: list[dict], edges: list[dict] = None) -> str:
     [nombre|tipo] prop1=val1, prop2=val2
     ---
     [from]-[REL]-[to]
+
+    Incluye campos de código Y de dominio (descripcion, precio, descuento…).
+    Excluye embeddings, hashes y metadatos internos.
     """
     lines = []
     node_map = {n["id"]: n.get("name", n["id"]) for n in nodes}
 
-    skip_keys = {"id", "status", "created_at", "updated_at", "source_doc_id", "source_hash", "aliases"}
-    target_keys = {"parametros", "lineas_aprox", "lineas", "module", "docstring", "tipo_retorno",
-                   "metodos_publicos", "metodos", "hereda_de", "path", "importado_por", "confidence"}
+    skip_keys = {
+        "id", "status", "created_at", "updated_at", "source_doc_id", "source_hash",
+        "aliases", "_depth", "precision_critical", "embedding",
+    }
+
+    # Campos objetivo: código (original) + dominio (nuevo)
+    target_keys = {
+        # Código
+        "parametros", "lineas_aprox", "lineas", "module", "docstring", "tipo_retorno",
+        "metodos_publicos", "metodos", "hereda_de", "path", "importado_por", "confidence",
+        # Dominio
+        "descripcion", "description", "precio", "precio_base", "precio_final",
+        "descuento", "descuento_pct", "porcentaje", "valor", "valor_maximo",
+        "tipo_condicion", "aplica_a", "requisitos", "restricciones",
+        "edad_minima", "edad_maxima", "penalizacion", "penalizacion_max",
+        "servicios", "categoria", "segmento", "permanencia",
+    }
 
     for node in nodes:
         name = node.get("name", node.get("id", "?"))
         ntype = node.get("type", "")
-        props = {}
+        props: dict[str, str] = {}
+
+        # 1. Campos del sub-dict "properties" (si existe)
         props_source = node.get("properties", {}) or {}
         for k, v in props_source.items():
             if v and k not in skip_keys:
@@ -26,6 +45,8 @@ def serialize_context(nodes: list[dict], edges: list[dict] = None) -> str:
                 if len(vshort) > 120:
                     vshort = vshort[:117] + "..."
                 props[k] = vshort
+
+        # 2. Campos root-level en target_keys
         for k in target_keys:
             v = node.get(k)
             if v and k not in props:
@@ -33,6 +54,7 @@ def serialize_context(nodes: list[dict], edges: list[dict] = None) -> str:
                 if len(vshort) > 120:
                     vshort = vshort[:117] + "..."
                 props[k] = vshort
+
         props_str = ", ".join(f"{k}={v}" for k, v in props.items())
         line = f"[{name}|{ntype}]"
         if props_str:
