@@ -1,6 +1,0 @@
-{
-  "query": "En cache/redis_cache.py hay dos generadores de claves Redis. Escribe el codigo exacto que genera la clave para queries (_query_key) y la clave para subgrafos (_subgraph_key). Incluye el prefijo, el algoritmo de hash y la transformacion de la query.",
-  "response": "",
-  "input_tokens": 0,
-  "output_tokens": 0
-}

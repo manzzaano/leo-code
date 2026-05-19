@@ -1,6 +1,0 @@
-{
-  "query": "En query/pipeline.py, cuando el intent es parallel, describe exactamente como se ejecuta route_parallel(). Cual es la llamada asyncio exacta y como se decide si usar el resultado o continuar con el flujo normal?",
-  "response": "Veamos el contenido exacto de `query/pipeline.py`:Ahora veamos `route_parallel` en el router:Aquí tienes la descripción exacta del flujo cuando el `intent` es `\"parallel\"`:\n\n---\n\n## 1. Cómo se activa `route_parallel()`\n\nEn `pipeline.py` línea 45-46:\n\n```python\nif intent == \"parallel\":\n    parallel_result = asyncio.run(route_parallel(user_query, try_resolve, retrieve_subgraph))\n```\n\nLa condición se cumple cuando `route()` (línea 42) devuelve `\"parallel\"`. Esto ocurre en `router.py` línea 84-88 cuando la **confianza del intent clasificado es menor que `config.ROUTER_CONFIDENCE_THRESHOLD`** (query ambigua/baja confianza).\n\n---\n\n## 2. La llamada asyncio exacta\n\n### En `pipeline.py` (línea 46):\n\n```python\nasyncio.run(route_parallel(user_query, try_resolve, retrieve_subgraph))\n```\n\n`asyncio.run(",
-  "input_tokens": 8479,
-  "output_tokens": 1283
-}

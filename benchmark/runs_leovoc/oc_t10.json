@@ -1,6 +1,0 @@
-{
-  "query": "En el directorio packages/leo-code/src/context/, identifica qué símbolos se exportan desde cada archivo pero NO se importan en ningún otro archivo del proyecto packages/leo-code/src/. Usa el call graph o búsqueda de imports para verificar cada export.",
-  "response": "",
-  "input_tokens": 18674,
-  "output_tokens": 80
-}

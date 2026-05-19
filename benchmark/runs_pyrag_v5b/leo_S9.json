@@ -1,6 +1,0 @@
-{
-  "query": "En security/audit.py, log_query() incluye un campo grounding en el entry. De donde obtiene ese valor exactamente? Que transformacion matematica aplica antes de guardarlo?",
-  "response": "El valor `grounding` se obtiene de `result.get(\"_grounding\", {}).get(\"score\", 0.0)`, accediendo al campo `score` dentro del diccionario `_grounding` del resultado, con valor por defecto `0.0`.\n\nLa transformación matemática que aplica es `round(..., 3)`, redondeando el valor a 3 decimales.",
-  "input_tokens": 815,
-  "output_tokens": 89
-}

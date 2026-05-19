@@ -1,6 +1,0 @@
-{
-  "query": "En ingestion/extractor.py, EXTRACTION_PROMPT (no CODE_EXTRACTION_PROMPT) lista tipos de entidad validos. Cuantos tipos hay en total y cuales son exactamente?",
-  "response": "Let me look at the file to see the extraction prompt and entity types.El archivo `ingestion/extractor.py` no existe en el código base actual. Solo hay referencias a él en archivos de benchmark (como `benchmark_python_rag_v4.py`), pero no se encuentra en ningún directorio indexado o tracked. Es posible que haya sido eliminado, movido o que sea parte de un pipeline externo. No puedo responder cuántos tipos hay ni cuáles son porque el archivo no está disponible.",
-  "input_tokens": 57298,
-  "output_tokens": 360
-}

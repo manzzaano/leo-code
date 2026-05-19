@@ -1,6 +1,0 @@
-{
-  "query": "En query/pipeline.py, cuando intent es parallel, route_parallel() se ejecuta de manera asincrona. Que dos funciones exactas se pasan como argumentos capa0_fn y capa2_fn respectivamente?",
-  "response": "En `query/pipeline.py`, cuando el intent es `parallel`, las dos funciones pasadas como argumentos a `route_parallel()` son:\n\n- **`capa0_fn`**: `try_resolve`\n- **`capa2_fn`**: `retrieve_subgraph`\n\nAmbas se importan desde `query.capa0` y `query.capa2` respectivamente.",
-  "input_tokens": 718,
-  "output_tokens": 81
-}

@@ -1,6 +1,0 @@
-{
-  "query": "En query/pipeline.py, que dos funciones exactas importa del modulo security? Dame los nombres exactos de las funciones importadas de security.",
-  "response": "Del módulo `security`, se importan exactamente dos funciones:\n\n1. `validate_query` (de `security.sanitize`)\n2. `log_query` (de `security.audit`)",
-  "input_tokens": 848,
-  "output_tokens": 43
-}

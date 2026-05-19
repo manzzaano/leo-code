@@ -1,6 +1,0 @@
-{
-  "query": "En graph/nodes.py, la funcion upsert_relation() tiene exactamente cuantos parametros? Lista sus nombres exactos.",
-  "response": "La función `upsert_relation()` en `graph/nodes.py` tiene **4 parámetros**. Sus nombres exactos son:\n\n1. `source_name`\n2. `target_name`\n3. `relation_type`\n4. `properties`",
-  "input_tokens": 1512,
-  "output_tokens": 50
-}

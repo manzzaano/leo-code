@@ -1,6 +1,0 @@
-{
-  "query": "En ingestion/pipeline.py, _extract_from_ast() identifica constantes Python. Cuando encuentra una constante (nombre en mayusculas), que valores asigna a precision_critical y confidence? Menciona la constante CONFIDENCE_MAP si se usa.",
-  "response": "Let me read the file to find `_extract_from_ast()` and understand the logic.En `_extract_from_ast()` (líneas 11-117), cuando encuentra una **constante** (nombre en mayúsculas, línea 50: `is_const = t.id.isupper()`), asigna los siguientes valores en el diccionario de la entidad (líneas 51-57):\n\n- **`\"precision_critical\": True`** (línea 56)\n- **`\"confidence\": \"HIGH\"`** (línea 55)\n\nSin embargo, **no se usa `CONFIDENCE_MAP`** dentro de `_extract_from_ast()`. El diccionario `CONFIDENCE_MAP` (definido en línea 9 como `{\"HIGH\": 0.95, \"LOW\": 0.60}`) se utiliza posteriormente en `_upsert_entities_relations()` (línea 136) y en el bucle de relaciones de `_ingest_python()` (línea 253), donde convierte el string `\"HIGH\"` → `0.95` y `\"LOW\"` → `0.60`.\n\n**Resumen:** `_extract_from_ast()` asigna `\"precisio",
-  "input_tokens": 14206,
-  "output_tokens": 556
-}

@@ -1,6 +1,0 @@
-{
-  "query": "Traza el flujo completo de ejecucion de la funcion query() en query/pipeline.py desde que recibe user_query hasta que devuelve el resultado final (path sin cache). Lista las funciones llamadas EN ORDEN con sus modulos de origen.",
-  "response": "Basado en el contexto del proyecto `RAG`, el flujo de `query()` en `query/pipeline.py` es el siguiente (orden de llamadas):\n\n1. **`security.sanitize.validate_query(user_query)`** → `pipeline.py`\n2. **`cache.redis_cache.get_cached_result(user_query)`** → `pipeline.py` (si falla, continúa)\n3. **`query.router.classify_intent(user_query)`** → `pipeline.py`\n4. **`query.router.route(user_query, intent)`** → `pipeline.py`\n5. **`query.capa0.try_resolve(user_query)`** → `pipeline.py`\n   * Internamente llama a `_try_code_lookup(capa0.py)` y `_entity_candidates(capa0.py)`\n6. **`query.capa2.retrieve_subgraph(resolved_entities)`** → `pipeline.py`\n   * Llama a `graph.traversal.bfs_subgraph(capa2.py)` y `graph.traversal.find_nodes_by_name(capa2.py)`\n7. **`query.capa3.compress(subgraph)`** → `pipeline.py`",
-  "input_tokens": 1552,
-  "output_tokens": 430
-}

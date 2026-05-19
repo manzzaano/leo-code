@@ -1,6 +1,0 @@
-{
-  "query": "En cache/redis_cache.py, la funcion is_available() determina si Redis esta disponible. Describe su logica: que llama internamente y que retorna cuando Redis no esta accesible?",
-  "response": "La función `is_available()` llama internamente a `_get_client()`. Si Redis no está accesible, `_get_client()` retorna `None`, por lo que `is_available()` retorna `False`. Si Redis está disponible, retorna `True`.",
-  "input_tokens": 965,
-  "output_tokens": 58
-}

@@ -1,6 +1,0 @@
-{
-  "query": "En query/pipeline.py, cuando el intent es parallel, describe exactamente como se ejecuta route_parallel(). Cual es la llamada asyncio exacta y como se decide si usar el resultado o continuar con el flujo normal?",
-  "response": "",
-  "input_tokens": 0,
-  "output_tokens": 0
-}

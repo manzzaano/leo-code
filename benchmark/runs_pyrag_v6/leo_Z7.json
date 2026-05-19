@@ -1,6 +1,0 @@
-{
-  "query": "En cache/redis_cache.py, como se inicializa el cliente Redis? Cuales son los argumentos exactos pasados a redis.from_url() y que hace si la conexion falla?",
-  "response": "Permíteme leer el archivo completo para darte una respuesta precisa.La inicialización del cliente Redis se encuentra en la función `_get_client()` (líneas 10-24):\n\n## Argumentos exactos de `redis.from_url()`\n\n```python\nr = redis.from_url(\n    config.REDIS_URL,\n    socket_connect_timeout=0.1,\n    decode_responses=True,\n)\n```\n\n- **`config.REDIS_URL`**: La URL de conexión (tomada de la configuración del proyecto).\n- **`socket_connect_timeout=0.1`**: Timeout de conexión de solo **100ms**, para que falle rápido si Redis no está disponible.\n- **`decode_responses=True`**: Las respuestas se decodifican automáticamente de bytes a strings UTF-8.\n\n## ¿Qué pasa si la conexión falla?\n\nDespués de crear el cliente, se ejecuta `r.ping()` (línea 20) para verificar que realmente responde. Si **cualquier exc",
-  "input_tokens": 4897,
-  "output_tokens": 416
-}

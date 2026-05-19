@@ -1,6 +1,0 @@
-{
-  "query": "En graph/nodes.py, la funcion upsert_node() tiene un parametro de confianza con valor por defecto. Cual es ese parametro y su valor exacto?",
-  "response": "El parámetro es `confidence` y su valor por defecto exacto es **0.6**.",
-  "input_tokens": 1348,
-  "output_tokens": 21
-}

@@ -1,6 +1,0 @@
-{
-  "query": "Traza el flujo completo de ejecucion de la funcion query() en query/pipeline.py desde que recibe user_query hasta que devuelve el resultado final (path sin cache). Lista las funciones llamadas EN ORDEN con sus modulos de origen.",
-  "response": "",
-  "input_tokens": 0,
-  "output_tokens": 0
-}

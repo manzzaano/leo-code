@@ -1,6 +1,0 @@
-{
-  "query": "En query/router.py, classify_intent() tiene un caso por defecto cuando ninguna categoria tiene score. Cual es el intent_type devuelto y cuanto vale la confidence en ese caso?",
-  "response": "Cuando ninguna categoría tiene score (todos los `_score` son 0), la función cae en el caso por defecto fuera de todos los `if` y `elif`:\n\n- **intent_type**: `\"semantic\"`\n- **confidence**: `0.65`",
-  "input_tokens": 933,
-  "output_tokens": 60
-}

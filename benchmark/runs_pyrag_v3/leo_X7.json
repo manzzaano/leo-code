@@ -1,6 +1,0 @@
-{
-  "query": "En cache/redis_cache.py, cache_result() tiene un parametro opcional para el tiempo de vida. Cual es ese parametro, su valor por defecto y que constante de config usa si no se especifica?",
-  "response": "El parámetro opcional es `ttl` con valor por defecto `None`.\n\nSi no se especifica, usa la constante `config.CACHE_L3_TTL`.",
-  "input_tokens": 878,
-  "output_tokens": 36
-}

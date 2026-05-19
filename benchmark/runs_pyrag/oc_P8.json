@@ -1,6 +1,0 @@
-{
-  "query": "¿Qué funciones en graph/traversal.py dependen directamente de Neo4j (llaman a run_query o run_write) y cuáles son independientes?",
-  "response": "",
-  "input_tokens": 18642,
-  "output_tokens": 94
-}

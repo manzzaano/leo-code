@@ -1,6 +1,0 @@
-{
-  "query": "Si cambias la condición Tier 1 en packages/leo-code/src/context/plugin.ts de `_kcragResult.tokens > 300` a `_kcragResult.tokens > 500`, ¿cuáles de las 6 tareas del benchmark en benchmark/agent_tasks.json pasarían de Tier 1 a Tier 2? Para cada tarea afectada: indica su ctx (tokens de contexto actual), qué tools RECUPERARÍA el agente, y cómo cambiaría su comportamiento.",
-  "response": "Let me start by reading the relevant files to understand the tier logic and benchmark tasks.",
-  "input_tokens": 10384,
-  "output_tokens": 133
-}

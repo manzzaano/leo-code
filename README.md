@@ -1,42 +1,12 @@
-<div align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="packages/console/app/src/asset/logo-ornate-dark.svg">
-    <img alt="leo/code" src="packages/console/app/src/asset/logo-ornate-dark.svg" width="160">
-  </picture>
+# leo-code
 
-  <br><br>
+**KC-RAG — Knowledge Capsule Retrieval-Augmented Generation para código.**
 
-  <p>
-    <strong>Agente de terminal con Recuperación Estructural de Código (KC-RAG)</strong><br>
-    <sub>Fork de opencode — el código es un grafo, no texto plano.</sub>
-  </p>
-
-  <p>
-    <a href="LICENSE">
-      <img src="https://img.shields.io/badge/License-MIT-34d399?style=flat-square&labelColor=070708">
-    </a>
-    <a href="#kc-rag">
-      <img src="https://img.shields.io/badge/KC--RAG-Estructural-5B8DEF?style=flat-square&labelColor=070708">
-    </a>
-    <a href="#benchmark">
-      <img src="https://img.shields.io/badge/benchmark-v12-1d4ed8?style=flat-square&labelColor=070708">
-    </a>
-  </p>
-</div>
-
----
-
-## Qué es esto
-
-**leo-code** es un fork de [opencode](https://github.com/sst/opencode) con un plugin KC-RAG integrado. En lugar de dejar que el agente explore el código libremente (abriendo archivos, buscando en el árbol de directorios), leo-code **inyecta el contexto relevante antes de que el modelo vea la pregunta**.
-
-El sidecar KC-RAG (`leo-code-mcp`) indexa el repositorio, construye un índice vectorial y devuelve las cápsulas de código más relevantes comprimidas, adaptadas al tipo de tarea. El agente responde con ese contexto ya disponible.
+Recuperación estructural de código por subgrafo de dependencias. En lugar de chunking por longitud + similitud coseno de embeddings (como hacen todos los agentes actuales), KC-RAG extrae cápsulas del AST, las indexa en Qdrant, y devuelve el subgrafo de dependencias relevante comprimido según el tipo de tarea.
 
 ---
 
 ## El problema del chunking tradicional
-
-Todos los agentes de código actuales recuperan contexto igual: **chunking por longitud + similitud coseno de embeddings.**
 
 | Fallo | Causa | Consecuencia |
 |-------|-------|-------------|
@@ -48,9 +18,7 @@ Todos los agentes de código actuales recuperan contexto igual: **chunking por l
 
 ---
 
-## KC-RAG: recuperación por subgrafo de dependencias
-
-KC-RAG no busca texto similar. Recupera el **subgrafo de dependencias** de las cápsulas relevantes.
+## KC-RAG: Recuperación por subgrafo de dependencias
 
 ```
 Código fuente
@@ -60,7 +28,7 @@ Cápsulas: función, clase, módulo — con metadatos (calls, imports, docstring
 Candidatos relevantes (top 15 semánticos + exact match)
     ↓ Compresión adaptativa por tipo de tarea
 Contexto estructural (~400–2000 tokens)
-    ↓ Inyectado en el system prompt por plugin.ts
+    ↓ Inyectado en el system prompt
 El modelo responde directamente sin abrir archivos
 ```
 
@@ -71,7 +39,7 @@ El modelo responde directamente sin abrir archivos
 | `code_query` | Primera cápsula con cuerpo completo + firmas del resto | 500–2000 |
 | `refactor` | Función target + todas sus callees + callers | 800–1500 |
 | `search` | Mapa de funciones con indicador ✓doc/✗doc | 300–800 |
-| `no_code` | Solo cápsulas de tipo documento (tarifas, condiciones) | 100–500 |
+| `no_code` | Solo cápsulas de tipo documento | 100–500 |
 | `code_gen` | Estructura de directorios sin cuerpos | 200–600 |
 
 ---
@@ -79,150 +47,178 @@ El modelo responde directamente sin abrir archivos
 ## Arquitectura
 
 ```
-Usuario → leo-code CLI (TypeScript/opencode)
-              ↓ plugin.ts intercepta la query
-              ↓ POST /context a leo-code-mcp (:9898)
+Cliente → POST /context a leo-code-mcp (:9898)
+              ↓
          KC-RAG Sidecar (FastAPI Python)
               ↓ Indexer (AST) → Qdrant → Compressor
               ↓ contexto ~400-2000 tokens
-         plugin.ts inyecta en system prompt
-              ↓
-         Modelo LLM (DeepSeek, Claude, GPT, ...)
-              ↓ responde del contexto KC-RAG
-         Respuesta al usuario
+         Respuesta comprimida al cliente
 ```
 
 ### Componentes
 
 | Componente | Ubicación | Función |
 |-----------|-----------|---------|
-| `plugin.ts` | `packages/leo-code/src/context/` | Intercepta queries, llama al sidecar, inyecta contexto |
-| `kcrag.ts` | `packages/leo-code/src/context/` | Cliente HTTP del sidecar |
-| `server.py` | `sidecar/leo_mcp/` | FastAPI: /context, /index, /search, /health |
-| `compressor.py` | `kc-rag/kc_code/kc_rag/` | Compresión adaptativa por tipo de tarea |
-| `classifier.py` | `kc-rag/kc_code/kc_rag/` | Clasificación automática del tipo de tarea |
-| `kc_core/` | `kc-core/kc_core/` | Librería base: Capsule, parser, serialize_context |
+| **kc-core** | `kc-core/kc_core/` | Librería base: `Capsule`, parser AST, grafo BFS, `serialize_context`, cache Redis, benchmark |
+| **kc-rag** | `kc-rag/kc_code/` | Pipeline KC-RAG: encoder, vector store Qdrant, compressor, classifier, agent loop, LLM providers |
+| **leo-code-mcp** | `sidecar/leo_mcp/` | Servidor FastAPI: `/context`, `/search`, `/index`, `/preindex`, `/health`, `/stats` |
 
 ---
 
-## Benchmark
-
-Medimos leo-code contra dos baselines en **6 tareas reales sobre el propio código del proyecto**:
-
-- **LEO**: leo-code con KC-RAG integrado (agente completo)
-- **OC**: DeepSeek API directa sin herramientas ni contexto (baseline mínimo)
-- **KC-API**: DeepSeek API + contexto KC-RAG inyectado, llamada única (sin agente)
-- **NO**: DeepSeek API sin contexto ni herramientas
-
-### Resultados v12 (2026-05-18)
-
-| Sistema | Tokens totales | Criterios avg | Judge (6 tareas) |
-|---------|---------------|---------------|-----------------|
-| **LEO** | 84.148 | 76.2% | 3/6 |
-| OC (baseline) | 4.259 | 50.5% | 2/6 |
-| **KC-API** | 4.257 | 69.2% | 2/6 |
-| NO (sin contexto) | 1.867 | 51.3% | 3/6 |
-
-### Métricas de eficiencia
-
-- **TRR** (Token Reduction Rate): `1 − (tokens_leo / tokens_oc)` — cuánto menos tokens usa LEO vs baseline
-- **QPR** (Quality-Per-Resource): `TRR × (criterios_leo / criterios_oc)` — calidad relativa por coste
-
-### Observación clave
-
-El modo **KC-API** (inyección directa de contexto KC-RAG + llamada única al LLM, sin agente) obtiene **69% de criterios a solo 4.257 tokens** — casi igual que LEO (76%) pero a **20x menor coste**. La inyección de contexto funciona; el overhead viene del agente usando herramientas adicionales.
-
-El benchmark se ejecuta con `python benchmark/agent_compare.py` desde `leo-code/benchmark/`.
-
----
-
-## Instalación (CLI Python)
-
-> Monorepo único — todo está en este repositorio. No se necesita Node/Bun.
+## Instalación
 
 ```bash
-# 1. Clonar leo-code
 git clone https://github.com/manzzaano/leo-code.git
 cd leo-code
 
-# 2. Instalar el CLI y las librerías en modo editable
-pip install -e cli/ -e kc-rag/ -e kc-core/
+# Instalar las 3 librerías en modo editable
+pip install -e kc-core/ -e kc-rag/ -e sidecar/
 
-# 3. Variables de entorno (una o más según el proveedor que uses)
-# PowerShell:
-$env:DEEPSEEK_API_KEY = "sk-..."
-$env:ANTHROPIC_API_KEY = "sk-ant-..."   # opcional, solo si usas Claude
-
-# bash/zsh:
-# export DEEPSEEK_API_KEY=sk-...
-# export ANTHROPIC_API_KEY=sk-ant-...
-
-# 4. Uso inmediato (el sidecar KC-RAG arranca automáticamente)
-leo-code ask "Qué hace la función retrieve_subgraph?" --repo /ruta/al/repo
-leo-code chat --repo /ruta/al/repo
-leo-code index /ruta/al/repo
+# Variables de entorno (según proveedor)
+export DEEPSEEK_API_KEY=sk-...
+export ANTHROPIC_API_KEY=sk-ant-...
+export OPENAI_API_KEY=sk-...
 ```
-
-### Comandos disponibles
-
-```
-leo-code ask  <pregunta>           Consulta directa al agente
-leo-code chat                      Modo conversacional multi-turn
-leo-code index <repo>              Indexar repositorio en KC-RAG
-leo-code serve                     Arrancar el sidecar KC-RAG manualmente
-
-Opciones comunes:
-  --repo   -r  Ruta del repositorio (por defecto: directorio actual)
-  --model  -m  Modelo LLM (por defecto: auto-selección por complejidad)
-  --no-rag     Desactivar contexto KC-RAG (baseline directo al LLM)
-```
-
-### Selección de modelos
-
-| Opción `--model` | Descripción |
-|-----------------|-------------|
-| `auto` (por defecto) | Auto-selección: DeepSeek Flash para simple, Claude Sonnet para medio/código |
-| `deepseek/deepseek-chat` | DeepSeek API — económico, buen rendimiento en código |
-| `anthropic/claude-sonnet-4` | Claude Sonnet — mejor para razonamiento complejo |
-| `anthropic/claude-opus-4` | Claude Opus — máxima calidad |
 
 ---
 
-## Estado actual
-
-| Componente | Estado |
-|-----------|--------|
-| CLI Python (`leo-code ask/chat/index`) | ✅ Funcional — sin dependencia de opencode |
-| Sidecar KC-RAG (:9898) | ✅ Funcional — /context, /index, /search, /health |
-| Indexación Python (AST) | ✅ Funcional — extrae cápsulas sin LLM |
-| Búsqueda híbrida (exact + semántica) | ✅ Funcional — Qdrant + match por nombre/archivo |
-| Compresión adaptativa | ✅ Funcional — 5 tipos de tarea |
-| Multi-turn (chat con historial) | ✅ Funcional |
-| AnthropicProvider (Claude) | ✅ Implementado — requiere `pip install anthropic` |
-| Benchmark | ✅ 6 tareas, 4 sistemas, LLM judge |
-| Indexación incremental (watcher) | ❌ Pendiente |
-| Publicación PyPI | ❌ Pendiente |
-
----
-
-## Desarrollo
+## Uso del sidecar KC-RAG
 
 ```bash
-# Instalar en modo editable (cambios en código se reflejan sin reinstalar)
-pip install -e cli/ -e kc-rag/ -e kc-core/
-
-# Tests
-pytest kc-rag/tests/
+# Arrancar el servidor en puerto 9898
+leo-code-mcp --workers 2
+# o directamente:
+python -m leo_mcp.server
 ```
 
-> `packages/` contiene el fork TypeScript experimental de opencode — no está mantenido activamente.
+### Endpoints
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `GET` | `/health` | Health check |
+| `POST` | `/context` | KC-RAG pipeline completo: indexer → Qdrant → compress → contexto |
+| `POST` | `/search` | Búsqueda semántica en el knowledge graph |
+| `POST` | `/index` | Indexar un repositorio |
+| `POST` | `/preindex` | Pre-indexar en background |
+| `GET` | `/stats` | Estadísticas del índice |
+
+### Ejemplo de uso
+
+```bash
+# Indexar un repo
+curl -X POST http://localhost:9898/index \
+  -H "Content-Type: application/json" \
+  -d '{"repo_path": "/ruta/al/repo", "languages": "python,text"}'
+
+# Consultar contexto
+curl -X POST http://localhost:9898/context \
+  -H "Content-Type: application/json" \
+  -d '{"query": "qué hace la función retrieve_subgraph", "repo_path": "/ruta/al/repo"}'
+
+# Búsqueda semántica
+curl -X POST http://localhost:9898/search \
+  -H "Content-Type: application/json" \
+  -d '{"query": "vector store hnsw", "repo_path": "/ruta/al/repo", "top_k": 5}'
+```
 
 ---
 
-<div align="center">
-  <sub>
-    Construido por <a href="https://github.com/manzzaano">Ismael Manzano</a> ·
-    Fork de <a href="https://github.com/sst/opencode">opencode</a> ·
-    © 2026 — MIT
-  </sub>
-</div>
+## Estructura interna
+
+### Parser (`kc-core/kc_core/parser.py`)
+
+Extrae cápsulas del AST de Python sin LLM. Cada cápsula contiene:
+
+```python
+@dataclass
+class Capsule:
+    id: str           # hash SHA256 del path+línea+firma
+    type: str         # function, class, module, variable, constant, document, file_header
+    name: str         # nombre de la función/clase/módulo
+    file_path: str    # ruta del archivo fuente
+    start_line: int
+    end_line: int
+    language: str
+    signature: str    # def foo(a: int, b: str) -> bool
+    content: str      # cuerpo completo de la función/clase
+    docstring: str    # docstring extraído
+    calls: list[str]  # funciones que llama
+    called_by: list[str]  # funciones que la llaman (resuelto por build_call_graph)
+    imports: list[str]
+    properties: dict  # parametros, tipo_retorno, lineas, module, metodos, etc.
+```
+
+Soporta Python vía `ast.parse()` y multi-lenguaje vía tree-sitter. Archivos `.txt` se parsean como cápsulas `document`.
+
+### Compressor (`kc-rag/kc_code/kc_rag/compressor.py`)
+
+Compresión adaptativa según tipo de tarea:
+
+- **code_query**: primera cápsula con cuerpo completo, resto con firma+docstring+relaciones. Incluye edges LLAMA.
+- **code_edit**: función target + imports sin cuerpos completos.
+- **code_gen**: estructura de directorios y archivos.
+- **refactor**: función target + todas sus callees + todos sus callers con firmas.
+- **search**: mini-mapa de funciones por archivo con indicador ✓doc/✗doc. Funciones sin docstring primero.
+- **no_code**: cápsulas tipo documento con keyword match.
+
+### Classifier (`kc-rag/kc_code/kc_rag/classifier.py`)
+
+Clasifica automáticamente la query en uno de 6 tipos usando señales léxicas en español e inglés:
+`code_gen`, `code_edit`, `code_query`, `refactor`, `search`, `no_code`.
+
+También detecta si la query necesita contexto de código (`snake_case`, `CamelCase`, palabras clave técnicas) y recomienda un presupuesto de tokens.
+
+### Búsqueda híbrida (`sidecar/leo_mcp/server.py`)
+
+El endpoint `/context` combina:
+1. **Exact match** por nombre de archivo, nombre de función, y palabras clave en la query
+2. **Búsqueda semántica** Qdrant HNSW con embeddings `all-MiniLM-L6-v2` (384 dims)
+3. Los resultados exactos se ordenan primero, fusionados con los semánticos
+
+### LLM Providers (`kc-rag/kc_code/llm/`)
+
+Capa model-agnostic con auto-descubrimiento de providers vía variables de entorno:
+
+| Provider | Variable de entorno |
+|----------|-------------------|
+| Anthropic (Claude) | `ANTHROPIC_API_KEY` |
+| OpenAI / DeepSeek | `OPENAI_API_KEY` o `DEEPSEEK_API_KEY` |
+| OpenRouter | `OPENROUTER_API_KEY` |
+| Google Gemini | `GOOGLE_API_KEY` o `GEMINI_API_KEY` |
+| Mistral | `MISTRAL_API_KEY` |
+| Groq | `GROQ_API_KEY` |
+| Cohere | `COHERE_API_KEY` |
+| Ollama | Local (sin API key) |
+
+### Cache (`kc-core/kc_core/cache.py`)
+
+Cache Redis L1/L2/L3 con circuit breaker. Resultados de `/context` se cachean por 60s (TTL configurable). Se invalida al indexar.
+
+### Rate limiting
+
+El sidecar aplica rate limiting: 30 requests por ventana de 10 segundos por IP.
+
+---
+
+## Seguridad
+
+- **Sin API keys hardcodeadas**: todas las credenciales se leen de variables de entorno
+- **Rate limiting**: protección básica contra abuso en el sidecar
+- **Sin paths absolutos**: el código usa paths relativos o `os.path.abspath()` sobre inputs
+- **Caché en `/cache`**: ignorado por `.gitignore`, no se commitea
+- **Sin dependencia de LLM para indexar**: el parser AST es determinista, no filtra datos al exterior
+
+---
+
+## Requisitos
+
+- Python >= 3.11
+- Qdrant (local, sin servidor externo — usa `qdrant-client` en modo archivo)
+- Redis (opcional, para cache L1/L2/L3)
+- Dependencias opcionales por provider: `anthropic`, `openai`, `ollama`
+
+---
+
+## Licencia
+
+MIT — [Ismael Manzano Leon](https://github.com/manzzaano) — 2026

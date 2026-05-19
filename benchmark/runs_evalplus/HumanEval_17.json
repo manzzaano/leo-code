@@ -1,9 +1,0 @@
-{
-  "task_id": "HumanEval/17",
-  "entry_point": "parse_music",
-  "raw_response": "```python\ndef parse_music(music_string: str) -> List[int]:\n    notes = music_string.split()\n    durations = {\"o\": 4, \"o|\": 2, \".|\": 1}\n    return [durations[note] for note in notes]\n```",
-  "extracted_code": "def parse_music(music_string: str) -> List[int]:\n    notes = music_string.split()\n    durations = {\"o\": 4, \"o|\": 2, \".|\": 1}\n    return [durations[note] for note in notes]",
-  "input_tokens": 10448,
-  "output_tokens": 61,
-  "latency_s": 5.965
-}

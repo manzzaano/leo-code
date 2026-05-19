@@ -1,6 +1,0 @@
-{
-  "query": "En query/capa4.py existe SYSTEM_PROMPT para el LLM. Que formatos de respuesta prohibe explicitamente ese prompt?",
-  "response": "No se encontró ningún archivo `capa4.py` en el repositorio. ¿Podrías verificar la ruta exacta o el nombre del archivo?",
-  "input_tokens": 56188,
-  "output_tokens": 178
-}

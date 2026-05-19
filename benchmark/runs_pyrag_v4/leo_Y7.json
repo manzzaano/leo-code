@@ -1,6 +1,0 @@
-{
-  "query": "En cache/redis_cache.py, existen dos funciones privadas para generar claves de Redis: una para queries y otra para subgrafos. Cuales son los prefijos exactos que usa cada una?",
-  "response": "The function for queries uses prefix `\"query:\"` and the function for subgraphs uses prefix `\"subgraph:\"`.\n\nLet me verify this.Let me re-read the file to confirm the exact prefixes.Confirmado tras leer el archivo:\n\n- **`_query_key`** — prefijo: `\"query:\"` (línea 20)\n- **`_subgraph_key`** — prefijo: `\"subgraph:\"` (línea 25)\n\nAmbos usan un hash SHA-256 del contenido después del prefijo.",
-  "input_tokens": 28330,
-  "output_tokens": 899
-}

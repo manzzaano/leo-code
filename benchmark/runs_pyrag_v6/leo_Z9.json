@@ -1,6 +1,0 @@
-{
-  "query": "En cache/redis_cache.py hay dos generadores de claves Redis. Escribe el codigo exacto que genera la clave para queries (_query_key) y la clave para subgrafos (_subgraph_key). Incluye el prefijo, el algoritmo de hash y la transformacion de la query.",
-  "response": "```python\ndef _query_key(query: str) -> str:\n    \"\"\"Genera clave Redis para query: 'query:' + md5(query.lower().strip()).\"\"\"\n    raw = query.lower().strip()\n    return f\"query:{hashlib.md5(raw.encode()).hexdigest()}\"\n\ndef _subgraph_key(entity_id: str) -> str:\n    \"\"\"Genera clave Redis para subgrafo: 'subgraph:{entity_id}'.\"\"\"\n    return f\"subgraph:{entity_id}\"\n```",
-  "input_tokens": 1138,
-  "output_tokens": 104
-}

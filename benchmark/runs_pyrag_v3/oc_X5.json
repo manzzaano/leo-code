@@ -1,6 +1,0 @@
-{
-  "query": "En graph/nodes.py, la funcion privada _node_id() genera IDs de nodos. Que algoritmo de hash usa y cual es el formato exacto de la cadena de entrada?",
-  "response": "No se encontró `_node_id()` en ningún archivo del repositorio. El archivo `graph/nodes.py` no existe en la raíz del proyecto. ¿Podrías verificar la ruta correcta del archivo o si el proyecto está en otro directorio?",
-  "input_tokens": 75143,
-  "output_tokens": 244
-}

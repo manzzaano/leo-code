@@ -1,6 +1,0 @@
-{
-  "query": "¿Qué funciones de graph/nodes.py tienen operaciones en batch (batch operations)?",
-  "response": "Let me search for batch operations in the graph/nodes.py file.",
-  "input_tokens": 18626,
-  "output_tokens": 112
-}

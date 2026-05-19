@@ -1,6 +1,0 @@
-{
-  "query": "Usando los tipos de packages/leo-code/src/mcp/index.ts, implementa la función `getAvailableMcpToolNames(status: Status): string[]` que retorne los nombres de todas las tools disponibles cuando el servidor MCP está connected, y un array vacío en cualquier otro estado. Importa Status del módulo correcto.",
-  "response": "Let me first explore the relevant files.",
-  "input_tokens": 18674,
-  "output_tokens": 150
-}

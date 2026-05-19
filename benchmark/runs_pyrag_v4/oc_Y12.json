@@ -1,6 +1,0 @@
-{
-  "query": "En query/pipeline.py, si validate_query() lanza una excepcion ValueError, que diccionario devuelve query()? Cual es el valor del campo capa en _meta y el campo error?",
-  "response": "Let me find the code in question.El archivo `query/pipeline.py` no existe en este repositorio. No hay un directorio `query/` ni ningún archivo `pipeline.py` en el código fuente. Las referencias a ese archivo y a `validate_query` aparecen solo en datos de benchmarks y prompts, no como código real.\n\n¿Podrías confirmar la ruta exacta o compartir el contenido del archivo?",
-  "input_tokens": 75885,
-  "output_tokens": 414
-}

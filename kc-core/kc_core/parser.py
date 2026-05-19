@@ -240,7 +240,7 @@ def extract_from_file(path: str, language: str = "python") -> list[Capsule]:
         return extract_from_txt(content, path)
     try:
         return extract_from_tree_sitter(content, path, language)
-    except Exception:
+    except (ImportError, SyntaxError, ValueError):
         return []
 
 
@@ -415,10 +415,10 @@ def extract_from_tree_sitter(content: str, file_path: str, language: str = "pyth
 def build_call_graph(capsules: list[Capsule]) -> None:
     """Rellena called_by en todas las cápsulas a partir de calls."""
     name_to_id = {c.name: c.id for c in capsules}
+    id_to_capsule = {c.id: c for c in capsules}
     for c in capsules:
         for call_name in c.calls:
             if call_name in name_to_id:
-                target_id = name_to_id[call_name]
-                for target in capsules:
-                    if target.id == target_id and c.id not in target.called_by:
-                        target.called_by.append(c.id)
+                target = id_to_capsule.get(name_to_id[call_name])
+                if target and c.id not in target.called_by:
+                    target.called_by.append(c.id)

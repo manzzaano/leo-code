@@ -1,6 +1,0 @@
-{
-  "query": "En ingestion/pipeline.py, la funcion privada _upsert_entities_relations() tiene un parametro con string vacio como default. Cual es ese parametro y su valor exacto?",
-  "response": "El parámetro es `prefix` con valor por defecto `\"\"` (string vacío).",
-  "input_tokens": 1513,
-  "output_tokens": 20
-}

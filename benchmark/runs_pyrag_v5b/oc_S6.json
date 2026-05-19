@@ -1,6 +1,0 @@
-{
-  "query": "En ingestion/extractor.py, CODE_EXTRACTION_PROMPT especifica que propiedades extraer para entidades tipo Funcion. Lista exactamente las propiedades que debe extraer para cada funcion.",
-  "response": "No existe un archivo `ingestion/extractor.py` ni ningún `extractor*` en el repositorio. El path `ingestion/` no existe como directorio en la raíz del proyecto.\n\n¿Podrías verificar la ruta exacta? Tal vez el archivo esté en `kc-rag/`, `kc-core/`, o `packages/`?",
-  "input_tokens": 113702,
-  "output_tokens": 497
-}

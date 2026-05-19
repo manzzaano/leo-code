@@ -1,9 +1,0 @@
-{
-  "task_id": "HumanEval/16",
-  "entry_point": "count_distinct_characters",
-  "raw_response": "```python\ndef count_distinct_characters(string: str) -> int:\n    return len(set(string.lower()))\n```",
-  "extracted_code": "def count_distinct_characters(string: str) -> int:\n    return len(set(string.lower()))",
-  "input_tokens": 10346,
-  "output_tokens": 25,
-  "latency_s": 5.995
-}

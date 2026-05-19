@@ -1,6 +1,0 @@
-{
-  "query": "Traza el flujo completo del flag --model en leo-code desde que el usuario lo escribe en el CLI hasta que el LLM recibe la primera llamada de streaming. Nombra cada archivo y función específica involucrada en la cadena.",
-  "response": "Let me trace the full flow of `--model` from CLI to LLM streaming call.",
-  "input_tokens": 7335,
-  "output_tokens": 199
-}

@@ -1,6 +1,0 @@
-{
-  "query": "Traza el flujo COMPLETO de query() en query/pipeline.py cuando: use_cache=True pero no hay cache hit, y el routing decide intent==parallel. Lista TODAS las funciones llamadas en orden con sus modulos exactos.",
-  "response": "",
-  "input_tokens": 0,
-  "output_tokens": 0
-}

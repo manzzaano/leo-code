@@ -1,6 +1,0 @@
-{
-  "query": "En query/pipeline.py, cuando el routing decide intent==parallel, se usa asyncio para ejecutar route_parallel(). Escribe la llamada exacta incluyendo los argumentos pasados a route_parallel().",
-  "response": "Los archivos `query/pipeline.py` y `query/router.py` no existen en este repositorio (`leo-code`). Solo hay referencias a ellos en archivos de benchmark (`benchmark_python_rag_v2.py` y `benchmark_python_rag_v4.py`) que apuntan a un repositorio externo en `C:\\Users\\Ismael\\Desktop\\RAG`.La llamada exacta en `query/pipeline.py` línea 42 es:\n\n```python\nasyncio.run(route_parallel(user_query, try_resolve, retrieve_subgraph))\n```\n\nLos argumentos pasados a `route_parallel()` son:\n1. **`user_query`** — la consulta del usuario (str)\n2. **`try_resolve`** — la función de Capa 0 (importada de `query.capa0`)\n",
-  "input_tokens": 178086,
-  "output_tokens": 933
-}

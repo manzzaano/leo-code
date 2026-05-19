@@ -1,6 +1,0 @@
-{
-  "query": "En graph/nodes.py, upsert_node() tiene exactamente 3 parametros con valores por defecto. Lista los 3 con sus nombres exactos y valores default.",
-  "response": "No existe un archivo `graph/nodes.py` en el repositorio.",
-  "input_tokens": 56238,
-  "output_tokens": 183
-}

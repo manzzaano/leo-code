@@ -1,9 +1,0 @@
-{
-  "task_id": "HumanEval/7",
-  "entry_point": "filter_by_substring",
-  "raw_response": "```python\ndef filter_by_substring(strings: List[str], substring: str) -> List[str]:\n    return [s for s in strings if substring in s]\n```",
-  "extracted_code": "def filter_by_substring(strings: List[str], substring: str) -> List[str]:\n    return [s for s in strings if substring in s]",
-  "input_tokens": 10367,
-  "output_tokens": 36,
-  "latency_s": 5.609
-}

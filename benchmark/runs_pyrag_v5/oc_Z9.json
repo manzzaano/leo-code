@@ -1,6 +1,0 @@
-{
-  "query": "En cache/redis_cache.py hay dos generadores de claves Redis. Escribe el codigo exacto que genera la clave para queries (_query_key) y la clave para subgrafos (_subgraph_key). Incluye el prefijo, el algoritmo de hash y la transformacion de la query.",
-  "response": "Aquí está el código exacto de los dos generadores de clave Redis en `kc-core/kc_core/cache.py`:\n\n**`_query_key` (línea 32–33):**\n```python\ndef _query_key(query: str) -> str:\n    return \"query:\" + hashlib.md5(query.lower().strip().encode()).hexdigest()\n```\n\n**`_subgraph_key` (línea 36–37):**\n```python\ndef _subgraph_key(entity_id: str) -> str:\n    return f\"subgraph:{entity_id}\"\n```\n\n**Resumen:**\n- **Prefijo**: `query:` para queries, `subgraph:` para subgrafos.\n- **Hash**: MD5 del query normalizado (lowercased + stripped + codificado a bytes).\n- **Transformación**: la query se pasa por `.lower().strip()` antes de hashear — normaliza a minúsculas y elimina whitespace inicial/final para aumentar cache hits en consultas semánticamente idénticas con diferencias triviales de formato.",
-  "input_tokens": 115870,
-  "output_tokens": 595
-}

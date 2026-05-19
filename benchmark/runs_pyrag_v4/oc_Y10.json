@@ -1,6 +1,0 @@
-{
-  "query": "En graph/nodes.py, la funcion upsert_nodes_batch() recibe un tipo especifico. Cual es el tipo exacto del parametro nodes_data y que tipo retorna la funcion?",
-  "response": "No existe un archivo `graph/nodes.py` en el repositorio. ¿Podrías verificar la ruta exacta, o buscar el archivo con `**/nodes.py` como pista adicional?",
-  "input_tokens": 75058,
-  "output_tokens": 196
-}

@@ -1,6 +1,0 @@
-{
-  "query": "Según la documentación del sistema, ¿cuáles son exactamente las condiciones C01 y C05 para obtener descuentos?",
-  "response": "No hay suficiente información en el resumen proporcionado para responder a tu pregunta sobre las condiciones C01 y C05. El contexto solo contiene metadatos de archivos y funciones, no el contenido específico de la documentación del sistema ni los detalles de las condiciones de descuento.",
-  "input_tokens": 1577,
-  "output_tokens": 59
-}

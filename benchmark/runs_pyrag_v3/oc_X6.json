@@ -1,6 +1,0 @@
-{
-  "query": "En graph/vector_index.py hay exactamente 3 funciones publicas de busqueda vectorial. Cuales son sus nombres exactos y cual es el valor por defecto del parametro n_results?",
-  "response": "No existe el archivo `graph/vector_index.py` en este repositorio. Las búsquedas con glob no encontraron ningún archivo que coincida con ese nombre. ¿Podrías verificar la ruta o el nombre del archivo?",
-  "input_tokens": 75069,
-  "output_tokens": 207
-}

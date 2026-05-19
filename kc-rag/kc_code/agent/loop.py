@@ -4,6 +4,7 @@ Flujo: consulta → indexer → Qdrant search → compress → LLM → tool call
 """
 
 import os
+import time
 import asyncio
 from typing import Optional
 from kc_code.agent.tools import ToolRegistry
@@ -25,7 +26,18 @@ class AgentLoop:
                   model: str = "deepseek/deepseek-v4-flash",
                   use_kc_rag: bool = True,
                   history: list[dict] | None = None) -> dict:
-        """Ejecuta una consulta completa: retrieval → LLM → tools → respuesta."""
+        """Ejecuta una consulta completa: retrieval → LLM → tools → respuesta.
+
+        Retorna dict con:
+          respuesta: str
+          steps: list[dict]  — cada paso con {reasoning, tool_calls, text, duration_ms}
+          total_tokens: int
+          iterations: int
+          duration_ms: int
+          finish: str
+          model: str
+        """
+        t0 = time.time()
         if self.llm is None:
             self.llm = self._init_llm(model)
 
@@ -45,17 +57,36 @@ class AgentLoop:
 
         tool_defs = self.tools.get_openai_definitions()
         total_tokens = 0
+        steps: list[dict] = []
 
         if context:
             messages.insert(1, {"role": "system", "content": f"Contexto del codigo:\n{context}"})
 
         for iteration in range(self.max_iterations):
+            step_start = time.time()
             resp = await self.llm.generate(messages, tool_defs, temperature=0.2)
+            step_ms = int((time.time() - step_start) * 1000)
             total_tokens += resp.usage.input_tokens + resp.usage.output_tokens
+
+            step = {
+                "reasoning": resp.reasoning_content or "",
+                "text": resp.text or "",
+                "tool_calls": [],
+                "duration_ms": step_ms,
+            }
 
             if resp.tool_calls:
                 for tc in resp.tool_calls:
+                    tool_start = time.time()
                     result = self.tools.execute(tc.name, tc.arguments, repo_path)
+                    tool_ms = int((time.time() - tool_start) * 1000)
+                    step["tool_calls"].append({
+                        "name": tc.name,
+                        "arguments": tc.arguments,
+                        "result": result[:2000],
+                        "result_chars": len(result),
+                        "duration_ms": tool_ms,
+                    })
                     assistant_msg = {
                         "role": "assistant",
                         "content": resp.text or "",
@@ -73,23 +104,27 @@ class AgentLoop:
                         "tool_call_id": tc.id,
                         "content": result[:4000],
                     })
-                    try:
-                        print(f"  [tool] {tc.name}({str(tc.arguments)[:80]}) -> {len(result)} chars")
-                    except UnicodeEncodeError:
-                        print(f"  [tool] {tc.name}(...) -> {len(result)} chars")
+                steps.append(step)
             else:
+                steps.append(step)
                 return {
                     "respuesta": resp.text,
+                    "steps": steps,
                     "iterations": iteration + 1,
                     "total_tokens": total_tokens,
+                    "duration_ms": int((time.time() - t0) * 1000),
                     "finish": "stop",
+                    "model": model,
                 }
 
         return {
             "respuesta": messages[-1].get("content", "Maximo de iteraciones alcanzado."),
+            "steps": steps,
             "iterations": self.max_iterations,
             "total_tokens": total_tokens,
+            "duration_ms": int((time.time() - t0) * 1000),
             "finish": "max_iterations",
+            "model": model,
         }
 
     def _init_llm(self, model: str):

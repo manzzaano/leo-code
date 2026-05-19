@@ -1,6 +1,0 @@
-{
-  "query": "Haz un audit completo de todos los imports de query/pipeline.py. Lista TODOS los modulos importados y las funciones especificas importadas de cada uno. Sé exhaustivo.",
-  "response": "Necesito leer el archivo `query/pipeline.py` para hacer el audit completo de sus imports.Aquí tienes el **audit completo y exhaustivo** de todos los imports de `query/pipeline.py`:\n\n---\n\n## 📦 Audit de imports — `query/pipeline.py`\n\n### 1. Módulos estándar (stdlib)\n\n| Import | Tipo | Alias | Uso |\n|--------|------|-------|-----|\n| `import asyncio` | Módulo completo | — | Línea 46: `asyncio.run(...)` para ejecutar `route_parallel` de forma concurrente |\n| `import time` | Módulo completo | — | Línea 18: `time.time()` para medir duración del pipeline |\n\n### 2. Módulos propios del proyecto (query.*)\n\n| Import | Origen | Símbolos importados | Uso |\n|--------|--------|---------------------|-----|\n| `from query.router import ...` | `query/router.py` | `route` | Línea 42: clasifica la intención de ",
-  "input_tokens": 5985,
-  "output_tokens": 1219
-}

@@ -5,6 +5,24 @@ Usa kc_core.graph.bfs_subgraph para el traversal estructural.
 
 from kc_core.parser import Capsule
 
+_edges_cache: tuple[int, list[dict]] = (0, [])
+
+
+def _build_edges(nodes: list[Capsule], nodes_by_id: dict[str, Capsule]) -> list[dict]:
+    global _edges_cache
+    nodes_id = id(nodes)
+    if _edges_cache[0] == nodes_id:
+        return _edges_cache[1]
+    name_to_id = {c.name: c.id for c in nodes}
+    edges = []
+    for c in nodes:
+        for call_name in c.calls:
+            target_id = name_to_id.get(call_name)
+            if target_id:
+                edges.append({"from": c.id, "type": "LLAMA", "to": target_id})
+    _edges_cache = (nodes_id, edges)
+    return edges
+
 
 def expand(
     capsules: dict[str, Capsule],
@@ -16,14 +34,9 @@ def expand(
     Expande un conjunto semilla de cápsulas vía BFS sobre sus dependencias.
     Retorna lista de cápsulas topológicamente conectadas.
     """
-    nodes = [c for c in capsules.values()]
+    nodes = list(capsules.values())
     nodes_by_id = {c.id: c for c in nodes}
-    edges = []
-    for c in nodes:
-        for call_name in c.calls:
-            target = next((t for t in nodes if t.name == call_name), None)
-            if target:
-                edges.append({"from": c.id, "type": "LLAMA", "to": target.id})
+    edges = _build_edges(nodes, nodes_by_id)
 
     from kc_core.graph import bfs_subgraph
     visited_ids = set()

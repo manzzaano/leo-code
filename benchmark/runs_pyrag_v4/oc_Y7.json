@@ -1,6 +1,0 @@
-{
-  "query": "En cache/redis_cache.py, existen dos funciones privadas para generar claves de Redis: una para queries y otra para subgrafos. Cuales son los prefijos exactos que usa cada una?",
-  "response": "El archivo no existe en este repositorio. Las referencias a `redis_cache.py` solo aparecen en queries de benchmarks, no como un archivo real. Parece que es parte de un proyecto externo no presente en este workspace.",
-  "input_tokens": 94299,
-  "output_tokens": 265
-}

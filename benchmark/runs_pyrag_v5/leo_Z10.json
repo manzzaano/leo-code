@@ -1,6 +1,0 @@
-{
-  "query": "En query/pipeline.py, cuando el intent es parallel, describe exactamente como se ejecuta route_parallel(). Cual es la llamada asyncio exacta y como se decide si usar el resultado o continuar con el flujo normal?",
-  "response": "Let me read the relevant code.I don't have a `Read` tool available. Let me reconstruct the answer from the KCrag context. The context shows `C:\\Users\\Ismael\\Desktop\\RAG\\query\\pipeline.py` exists but I can't read its contents directly with these tools.\n\nLet me check if I can use a different approach — let me look at the query directory structure. From the context, I know:\n\n- `query/pipeline.py` exists\n- `query/router.py` exists\n- Capa files: `capa0.py`, `capa2.py`, `capa3.py`, `capa4.py`, `capa5.py`\n\nUnfortunately, I don't have a `Read` or `Grep` tool in my available toolset. I can only `edit`, `write`, `todowrite`, and call invalid tools. I cannot read files to answer your question about `route_parallel()`.\n\nCould you paste the content of `query/pipeline.py` (and `query/router.py` if relev",
-  "input_tokens": 30070,
-  "output_tokens": 463
-}

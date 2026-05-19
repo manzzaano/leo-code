@@ -1,6 +1,0 @@
-{
-  "query": "En cache/redis_cache.py, como se inicializa el cliente Redis? Cuales son los argumentos exactos pasados a redis.from_url() y que hace si la conexion falla?",
-  "response": "En `_get_client()`:\n\n```python\nr = redis.from_url(config.REDIS_URL, socket_connect_timeout=0.1, decode_responses=True)\n```\n\nArgumentos exactos:\n- `config.REDIS_URL`: URL de conexión (por defecto `redis://localhost:6379`)\n- `socket_connect_timeout=0.1`: timeout de conexión de 100ms\n- `decode_responses=True`: decodifica respuestas a strings\n\nSi la conexión falla, captura la excepción, retorna `None` y todas las funciones que llaman a `_get_client()` retornan `None` también, desactivando efectivamente el caché sin lanzar error.",
-  "input_tokens": 990,
-  "output_tokens": 156
-}
