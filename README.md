@@ -59,9 +59,9 @@ Cliente → POST /context a leo-code-mcp (:9898)
 
 | Componente | Ubicación | Función |
 |-----------|-----------|---------|
-| **kc-core** | `kc-core/kc_core/` | Librería base: `Capsule`, parser AST, grafo BFS, `serialize_context`, cache Redis, benchmark |
-| **kc-rag** | `kc-rag/kc_code/` | Pipeline KC-RAG: encoder, vector store Qdrant, compressor, classifier, agent loop, LLM providers |
-| **leo-code-mcp** | `sidecar/leo_mcp/` | Servidor FastAPI: `/context`, `/search`, `/index`, `/preindex`, `/health`, `/stats` |
+| **core** | `leo_code/core/` | Librería base: `Capsule`, parser AST, grafo BFS, `serialize_context`, cache Redis, benchmark |
+| **rag** | `leo_code/rag/` | Pipeline KC-RAG: encoder, vector store Qdrant, compressor, classifier, agent loop, LLM providers |
+| **server** | `leo_code/server/` | Servidor FastAPI: `/context`, `/search`, `/index`, `/preindex`, `/health`, `/stats` |
 
 ---
 
@@ -71,8 +71,8 @@ Cliente → POST /context a leo-code-mcp (:9898)
 git clone https://github.com/manzzaano/leo-code.git
 cd leo-code
 
-# Instalar las 3 librerías en modo editable
-pip install -e kc-core/ -e kc-rag/ -e sidecar/
+# Instalar en modo editable (un solo paquete)
+pip install -e .
 
 # Variables de entorno (según proveedor)
 export DEEPSEEK_API_KEY=sk-...
@@ -88,7 +88,7 @@ export OPENAI_API_KEY=sk-...
 # Arrancar el servidor en puerto 9898
 leo-code-mcp --workers 2
 # o directamente:
-python -m leo_mcp.server
+python -m leo_code.server.server
 ```
 
 ### Endpoints
@@ -125,7 +125,7 @@ curl -X POST http://localhost:9898/search \
 
 ## Estructura interna
 
-### Parser (`kc-core/kc_core/parser.py`)
+### Parser (`leo_code/core/parser.py`)
 
 Extrae cápsulas del AST de Python sin LLM. Cada cápsula contiene:
 
@@ -150,7 +150,7 @@ class Capsule:
 
 Soporta Python vía `ast.parse()` y multi-lenguaje vía tree-sitter. Archivos `.txt` se parsean como cápsulas `document`.
 
-### Compressor (`kc-rag/kc_code/kc_rag/compressor.py`)
+### Compressor (`leo_code/rag/compressor.py`)
 
 Compresión adaptativa según tipo de tarea:
 
@@ -161,21 +161,21 @@ Compresión adaptativa según tipo de tarea:
 - **search**: mini-mapa de funciones por archivo con indicador ✓doc/✗doc. Funciones sin docstring primero.
 - **no_code**: cápsulas tipo documento con keyword match.
 
-### Classifier (`kc-rag/kc_code/kc_rag/classifier.py`)
+### Classifier (`leo_code/rag/classifier.py`)
 
 Clasifica automáticamente la query en uno de 6 tipos usando señales léxicas en español e inglés:
 `code_gen`, `code_edit`, `code_query`, `refactor`, `search`, `no_code`.
 
 También detecta si la query necesita contexto de código (`snake_case`, `CamelCase`, palabras clave técnicas) y recomienda un presupuesto de tokens.
 
-### Búsqueda híbrida (`sidecar/leo_mcp/server.py`)
+### Búsqueda híbrida (`leo_code/server/server.py`)
 
 El endpoint `/context` combina:
 1. **Exact match** por nombre de archivo, nombre de función, y palabras clave en la query
 2. **Búsqueda semántica** Qdrant HNSW con embeddings `all-MiniLM-L6-v2` (384 dims)
 3. Los resultados exactos se ordenan primero, fusionados con los semánticos
 
-### LLM Providers (`kc-rag/kc_code/llm/`)
+### LLM Providers (`leo_code/rag/llm/`)
 
 Capa model-agnostic con auto-descubrimiento de providers vía variables de entorno:
 
@@ -190,7 +190,7 @@ Capa model-agnostic con auto-descubrimiento de providers vía variables de entor
 | Cohere | `COHERE_API_KEY` |
 | Ollama | Local (sin API key) |
 
-### Cache (`kc-core/kc_core/cache.py`)
+### Cache (`leo_code/core/cache.py`)
 
 Cache Redis L1/L2/L3 con circuit breaker. Resultados de `/context` se cachean por 60s (TTL configurable). Se invalida al indexar.
 
