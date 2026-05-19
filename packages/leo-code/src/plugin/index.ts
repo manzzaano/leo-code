@@ -60,11 +60,11 @@ export class Service extends Context.Service<Service, Interface>()("@leo-code/Pl
 
 // Built-in plugins that are directly imported (not installed from npm)
 const INTERNAL_PLUGINS: PluginInstance[] = [
-  kcragPlugin,
+  kcragPlugin as unknown as PluginInstance,
   CodexAuthPlugin,
   CopilotAuthPlugin,
-  GitlabAuthPlugin,
-  PoeAuthPlugin,
+  GitlabAuthPlugin as unknown as PluginInstance,
+  PoeAuthPlugin as unknown as PluginInstance,
   CloudflareWorkersAuthPlugin,
   CloudflareAIGatewayAuthPlugin,
   AzureAuthPlugin,
