@@ -80,7 +80,8 @@ def _run_cli_streaming(cmd, cwd, env, timeout=120) -> str:
         try:
             for raw in proc.stdout:
                 lines.append(raw)
-                if b'"step_finish"' in raw and b'"total"' in raw:
+                # Stop only when agent finishes (reason:stop), not on tool-call steps
+                if b'"step_finish"' in raw and b'"reason":"stop"' in raw:
                     break
         finally:
             done.set()
