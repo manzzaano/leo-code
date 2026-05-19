@@ -1,0 +1,6 @@
+{
+  "query": "¿Cuál es la firma completa de synthesize() en query/capa4.py incluyendo todos sus parámetros?",
+  "response": "La función `synthesize` en `query/capa4.py` no tiene docstring (✗doc). Su firma completa es:\n\n```python\ndef synthesize(query, subgraph, context, max_retries=3)\n```\n\n**Parámetros:**\n- `query`: str — consulta original del usuario\n- `subgraph`: dict — subgrafo recuperado de capa2\n- `context`: dict — contexto serializado de capa3\n- `max_retries`: int (default=3) — reintentos ante fallo del LLM",
+  "input_tokens": 1555,
+  "output_tokens": 121
+}

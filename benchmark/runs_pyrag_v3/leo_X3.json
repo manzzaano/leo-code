@@ -1,0 +1,6 @@
+{
+  "query": "En ingestion/extractor.py, CODE_EXTRACTION_PROMPT lista tipos de relacion validos. Cuales son exactamente los tipos de relacion validos para codigo Python?",
+  "response": "Los tipos de relación válidos para código Python listados en `CODE_EXTRACTION_PROMPT` son:\n\n1. **imports**\n2. **calls**\n3. **defines**",
+  "input_tokens": 1581,
+  "output_tokens": 41
+}

@@ -1,0 +1,9 @@
+{
+  "task_id": "HumanEval/2",
+  "entry_point": "truncate_number",
+  "raw_response": "```python\ndef truncate_number(number: float) -> float:\n    return number - int(number)\n```",
+  "extracted_code": "def truncate_number(number: float) -> float:\n    return number - int(number)",
+  "input_tokens": 10358,
+  "output_tokens": 22,
+  "latency_s": 5.451
+}

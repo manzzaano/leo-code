@@ -1,0 +1,6 @@
+{
+  "query": "En query/capa4.py, el SYSTEM_PROMPT da instrucciones al LLM. Describe que formatos prohíbe explicitamente y que tipo de informacion exige incluir en la respuesta.",
+  "response": "Let me read the file first.El archivo `query/capa4.py` no existe en el repositorio. El único directorio `query/` no contiene archivos `.py`. ¿Podrías verificar la ruta o el nombre exacto del archivo?",
+  "input_tokens": 75084,
+  "output_tokens": 211
+}

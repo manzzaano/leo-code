@@ -1,0 +1,9 @@
+{
+  "task_id": "HumanEval/8",
+  "entry_point": "sum_product",
+  "raw_response": "```python\ndef sum_product(numbers: List[int]) -> Tuple[int, int]:\n    if not numbers:\n        return (0, 1)\n    s = 0\n    p = 1\n    for n in numbers:\n        s += n\n        p *= n\n    return (s, p)\n```",
+  "extracted_code": "def sum_product(numbers: List[int]) -> Tuple[int, int]:\n    if not numbers:\n        return (0, 1)\n    s = 0\n    p = 1\n    for n in numbers:\n        s += n\n        p *= n\n    return (s, p)",
+  "input_tokens": 10384,
+  "output_tokens": 67,
+  "latency_s": 5.981
+}

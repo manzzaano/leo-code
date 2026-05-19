@@ -1,0 +1,6 @@
+{
+  "query": "En ingestion/extractor.py, CODE_EXTRACTION_PROMPT especifica que propiedades extraer para entidades tipo Funcion. Lista exactamente las propiedades que debe extraer para cada funcion.",
+  "response": "Para cada entidad de tipo **Funcion**, `CODE_EXTRACTION_PROMPT` (línea 50) especifica que debe extraer estas propiedades:\n\n- **parametros** — lista de parámetros que recibe la función\n- **tipo_retorno** — tipo de dato que retorna\n- **docstring** — contenido del docstring, si existe\n- **lineas_aprox** — número aproximado de líneas de la función",
+  "input_tokens": 21801,
+  "output_tokens": 160
+}

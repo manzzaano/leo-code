@@ -1,0 +1,6 @@
+{
+  "query": "En graph/nodes.py, upsert_node() tiene un parametro aliases. Cual es su tipo exacto de anotacion y su valor por defecto? Tambien nombra el bool parametro que existe junto a aliases.",
+  "response": "No existe en este repositorio un archivo `graph/nodes.py` ni ningún archivo que coincida con ese patrón.",
+  "input_tokens": 75063,
+  "output_tokens": 188
+}

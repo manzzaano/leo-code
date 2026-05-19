@@ -1,0 +1,6 @@
+{
+  "query": "Haz un audit completo de todos los imports de query/pipeline.py. Lista TODOS los modulos importados y las funciones especificas importadas de cada uno. Sé exhaustivo.",
+  "response": "Basado en el contexto proporcionado, no tengo acceso al contenido real del archivo `query/pipeline.py`. El audit muestra que el archivo contiene funciones como `query.router.route`, `query.router.classify_intent`, `query.capa0.try_resolve`, etc., pero **no hay información sobre los imports reales del archivo**.\n\nPara hacer un audit exhaustivo necesitarías:\n1. Acceder al código fuente de `C:\\Users\\Ismael\\Desktop\\RAG\\query\\pipeline.py`\n2. Extraer todas las líneas `import` y `from ... import`\n3. Listar módulos y funciones específicas\n\n**¿Qué puedo inferir del contexto?**\nBasado en las funciones listadas, los imports probables son:\n- `query.router` → funciones: `route`, `classify_intent`, `route_parallel`\n- `query.capa0` → funciones: `try_resolve`\n- `query.capa2` → funciones: `retrieve_subgrap",
+  "input_tokens": 1530,
+  "output_tokens": 363
+}

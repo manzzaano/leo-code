@@ -17,7 +17,7 @@
     "db": "bun drizzle-kit"
   },
   "bin": {
-    "leo-code": "./bin/opencode"
+    "leo-code": "./bin/leo-code"
   },
   "exports": {
     "./*": "./src/*.ts"
@@ -37,7 +37,6 @@
   "devDependencies": {
     "@babel/core": "7.28.4",
     "@octokit/webhooks-types": "7.6.1",
-    "@leo-code/script": "workspace:*",
     "@leo-code/core": "workspace:*",
     "@parcel/watcher-darwin-arm64": "2.5.1",
     "@parcel/watcher-darwin-x64": "2.5.1",
@@ -94,15 +93,14 @@
     "@effect/opentelemetry": "catalog:",
     "@effect/platform-node": "catalog:",
     "@gitlab/opencode-gitlab-auth": "1.3.3",
+    "@leo-code/plugin": "workspace:*",
+    "@leo-code/sdk": "workspace:*",
+    "@leo-code/ui": "workspace:*",
     "@lydell/node-pty": "catalog:",
     "@modelcontextprotocol/sdk": "1.27.1",
     "@octokit/graphql": "9.0.2",
     "@octokit/rest": "catalog:",
     "@openauthjs/openauth": "catalog:",
-    "@leo-code/plugin": "workspace:*",
-    "@leo-code/script": "workspace:*",
-    "@leo-code/sdk": "workspace:*",
-    "@leo-code/ui": "workspace:*",
     "@openrouter/ai-sdk-provider": "2.8.1",
     "@opentelemetry/api": "1.9.0",
     "@opentelemetry/context-async-hooks": "2.6.1",

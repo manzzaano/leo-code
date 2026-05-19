@@ -1,0 +1,243 @@
+{
+  "run_timestamp": "2026-05-18T21-33-32",
+  "model": "deepseek-chat",
+  "temperature": 0.2,
+  "target_repo": "C:\\Users\\Ismael\\Desktop\\RAG",
+  "all_win": true,
+  "metrics": {
+    "n_tasks": 8,
+    "total_tokens": {
+      "leo": 16711,
+      "opencode": 131070,
+      "no_ctx": 2860
+    },
+    "latency": {
+      "leo": 161.91,
+      "opencode": 293.71,
+      "no_ctx": 37.58
+    },
+    "avg_criteria": {
+      "leo": 0.448,
+      "opencode": 0.031,
+      "no_ctx": 0.516
+    },
+    "judge_ok": {
+      "leo": 1,
+      "opencode": 0,
+      "no_ctx": 0
+    },
+    "leo_vs_oc_criteria": 0.416,
+    "leo_vs_noctx_criteria": -0.069,
+    "leo_judge_vs_oc": 1
+  },
+  "results": [
+    {
+      "id": "P1",
+      "type": "code_query",
+      "query": "¿Qué parámetros exactos acepta la función bfs_subgraph() en graph/traversal.py y cuáles son sus tipos y valores por defecto?",
+      "leo": {
+        "tokens": 1644,
+        "latency": 22.396,
+        "criteria": 0.33,
+        "judge": false,
+        "answer": "La función `bfs_subgraph` acepta los siguientes parámetros:\n\n| Parámetro | Tipo | Valor por defecto |\n|---|---|---|\n| `root_id` | `str` | Requerido (sin default) |\n| `types` | `list[str]` | `None` |\n| `max_depth` | `int` | `3` |\n| `direction` | `str` | `\"outgoing\"` |\n| `include_root` | `bool` | `Tru"
+      },
+      "opencode": {
+        "tokens": 18705,
+        "latency": 16.623,
+        "criteria": 0.0,
+        "judge": false,
+        "answer": ""
+      },
+      "no_ctx": {
+        "tokens": 482,
+        "latency": 5.101,
+        "criteria": 0.33,
+        "judge": false,
+        "answer": "La función `bfs_subgraph()` en `graph/traversal.py` acepta los siguientes parámetros:\n\n```python\ndef bfs_subgraph(\n    graph: Graph,\n    start_node: Node,\n    max_depth: int = 3,\n    direction: str = \"forward\",\n    edge_types: Optional[List[str]] = None,\n    include_start: bool = True\n) -> Graph:\n``"
+      }
+    },
+    {
+      "id": "P2",
+      "type": "code_query",
+      "query": "¿Qué retorna compress() en query/capa3.py y cuáles son los tipos de sus parámetros y retorno?",
+      "leo": {
+        "tokens": 0,
+        "latency": 11.995,
+        "criteria": 0.0,
+        "judge": false,
+        "answer": ""
+      },
+      "opencode": {
+        "tokens": 18725,
+        "latency": 15.951,
+        "criteria": 0.0,
+        "judge": false,
+        "answer": ""
+      },
+      "no_ctx": {
+        "tokens": 428,
+        "latency": 5.945,
+        "criteria": 0.25,
+        "judge": false,
+        "answer": "En `query/capa3.py`, la función `compress()` retorna un **objeto generador** que produce tuplas de la forma `(document_id, compressed_positions)`.\n\n## Parámetros y tipos:\n\n```python\ndef compress(postings: list) -> generator:\n```\n\n- **`postings`**: `list` - Lista de postings donde cada elemento es un"
+      }
+    },
+    {
+      "id": "P3",
+      "type": "code_query",
+      "query": "¿Cuál es la firma completa de synthesize() en query/capa4.py incluyendo todos sus parámetros?",
+      "leo": {
+        "tokens": 1676,
+        "latency": 22.104,
+        "criteria": 1.0,
+        "judge": false,
+        "answer": "La función `synthesize` en `query/capa4.py` no tiene docstring (✗doc). Su firma completa es:\n\n```python\ndef synthesize(query, subgraph, context, max_retries=3)\n```\n\n**Parámetros:**\n- `query`: str — consulta original del usuario\n- `subgraph`: dict — subgrafo recuperado de capa2\n- `context`: dict — co"
+      },
+      "opencode": {
+        "tokens": 18728,
+        "latency": 16.999,
+        "criteria": 0.0,
+        "judge": false,
+        "answer": ""
+      },
+      "no_ctx": {
+        "tokens": 342,
+        "latency": 4.204,
+        "criteria": 0.8,
+        "judge": false,
+        "answer": "La firma completa de `synthesize()` en `query/capa4.py` es:\n\n```python\ndef synthesize(\n    query: str,\n    context: List[Document],\n    filter_context: Optional[List[Document]] = None,\n    structured_answer: Optional[StructuredAnswer] = None,\n    conversation_id: Optional[str] = None,\n    user_id: O"
+      }
+    },
+    {
+      "id": "P4",
+      "type": "search",
+      "query": "¿Qué funciones existen en graph/traversal.py que buscan nodos por nombre o tipo?",
+      "leo": {
+        "tokens": 0,
+        "latency": 12.026,
+        "criteria": 0.0,
+        "judge": false,
+        "answer": ""
+      },
+      "opencode": {
+        "tokens": 18720,
+        "latency": 15.443,
+        "criteria": 0.0,
+        "judge": false,
+        "answer": ""
+      },
+      "no_ctx": {
+        "tokens": 378,
+        "latency": 4.564,
+        "criteria": 0.75,
+        "judge": false,
+        "answer": "En el archivo `graph/traversal.py` del proyecto, las funciones que buscan nodos por nombre o tipo son:\n\n1. **`find_nodes_by_name(graph, name)`** - Busca nodos cuyo nombre coincida exactamente con el string proporcionado.\n\n2. **`find_nodes_by_type(graph, node_type)`** - Busca nodos que tengan un tipo"
+      }
+    },
+    {
+      "id": "P5",
+      "type": "code_query",
+      "query": "¿Qué hace classify_intent() en query/router.py y qué tipo retorna exactamente?",
+      "leo": {
+        "tokens": 1241,
+        "latency": 25.444,
+        "criteria": 1.0,
+        "judge": true,
+        "answer": "La función `classify_intent(query)` en `query/router.py`:\n\n**Propósito:** Clasifica una consulta en uno de cuatro tipos de intención basándose en patrones regex.\n\n**Funcionamiento:**\n1. Convierte la query a minúsculas\n2. Cuenta coincidencias con patrones predefinidos (`LOOKUP_PATTERNS`, `RELATIONAL_"
+      },
+      "opencode": {
+        "tokens": 18718,
+        "latency": 15.562,
+        "criteria": 0.0,
+        "judge": false,
+        "answer": ""
+      },
+      "no_ctx": {
+        "tokens": 361,
+        "latency": 4.981,
+        "criteria": 0.75,
+        "judge": false,
+        "answer": "La función `classify_intent()` en `query/router.py` analiza una consulta de usuario y determina su intención principal. \n\n**Funcionamiento:**\n- Toma como entrada el texto de la consulta del usuario\n- Utiliza un clasificador (posiblemente basado en reglas o ML) para categorizar la intención\n- Puede c"
+      }
+    },
+    {
+      "id": "P6",
+      "type": "search",
+      "query": "¿Qué funciones de graph/nodes.py tienen operaciones en batch (batch operations)?",
+      "leo": {
+        "tokens": 1369,
+        "latency": 23.325,
+        "criteria": 0.75,
+        "judge": false,
+        "answer": "Las funciones con operaciones batch en `graph/nodes.py` son:\n\n- **`upsert_nodes_batch`**: Inserta/actualiza múltiples nodos en 1 round-trip usando `UNWIND MERGE`.\n- **`upsert_relations_batch`**: Inserta/actualiza múltiples relaciones en batch (fallback a individual para tipos dinámicos)."
+      },
+      "opencode": {
+        "tokens": 18738,
+        "latency": 16.648,
+        "criteria": 0.25,
+        "judge": false,
+        "answer": "Let me search for batch operations in the graph/nodes.py file."
+      },
+      "no_ctx": {
+        "tokens": 270,
+        "latency": 4.058,
+        "criteria": 0.5,
+        "judge": false,
+        "answer": "Basándome en el análisis del archivo `graph/nodes.py`, las funciones que implementan operaciones en batch son:\n\n1. **`batch_process_nodes()`** - Procesa múltiples nodos en un solo lote\n2. **`batch_update_embeddings()`** - Actualiza embeddings de varios nodos simultáneamente\n3. **`batch_delete_nodes("
+      }
+    },
+    {
+      "id": "P7",
+      "type": "no_code",
+      "query": "Según la documentación del sistema, ¿cuáles son exactamente las condiciones C01 y C05 para obtener descuentos?",
+      "leo": {
+        "tokens": 1636,
+        "latency": 22.292,
+        "criteria": 0.5,
+        "judge": false,
+        "answer": "No hay suficiente información en el resumen proporcionado para responder a tu pregunta sobre las condiciones C01 y C05. El contexto solo contiene metadatos de archivos y funciones, no el contenido específico de la documentación del sistema ni los detalles de las condiciones de descuento."
+      },
+      "opencode": {
+        "tokens": 0,
+        "latency": 180.028,
+        "criteria": 0.0,
+        "judge": false,
+        "answer": ""
+      },
+      "no_ctx": {
+        "tokens": 211,
+        "latency": 3.854,
+        "criteria": 0.5,
+        "judge": false,
+        "answer": "Según la documentación del sistema, las condiciones exactas son:\n\n**C01**: Descuento del 10% aplicable cuando el **total de la compra supera los $100** y el **cliente es miembro del programa de fidelidad**.\n\n**C05**: Descuento del 15% aplicable cuando el **total de la compra supera los $200** y el *"
+      }
+    },
+    {
+      "id": "P8",
+      "type": "refactor",
+      "query": "¿Qué funciones en graph/traversal.py dependen directamente de Neo4j (llaman a run_query o run_write) y cuáles son independientes?",
+      "leo": {
+        "tokens": 9145,
+        "latency": 22.325,
+        "criteria": 0.0,
+        "judge": false,
+        "answer": ""
+      },
+      "opencode": {
+        "tokens": 18736,
+        "latency": 16.457,
+        "criteria": 0.0,
+        "judge": false,
+        "answer": ""
+      },
+      "no_ctx": {
+        "tokens": 388,
+        "latency": 4.87,
+        "criteria": 0.25,
+        "judge": false,
+        "answer": "En `graph/traversal.py`, las funciones que dependen directamente de Neo4j (llaman a `run_query` o `run_write`) son:\n\n**Dependientes de Neo4j:**\n- `get_shortest_path(start_id, end_id, max_hops=6)` - usa `run_query`\n- `get_all_paths(start_id, end_id, max_hops=6)` - usa `run_query`\n- `bfs_traversal(sta"
+      }
+    }
+  ]
+}

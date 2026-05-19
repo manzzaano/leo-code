@@ -9,9 +9,9 @@ import { warn } from "console"
 
 const log = Log.create({ service: "config" })
 
-const MANAGED_PLIST_DOMAIN = "ai.opencode.managed"
+const MANAGED_PLIST_DOMAIN = "dev.leosoftware.managed"
 
-// Keys injected by macOS/MDM into the managed plist that are not OpenCode config
+// Keys injected by macOS/MDM into the managed plist that are not leo-code config
 const PLIST_META = new Set([
   "PayloadDisplayName",
   "PayloadIdentifier",

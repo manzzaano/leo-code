@@ -1,0 +1,59 @@
+
+[2026-05-19T10-40-21] Python RAG Benchmark v6: 10 tareas | leo-code vs opencode vs no_ctx vs full_ctx
+  full_ctx = techo teorico (archivo completo al LLM, sin RAG)
+  Target: C:\Users\Ismael\Desktop\RAG
+  KC-RAG sidecar: {'status': 'ok', 'service': 'leo-code-mcp', 'version': '0.1.0'}
+  [index] KC-RAG: {'status': 'ok', 'capsules': 585, 'repo': 'C:\\Users\\Ismael\\Desktop\\RAG'}
+  opencode WSL: 1.15.4
+
+  [Benchmark] 10 tareas x 4 modos en paralelo (timeout=240s)...
+  [done] Z1 (imports_audit) leo=100%(--) oc=0%(--) fc=0%(OK)
+  [done] Z2 (full_flow) leo=100%(--) oc=0%(--) fc=100%(--)
+  [done] Z4 (ast_flow) leo=100%(--) oc=0%(--) fc=83%(--)
+  [done] Z5 (bug_detection) leo=83%(OK) oc=0%(--) fc=83%(--)
+  [done] Z8 (logger_detail) leo=100%(OK) oc=0%(--) fc=100%(--)
+  [done] Z10 (async_flow) leo=100%(OK) oc=0%(--) fc=100%(OK)
+  [done] Z6 (imports_detail) leo=86%(OK) oc=0%(--) fc=100%(OK)
+  [done] Z3 (code_gen) leo=83%(OK) oc=0%(--) fc=83%(--)
+  [done] Z9 (key_generation) leo=100%(OK) oc=0%(--) fc=100%(OK)
+  [done] Z7 (redis_init) leo=100%(OK) oc=0%(--) fc=100%(OK)
+
+==================================================================================================================================
+  BENCHMARK v6 — leo-code KC-RAG vs opencode CLI vs no_ctx vs full_ctx (techo)  [2026-05-19T10-40-21]
+  Target: C:\Users\Ismael\Desktop\RAG | 10 tareas | full_ctx = archivo completo al LLM (oracle)
+==================================================================================================================================
+
+  Metrica                                            leo-code   opencode   no-ctx   full-ctx
+  ------------------------------------------------------------------------------------------
+  Tokens totales                                       76,394          0    2,797     14,934
+  Latencia total (s)                                    388.8     2400.3     55.9       71.4
+  Criteria avg                                         95.2%       0.0%    25.3%      84.9%
+  LLM judge OK                                             7/10         0/10      0/10         5/10
+  Leo vs opencode  (criteria)                          +95.2%
+  Leo vs no-ctx    (criteria)                          +69.9%
+  Leo vs full-ctx  (criteria) [brecha RAG]             +10.3%
+  Leo vs opencode  (judge)                                 +7
+  Leo vs full-ctx  (judge)  [brecha RAG]                   +2
+
+  ID    Tipo               Pregunta                              LEOc   OCc   NCc   FCc  LEOj   OCj   FCj   LEOtok    OCtok   FCtok
+  ------------------------------------------------------------------------------------------------------------------------
+  Z1    imports_audit      Haz un audit completo de todos los    100%    0%    0%    0%    --    --    OK    7,204        0   1,251
+  Z10   async_flow         En query/pipeline.py, cuando el in    100%    0%   17%  100%    OK    --    OK    9,762        0   1,166
+  Z2    full_flow          Traza el flujo completo de ejecuci    100%    0%    0%  100%    --    --    --   19,111        0   1,293
+  Z3    code_gen           Escribe el import correcto para us     83%    0%   17%   83%    OK    --    --    1,565        0   1,481
+  Z4    ast_flow           En ingestion/pipeline.py, _extract    100%    0%   50%   83%    --    --    --   14,762        0   3,094
+  Z5    bug_detection      En query/capa4.py, la funcion synt     83%    0%   67%   83%    OK    --    --    6,619        0   1,073
+  Z6    imports_detail     En ingestion/pipeline.py, identifi     86%    0%   14%  100%    OK    --    OK    8,821        0   2,992
+  Z7    redis_init         En cache/redis_cache.py, como se i    100%    0%   17%  100%    OK    --    OK    5,313        0     981
+  Z8    logger_detail      En security/audit.py, _get_logger(    100%    0%    0%  100%    OK    --    --    1,995        0     620
+  Z9    key_generation     En cache/redis_cache.py hay dos ge    100%    0%   71%  100%    OK    --    OK    1,242        0     983
+
+  --- Resultado ---
+  Leo > opencode criteria:    SI (+95.2%)
+  Leo > no-ctx criteria:      SI (+69.9%)
+  Leo >= opencode judge:      SI (+7/10)
+  Brecha RAG (leo vs oracle): +10.3%  (KC-RAG cercano al techo)
+  LEO GANA TODO:              [WIN]
+
+  Guardado: C:\Users\Ismael\Desktop\leo-code\benchmark\pyrag_v6_results.json
+  LEO_WINS_ALL: True

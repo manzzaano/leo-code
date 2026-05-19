@@ -1,0 +1,6 @@
+{
+  "query": "Traza el flujo COMPLETO de query() en query/pipeline.py cuando: use_cache=True pero no hay cache hit, y el routing decide intent==parallel. Lista TODAS las funciones llamadas en orden con sus modulos exactos.",
+  "response": "```mermaid\nflowchart TD\n    A[query/pipeline.py: query() - inicio] --> B[security.sanitize.validate_query]\n    B --> C[cache.redis_cache.get_cached_result] -->|no cache hit| D[query.router.classify_intent]\n    D -->|parallel| E[query.router.route_parallel]\n    E --> F[query.capa0.try_resolve]\n    E --> G[query.capa2.retrieve_subgraph]\n    F --> H[query.capa3.compress]\n    G --> H\n    H --> I[query.capa4.synthesize]\n    I --> J[cache.redis_cache.cache_result]\n    J --> K[security.audit.log_query]\n    K --> L[retorno final]\n```\n\n**Orden exacto de llamadas:**\n\n1. `security.sanitize.validate_query` — validación de entrada\n2. `cache.redis_cache.get_cached_result` — búsqueda en caché (miss)\n3. `query.router.classify_intent` — clasificación de intención → `parallel`\n4. `query.router.route_paralle",
+  "input_tokens": 1575,
+  "output_tokens": 361
+}

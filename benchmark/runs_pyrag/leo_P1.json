@@ -1,0 +1,6 @@
+{
+  "query": "¿Qué parámetros exactos acepta la función bfs_subgraph() en graph/traversal.py y cuáles son sus tipos y valores por defecto?",
+  "response": "La función `bfs_subgraph` acepta los siguientes parámetros:\n\n| Parámetro | Tipo | Valor por defecto |\n|---|---|---|\n| `root_id` | `str` | Requerido (sin default) |\n| `types` | `list[str]` | `None` |\n| `max_depth` | `int` | `3` |\n| `direction` | `str` | `\"outgoing\"` |\n| `include_root` | `bool` | `True` |\n\n*No se muestran tipos más específicos ni documentación adicional porque la función no tiene docstring asociado en el contexto proporcionado.*",
+  "input_tokens": 1509,
+  "output_tokens": 135
+}

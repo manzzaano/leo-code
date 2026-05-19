@@ -1,0 +1,6 @@
+{
+  "query": "En cache/redis_cache.py, cache_result() tiene un parametro opcional para el tiempo de vida. Cual es ese parametro, su valor por defecto y que constante de config usa si no se especifica?",
+  "response": "El parámetro es `ttl` (time-to-live), su valor por defecto es `60` (segundos), y no usa ninguna constante de configuración externa — el default está hardcodeado directamente en la firma de la función.",
+  "input_tokens": 76244,
+  "output_tokens": 256
+}

@@ -239,6 +239,7 @@ export interface Interface {
   readonly status: () => Effect.Effect<Record<string, Status>>
   readonly clients: () => Effect.Effect<Record<string, MCPClient>>
   readonly tools: () => Effect.Effect<Record<string, Tool>>
+  readonly toolNames: () => Effect.Effect<string[]>
   readonly prompts: () => Effect.Effect<Record<string, PromptInfo & { client: string }>>
   readonly resources: () => Effect.Effect<Record<string, ResourceInfo & { client: string }>>
   readonly add: (name: string, mcp: ConfigMCP.Info) => Effect.Effect<{ status: Record<string, Status> | Status }>
@@ -262,7 +263,7 @@ export interface Interface {
   readonly getAuthStatus: (mcpName: string) => Effect.Effect<AuthStatus>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/MCP") {}
+export class Service extends Context.Service<Service, Interface>()("@leo-code/MCP") {}
 
 export const layer = Layer.effect(
   Service,
@@ -654,6 +655,13 @@ export const layer = Layer.effect(
       s.status[name] = { status: "disabled" }
     })
 
+    const toolNames = Effect.fn("MCP.toolNames")(function* () {
+      const s = yield* InstanceState.get(state)
+      return Object.entries(s.defs)
+        .filter(([name]) => s.status[name]?.status === "connected")
+        .flatMap(([_, tools]) => tools.map((t) => t.name))
+    })
+
     const tools = Effect.fn("MCP.tools")(function* () {
       const result: Record<string, Tool> = {}
       const s = yield* InstanceState.get(state)
@@ -925,6 +933,7 @@ export const layer = Layer.effect(
       status,
       clients,
       tools,
+      toolNames,
       prompts,
       resources,
       add,

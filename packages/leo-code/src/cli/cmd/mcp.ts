@@ -397,11 +397,11 @@ export const McpLogoutCommand = effectCmd({
 })
 
 async function resolveConfigPath(baseDir: string, global = false) {
-  // Check for existing config files (prefer .jsonc over .json, check .opencode/ subdirectory too)
-  const candidates = [path.join(baseDir, "opencode.json"), path.join(baseDir, "leo-code.jsonc")]
+  // Check for existing config files (prefer .jsonc over .json, check .leo-code/ subdirectory too)
+  const candidates = [path.join(baseDir, "leo-code.json"), path.join(baseDir, "leo-code.jsonc")]
 
   if (!global) {
-    candidates.push(path.join(baseDir, ".opencode", "opencode.json"), path.join(baseDir, ".opencode", "leo-code.jsonc"))
+    candidates.push(path.join(baseDir, ".leo-code", "leo-code.json"), path.join(baseDir, ".leo-code", "leo-code.jsonc"))
   }
 
   for (const candidate of candidates) {

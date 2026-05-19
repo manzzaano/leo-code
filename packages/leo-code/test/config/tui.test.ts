@@ -77,7 +77,7 @@ it.instance("keeps server and tui plugin merge semantics aligned", () =>
     Effect.gen(function* () {
       const fs = yield* AppFileSystem.Service
       const test = yield* TestInstance
-      const local = path.join(test.directory, ".opencode")
+      const local = path.join(test.directory, ".leo-code")
       yield* fs.makeDirectory(local, { recursive: true })
 
       yield* fs.writeJson(path.join(Global.Path.config, "opencode.json"), {
@@ -119,7 +119,7 @@ it.instance("loads tui config with the same precedence order as server config pa
       yield* fs.writeJson(path.join(Global.Path.config, "tui.json"), { theme: "global" })
       yield* fs.writeJson(path.join(test.directory, "tui.json"), { theme: "project" })
       yield* fs.writeWithDirs(
-        path.join(test.directory, ".opencode", "tui.json"),
+        path.join(test.directory, ".leo-code", "tui.json"),
         JSON.stringify({ theme: "local", diff_style: "stacked" }, null, 2),
       )
 
@@ -708,13 +708,13 @@ it.instance("applies file substitutions when first identical token is in a comme
   ),
 )
 
-it.instance("loads .opencode/tui.json", () =>
+it.instance("loads .leo-code/tui.json", () =>
   withCleanState(
     Effect.gen(function* () {
       const fs = yield* AppFileSystem.Service
       const test = yield* TestInstance
       yield* fs.writeWithDirs(
-        path.join(test.directory, ".opencode", "tui.json"),
+        path.join(test.directory, ".leo-code", "tui.json"),
         JSON.stringify({ diff_style: "stacked" }, null, 2),
       )
 
@@ -842,7 +842,7 @@ it.instance("silently skips malformed tui.json - load failures degrade to {}", (
       const fs = yield* AppFileSystem.Service
       const test = yield* TestInstance
       yield* fs.writeFileString(path.join(test.directory, "tui.json"), '{ "theme": "broken",')
-      yield* fs.writeWithDirs(path.join(test.directory, ".opencode", "tui.json"), JSON.stringify({ theme: "fallback" }))
+      yield* fs.writeWithDirs(path.join(test.directory, ".leo-code", "tui.json"), JSON.stringify({ theme: "fallback" }))
 
       const config = yield* getTuiConfig(test.directory)
       expect(config.theme).toBe("fallback")
@@ -856,7 +856,7 @@ it.instance("silently skips non-ENOENT read failures (e.g. tui.json is a directo
       const fs = yield* AppFileSystem.Service
       const test = yield* TestInstance
       yield* fs.makeDirectory(path.join(test.directory, "tui.json"), { recursive: true })
-      yield* fs.writeWithDirs(path.join(test.directory, ".opencode", "tui.json"), JSON.stringify({ theme: "fallback" }))
+      yield* fs.writeWithDirs(path.join(test.directory, ".leo-code", "tui.json"), JSON.stringify({ theme: "fallback" }))
 
       const config = yield* getTuiConfig(test.directory)
       expect(config.theme).toBe("fallback")

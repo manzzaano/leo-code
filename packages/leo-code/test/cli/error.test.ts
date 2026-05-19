@@ -13,9 +13,9 @@ describe("cli.error", () => {
       },
       {
         tag: "ConfigDirectoryTypoError",
-        data: { path: "/tmp/leo-code.jsonc", dir: ".opencode", suggestion: "leo-code" },
+        data: { path: "/tmp/leo-code.jsonc", dir: ".leo-code", suggestion: "leo-code" },
         expected:
-          'Directory ".opencode" in /tmp/leo-code.jsonc is not valid. Rename the directory to "leo-code" or remove it. This is a common typo.',
+          'Directory ".leo-code" in /tmp/leo-code.jsonc is not valid. Rename the directory to "leo-code" or remove it. This is a common typo.',
       },
       {
         tag: "ConfigFrontmatterError",

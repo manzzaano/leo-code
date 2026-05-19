@@ -1,0 +1,6 @@
+{
+  "query": "En query/capa4.py, la funcion synthesize() usa ciertos parametros de inferencia. Si alguien llama synthesize() pasando subgraph=None cuando tiene el subgrafo completo disponible, que impacto tiene? Ademas, cuales son los valores exactos de temperature y max_tokens que usa internamente?",
+  "response": "",
+  "input_tokens": 0,
+  "output_tokens": 0
+}

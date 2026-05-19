@@ -1,0 +1,6 @@
+{
+  "query": "Escribe el import correcto para usar upsert_node() desde graph/nodes.py. Luego escribe la llamada completa a upsert_node() con todos sus parametros incluyendo los opcionales con sus defaults exactos.",
+  "response": "",
+  "input_tokens": 0,
+  "output_tokens": 0
+}

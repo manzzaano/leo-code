@@ -1,8 +1,8 @@
-import { createContext, useContext, type ParentProps, Show } from "solid-js"
+import { createContext, useContext, type ParentProps, Show, For } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "@tui/context/theme"
 import { useTerminalDimensions } from "@opentui/solid"
-import { SplitBorder } from "../component/border"
+import { RoundedBorder } from "../component/border"
 import { TextAttributes } from "@opentui/core"
 import { Schema } from "effect"
 import { TuiEvent } from "../event"
@@ -12,59 +12,95 @@ export type ToastOptions = Schema.Schema.Type<typeof TuiEvent.ToastShow.properti
 
 const decodeToastOptions = Schema.decodeUnknownSync(TuiEvent.ToastShow.properties)
 
+const MAX_VISIBLE = 3
+
+const VARIANT_ICON: Record<string, string> = {
+  success: "✓ ",
+  error: "✗ ",
+  warning: "⚠ ",
+  info: "ℹ ",
+}
+
 export function Toast() {
   const toast = useToast()
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
 
   return (
-    <Show when={toast.currentToast}>
-      {(current) => (
-        <box
-          position="absolute"
-          justifyContent="center"
-          alignItems="flex-start"
-          top={2}
-          right={2}
-          maxWidth={Math.min(60, dimensions().width - 6)}
-          paddingLeft={2}
-          paddingRight={2}
-          paddingTop={1}
-          paddingBottom={1}
-          backgroundColor={theme.backgroundPanel}
-          borderColor={theme[current().variant]}
-          border={["left", "right"]}
-          customBorderChars={SplitBorder.customBorderChars}
-        >
-          <Show when={current().title}>
-            <text attributes={TextAttributes.BOLD} marginBottom={1} fg={theme.text}>
-              {current().title}
-            </text>
-          </Show>
-          <text fg={theme.text} wrapMode="word" width="100%">
-            {current().message}
-          </text>
-        </box>
-      )}
+    <Show when={toast.queue.length > 0}>
+      <box
+        position="absolute"
+        top={2}
+        right={2}
+        flexDirection="column"
+        gap={1}
+        maxWidth={Math.min(60, dimensions().width - 6)}
+      >
+        <For each={toast.queue}>
+          {(item) => (
+            <box
+              paddingLeft={2}
+              paddingRight={2}
+              paddingTop={1}
+              paddingBottom={1}
+              backgroundColor={theme.backgroundPanel}
+              borderColor={theme[item.options.variant]}
+              border={["top", "left", "right", "bottom"]}
+              customBorderChars={RoundedBorder.customBorderChars}
+            >
+              {/* Icon + title row */}
+              <box flexDirection="row" marginBottom={1}>
+                <text fg={theme[item.options.variant]} attributes={TextAttributes.BOLD}>
+                  {VARIANT_ICON[item.options.variant] ?? "· "}
+                </text>
+                <Show when={item.options.title}>
+                  <text attributes={TextAttributes.BOLD} fg={theme.text}>
+                    {item.options.title}
+                  </text>
+                </Show>
+              </box>
+              <text fg={theme.text} wrapMode="word" width="100%">
+                {item.options.message}
+              </text>
+            </box>
+          )}
+        </For>
+      </box>
     </Show>
   )
 }
 
 function init() {
   const [store, setStore] = createStore({
-    currentToast: null as ToastOptions | null,
+    queue: [] as { id: number; options: ToastOptions }[],
   })
 
-  let timeoutHandle: NodeJS.Timeout | null = null
+  let nextId = 0
+  const timers = new Map<number, NodeJS.Timeout>()
+
+  function removeId(id: number) {
+    timers.delete(id)
+    setStore("queue", (q) => q.filter((t) => t.id !== id))
+  }
 
   const toast = {
-    show(options: ToastInput) {
-      const toastOptions = decodeToastOptions(options)
-      setStore("currentToast", toastOptions)
-      if (timeoutHandle) clearTimeout(timeoutHandle)
-      timeoutHandle = setTimeout(() => {
-        setStore("currentToast", null)
-      }, toastOptions.duration).unref()
+    show(input: ToastInput) {
+      const options = decodeToastOptions(input)
+      const id = nextId++
+
+      setStore("queue", (q) => {
+        const next = [...q, { id, options }]
+        if (next.length > MAX_VISIBLE) {
+          const removed = next.shift()!
+          const timer = timers.get(removed.id)
+          if (timer) clearTimeout(timer)
+          timers.delete(removed.id)
+        }
+        return next
+      })
+
+      const timer = setTimeout(() => removeId(id), options.duration).unref()
+      timers.set(id, timer)
     },
     error: (err: any) => {
       if (err instanceof Error)
@@ -77,8 +113,8 @@ function init() {
         message: "An unknown error has occurred",
       })
     },
-    get currentToast(): ToastOptions | null {
-      return store.currentToast
+    get queue() {
+      return store.queue
     },
   }
   return toast

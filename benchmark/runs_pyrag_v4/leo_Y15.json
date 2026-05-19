@@ -1,0 +1,6 @@
+{
+  "query": "En ingestion/extractor.py, EXTRACTION_PROMPT (no CODE_EXTRACTION_PROMPT) lista tipos de entidad validos. Cuantos tipos hay en total y cuales son exactamente?",
+  "response": "En `ingestion/extractor.py`, `EXTRACTION_PROMPT` define **3 tipos** de entidad válidos:\n\n1. `Person`\n2. `Organization`  \n3. `Concept`",
+  "input_tokens": 1587,
+  "output_tokens": 43
+}

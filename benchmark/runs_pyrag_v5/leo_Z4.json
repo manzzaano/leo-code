@@ -1,0 +1,6 @@
+{
+  "query": "En ingestion/pipeline.py, _extract_from_ast() identifica constantes Python. Cuando encuentra una constante (nombre en mayusculas), que valores asigna a precision_critical y confidence? Menciona la constante CONFIDENCE_MAP si se usa.",
+  "response": "En `_extract_from_ast()`, cuando encuentra una constante (nombre en mayúsculas), asigna:\n\n- **`precision_critical = True`**\n- **`confidence = CONFIDENCE_MAP.get(name, 0.1)`** – se usa la constante `CONFIDENCE_MAP` para obtener la confianza según el nombre de la constante, con valor por defecto `0.1`.",
+  "input_tokens": 1588,
+  "output_tokens": 89
+}

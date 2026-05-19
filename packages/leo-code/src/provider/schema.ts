@@ -9,7 +9,7 @@ export type ProviderID = typeof providerIdSchema.Type
 export const ProviderID = providerIdSchema.pipe(
   withStatics((schema: typeof providerIdSchema) => ({
     // Well-known providers
-    opencode: schema.make("leo-code"),
+    leoCode: schema.make("leo-code"),
     anthropic: schema.make("anthropic"),
     openai: schema.make("openai"),
     google: schema.make("google"),

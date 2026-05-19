@@ -1,0 +1,9 @@
+{
+  "task_id": "HumanEval/4",
+  "entry_point": "mean_absolute_deviation",
+  "raw_response": "```python\nfrom typing import List\n\n\ndef mean_absolute_deviation(numbers: List[float]) -> float:\n    mean = sum(numbers) / len(numbers)\n    mad = sum(abs(x - mean) for x in numbers) / len(numbers)\n    return mad\n```",
+  "extracted_code": "from typing import List\n\n\ndef mean_absolute_deviation(numbers: List[float]) -> float:\n    mean = sum(numbers) / len(numbers)\n    mad = sum(abs(x - mean) for x in numbers) / len(numbers)\n    return mad",
+  "input_tokens": 10390,
+  "output_tokens": 56,
+  "latency_s": 5.958
+}

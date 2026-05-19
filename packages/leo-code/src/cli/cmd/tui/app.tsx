@@ -50,6 +50,7 @@ import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
 import { DialogConfirm } from "./ui/dialog-confirm"
+import { WhichKey } from "./ui/which-key"
 import { ToastProvider, useToast } from "./ui/toast"
 import { ExitProvider, useExit } from "./context/exit"
 import { Session as SessionApi } from "@/session/session"
@@ -948,6 +949,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
           <TuiPluginRuntime.Slot name="app_bottom" />
         </box>
         <TuiPluginRuntime.Slot name="app" />
+        <WhichKey />
       </Show>
       <StartupLoading ready={ready} />
     </box>

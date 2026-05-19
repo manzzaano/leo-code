@@ -842,7 +842,7 @@ export const RunCommand = effectCmd({
         return Server.Default().app.fetch(request)
       }) as typeof globalThis.fetch
       const sdk = createOpencodeClient({
-        baseUrl: "http://opencode.internal",
+        baseUrl: "http://leo-code.internal",
         fetch: fetchFn,
         directory,
       })

@@ -1,0 +1,6 @@
+{
+  "query": "En ingestion/consensus.py, dual_model_extract() retorna un tipo complejo con dos listas. Cual es la firma completa incluyendo parametros y tipo de retorno exacto?",
+  "response": "Let me read the file to find the function.La firma completa es:\n\n```python\ndual_model_extract(text: str, prompt: str = None) -> tuple[list[dict], list[dict]]\n```\n\n- **Parámetros**: `text: str`, `prompt: str = None`\n- **Retorno**: `tuple[list[dict], list[dict]]` — una tupla con dos listas de diccionarios.",
+  "input_tokens": 56444,
+  "output_tokens": 275
+}

@@ -1,0 +1,6 @@
+{
+  "query": "En graph/nodes.py, upsert_node() tiene exactamente 3 parametros opcionales. Para cada uno indica: nombre exacto, tipo exacto (con anotacion) y valor por defecto exacto.",
+  "response": "El archivo `graph/nodes.py` no existe en el repositorio. Solo está referenciado en archivos de benchmark como contenido esperado. Sin el archivo no puedo determinar los parámetros de `upsert_node()`.\n\n¿Quieres que busque en los archivos benchmark para reconstruir la firma de `upsert_node` a partir de cómo se llama en las pruebas?",
+  "input_tokens": 76245,
+  "output_tokens": 325
+}

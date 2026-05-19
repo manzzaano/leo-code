@@ -1,0 +1,164 @@
+{"task_id": "HumanEval/0", "solution": "def has_close_elements(numbers: List[float], threshold: float) -> bool:\n    for i in range(len(numbers)):\n        for j in range(i + 1, len(numbers)):\n            if abs(numbers[i] - numbers[j]) < threshold:\n                return True\n    return False"}
+{"task_id": "HumanEval/1", "solution": "from typing import List\n\n\ndef separate_paren_groups(paren_string: str) -> List[str]:\n    result = []\n    current = []\n    depth = 0\n    for ch in paren_string:\n        if ch == ' ':\n            continue\n        current.append(ch)\n        if ch == '(':\n            depth += 1\n        elif ch == ')':\n            depth -= 1\n        if depth == 0:\n            result.append(''.join(current))\n            current = []\n    return result"}
+{"task_id": "HumanEval/2", "solution": "def truncate_number(number: float) -> float:\n    return number - int(number)"}
+{"task_id": "HumanEval/3", "solution": "def below_zero(operations: List[int]) -> bool:\n    balance = 0\n    for op in operations:\n        balance += op\n        if balance < 0:\n            return True\n    return False"}
+{"task_id": "HumanEval/4", "solution": "from typing import List\n\n\ndef mean_absolute_deviation(numbers: List[float]) -> float:\n    mean = sum(numbers) / len(numbers)\n    mad = sum(abs(x - mean) for x in numbers) / len(numbers)\n    return mad"}
+{"task_id": "HumanEval/5", "solution": "from typing import List\n\n\ndef intersperse(numbers: List[int], delimeter: int) -> List[int]:\n    result = []\n    for i, num in enumerate(numbers):\n        result.append(num)\n        if i < len(numbers) - 1:\n            result.append(delimeter)\n    return result"}
+{"task_id": "HumanEval/6", "solution": "from typing import List\n\n\ndef parse_nested_parens(paren_string: str) -> List[int]:\n    groups = paren_string.split()\n    result = []\n    for group in groups:\n        depth = 0\n        max_depth = 0\n        for ch in group:\n            if ch == '(':\n                depth += 1\n                if depth > max_depth:\n                    max_depth = depth\n            elif ch == ')':\n                depth -= 1\n        result.append(max_depth)\n    return result"}
+{"task_id": "HumanEval/7", "solution": "def filter_by_substring(strings: List[str], substring: str) -> List[str]:\n    return [s for s in strings if substring in s]"}
+{"task_id": "HumanEval/8", "solution": "def sum_product(numbers: List[int]) -> Tuple[int, int]:\n    if not numbers:\n        return (0, 1)\n    s = 0\n    p = 1\n    for n in numbers:\n        s += n\n        p *= n\n    return (s, p)"}
+{"task_id": "HumanEval/9", "solution": "from typing import List, Tuple\n\n\ndef rolling_max(numbers: List[int]) -> List[int]:\n    result = []\n    current_max = float('-inf')\n    for num in numbers:\n        if num > current_max:\n            current_max = num\n        result.append(current_max)\n    return result"}
+{"task_id": "HumanEval/10", "solution": "def make_palindrome(string: str) -> str:\n    \"\"\" Find the shortest palindrome that begins with a supplied string.\n    Algorithm idea is simple:\n    - Find the longest postfix of supplied string that is a palindrome.\n    - Append to the end of the string reverse of a string prefix that comes before the palindromic suffix.\n    >>> make_palindrome('')\n    ''\n    >>> make_palindrome('cat')\n    'catac'\n    >>> make_palindrome('cata')\n    'catac'\n    \"\"\"\n    if not string:\n        return \"\"\n\n    palindromic_suffix_start = 0\n    for i in range(len(string)):\n        if is_palindrome(string[i:]):\n            palindromic_suffix_start = i\n            break\n\n    prefix = string[:palindromic_suffix_start]\n    return string + prefix[::-1]"}
+{"task_id": "HumanEval/11", "solution": "def string_xor(a: str, b: str) -> str:\n    \"\"\" Input are two strings a and b consisting only of 1s and 0s.\n    Perform binary XOR on these inputs and return result also as a string.\n    >>> string_xor('010', '110')\n    '100'\n    \"\"\"\n    return ''.join('1' if x != y else '0' for x, y in zip(a, b))"}
+{"task_id": "HumanEval/12", "solution": "def longest(strings: List[str]) -> Optional[str]:\n    if not strings:\n        return None\n    return max(strings, key=len)"}
+{"task_id": "HumanEval/13", "solution": "def greatest_common_divisor(a: int, b: int) -> int:\n    while b:\n        a, b = b, a % b\n    return abs(a)"}
+{"task_id": "HumanEval/14", "solution": "def all_prefixes(string: str) -> List[str]:\n    \"\"\" Return list of all prefixes from shortest to longest of the input string\n    >>> all_prefixes('abc')\n    ['a', 'ab', 'abc']\n    \"\"\"\n    return [string[:i] for i in range(1, len(string) + 1)]"}
+{"task_id": "HumanEval/15", "solution": "def string_sequence(n: int) -> str:\n    \"\"\" Return a string containing space-delimited numbers starting from 0 upto n inclusive.\n    >>> string_sequence(0)\n    '0'\n    >>> string_sequence(5)\n    '0 1 2 3 4 5'\n    \"\"\"\n    return ' '.join(str(i) for i in range(n + 1))"}
+{"task_id": "HumanEval/16", "solution": "def count_distinct_characters(string: str) -> int:\n    return len(set(string.lower()))"}
+{"task_id": "HumanEval/17", "solution": "def parse_music(music_string: str) -> List[int]:\n    notes = music_string.split()\n    durations = {\"o\": 4, \"o|\": 2, \".|\": 1}\n    return [durations[note] for note in notes]"}
+{"task_id": "HumanEval/18", "solution": "def how_many_times(string: str, substring: str) -> int:\n    if not substring:\n        return 0\n    count = 0\n    start = 0\n    while True:\n        start = string.find(substring, start)\n        if start == -1:\n            return count\n        count += 1\n        start += 1"}
+{"task_id": "HumanEval/19", "solution": "from typing import List\n\n\ndef sort_numbers(numbers: str) -> str:\n    \"\"\" Input is a space-delimited string of numberals from 'zero' to 'nine'.\n    Valid choices are 'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight' and 'nine'.\n    Return the string with numbers sorted from smallest to largest\n    >>> sort_numbers('three one five')\n    'one three five'\n    \"\"\"\n    numeral_order = [\"zero\", \"one\", \"two\", \"three\", \"four\", \"five\", \"six\", \"seven\", \"eight\", \"nine\"]\n    numeral_to_value = {num: i for i, num in enumerate(numeral_order)}\n    numerals = numbers.split()\n    numerals.sort(key=lambda n: numeral_to_value[n])\n    return \" \".join(numerals)"}
+{"task_id": "HumanEval/20", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/21", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/22", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/23", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/24", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/25", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/26", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/27", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/28", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/29", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/30", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/31", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/32", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/33", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/34", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/35", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/36", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/37", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/38", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/39", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/40", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/41", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/42", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/43", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/44", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/45", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/46", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/47", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/48", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/49", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/50", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/51", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/52", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/53", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/54", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/55", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/56", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/57", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/58", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/59", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/60", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/61", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/62", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/63", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/64", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/65", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/66", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/67", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/68", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/69", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/70", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/71", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/72", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/73", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/74", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/75", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/76", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/77", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/78", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/79", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/80", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/81", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/82", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/83", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/84", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/85", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/86", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/87", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/88", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/89", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/90", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/91", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/92", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/93", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/94", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/95", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/96", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/97", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/98", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/99", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/100", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/101", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/102", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/103", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/104", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/105", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/106", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/107", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/108", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/109", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/110", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/111", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/112", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/113", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/114", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/115", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/116", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/117", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/118", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/119", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/120", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/121", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/122", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/123", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/124", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/125", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/126", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/127", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/128", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/129", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/130", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/131", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/132", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/133", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/134", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/135", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/136", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/137", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/138", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/139", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/140", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/141", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/142", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/143", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/144", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/145", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/146", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/147", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/148", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/149", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/150", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/151", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/152", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/153", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/154", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/155", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/156", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/157", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/158", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/159", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/160", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/161", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/162", "solution": "pass  # no solution"}
+{"task_id": "HumanEval/163", "solution": "pass  # no solution"}

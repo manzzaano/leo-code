@@ -1,0 +1,6 @@
+{
+  "query": "En query/router.py hay una funcion asincrona (async def). Cual es su nombre exacto y que parametros recibe?",
+  "response": "No se encontró el archivo `en/query/router.py` en este repositorio. ¿Podrías verificar la ruta o el nombre del archivo?",
+  "input_tokens": 75075,
+  "output_tokens": 221
+}

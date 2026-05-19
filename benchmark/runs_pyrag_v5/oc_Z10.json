@@ -1,0 +1,6 @@
+{
+  "query": "En query/pipeline.py, cuando el intent es parallel, describe exactamente como se ejecuta route_parallel(). Cual es la llamada asyncio exacta y como se decide si usar el resultado o continuar con el flujo normal?",
+  "response": "Let me examine the pipeline file:El archivo `pipeline.py` no existe en el repo actual, solo los benchmarks. Pero según los benchmarks (`benchmark_python_rag_v5.py:85-86` y `v5b.py:51`), la respuesta es:\n\nLa llamada exacta es:\n\n```python\nparallel_result = asyncio.run(route_parallel(user_query, try_resolve, retrieve_subgraph))\n```\n\nDonde `try_resolve` es `capa0_fn` y `retrieve_subgraph` es `capa2_fn`. La decisión de usar el resultado o continuar:\n\n- Si `parallel_result.get(\"respuesta\")` es truthy **y** `needs_full_context` es False → se retorna `parallel_result` inmediatamente.\n- En caso contrario (sin `respuesta` o con `needs_full_context == True`) → se descarta `parallel_result` y se continúa con el flujo normal (compress → synthesize → verify_grounding → cache_result → log_query).",
+  "input_tokens": 58427,
+  "output_tokens": 438
+}

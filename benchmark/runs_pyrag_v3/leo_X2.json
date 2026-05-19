@@ -1,0 +1,6 @@
+{
+  "query": "En ingestion/pipeline.py existe una constante llamada CONFIDENCE_MAP. Cuales son los dos pares clave-valor exactos? Dame los valores numericos.",
+  "response": "Los dos pares clave-valor exactos de `CONFIDENCE_MAP` son:\n\n- `\"high\"`: `0.95`\n- `\"low\"`: `0.50`",
+  "input_tokens": 1570,
+  "output_tokens": 42
+}

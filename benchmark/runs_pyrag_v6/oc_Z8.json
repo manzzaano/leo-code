@@ -1,0 +1,6 @@
+{
+  "query": "En security/audit.py, _get_logger() configura un logger con nombre especifico. Cual es el nombre exacto del logger, el path del archivo de log, el patron del formatter y el nivel? Hay propagate configurado?",
+  "response": "",
+  "input_tokens": 0,
+  "output_tokens": 0
+}

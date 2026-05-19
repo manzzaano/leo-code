@@ -1,0 +1,6 @@
+{
+  "query": "En query/capa4.py existe SYSTEM_PROMPT para el LLM. Que formatos de respuesta prohibe explicitamente ese prompt?",
+  "response": "El SYSTEM_PROMPT en `query/capa4.py` prohíbe explícitamente los siguientes formatos de respuesta:\n\n- **Listas numeradas**\n- **Viñetas**\n- **Formato Markdown** (como tablas, bloques de código, etc.)",
+  "input_tokens": 696,
+  "output_tokens": 60
+}

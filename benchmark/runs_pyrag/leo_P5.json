@@ -1,0 +1,6 @@
+{
+  "query": "¿Qué hace classify_intent() en query/router.py y qué tipo retorna exactamente?",
+  "response": "La función `classify_intent(query)` en `query/router.py`:\n\n**Propósito:** Clasifica una consulta en uno de cuatro tipos de intención basándose en patrones regex.\n\n**Funcionamiento:**\n1. Convierte la query a minúsculas\n2. Cuenta coincidencias con patrones predefinidos (`LOOKUP_PATTERNS`, `RELATIONAL_PATTERNS`, `CODE_PATTERNS`)\n3. Retorna el tipo con mayor prioridad según las reglas:\n   - Si solo hay coincidencias `lookup` → `\"lookup\"` (confianza: 0.60 + 0.15 por patrón, máx 0.95)\n   - Si hay coin",
+  "input_tokens": 906,
+  "output_tokens": 335
+}

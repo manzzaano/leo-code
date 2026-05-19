@@ -1,0 +1,6 @@
+{
+  "query": "En query/pipeline.py, identifica exactamente que dos funciones del modulo security se importan y se usan en la funcion query(). Dame los nombres exactos de ambas funciones y de sus modulos de origen (security.X).",
+  "response": "No existe ningún archivo `pipeline.py` ni ningún módulo `security` en el repositorio. La ruta `query/pipeline.py` no se encuentra en el proyecto.",
+  "input_tokens": 75385,
+  "output_tokens": 285
+}

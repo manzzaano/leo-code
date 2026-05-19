@@ -1,0 +1,6 @@
+{
+  "query": "Traza el flujo completo de ejecucion de la funcion query() en query/pipeline.py desde que recibe user_query hasta que devuelve el resultado final (path sin cache). Lista las funciones llamadas EN ORDEN con sus modulos de origen.",
+  "response": "Voy a leer el archivo principal del pipeline para trazar el flujo.A continuación leo los módulos llamados para obtener los nombres exactos de sus funciones internas según el contexto KC-RAG ya disponible.Ahora tengo todo el contenido. Aquí está el flujo completo.\n\n---\n\n## Flujo de ejecución de `query()` en `query/pipeline.py` (path sin caché)\n\n**Módulo origen** → **Función llamada** (en orden exacto del cuerpo)\n\n| # | Módulo | Función | Llamada desde pipeline.py |\n|---|--------|---------|---------------------------|\n| 1 | `security.sanitize` | `validate_query(user_query)` | Línea 21 |\n| 2 | `cache.redis_cache` | `get_cached_result(user_query)` | Línea 25 — *miss (sigue)* |\n| 3 | `query.capa0` | **`try_resolve(query)`** | Línea 32 — *fast-path sin LLM* |\n| 4 | `query.router` | **`route(user",
+  "input_tokens": 17417,
+  "output_tokens": 1694
+}

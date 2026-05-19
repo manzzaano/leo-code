@@ -1,0 +1,82 @@
+[
+  {
+    "id": "Q1",
+    "type": "code_qa",
+    "query": "En el archivo packages/leo-code/src/context/plugin.ts existe un sistema de tiers que controla qué herramientas tiene disponibles el agente. Describe: (1) las condiciones exactas de tokens y task_type para activar Tier 1, Tier 2 y Tier 3, (2) qué herramientas se eliminan en cada tier, (3) qué constantes (HEAVY_TOOLS, ALL_READ_TOOLS) contienen.",
+    "criterios": ["300", "code_query", "refactor", "no_code", "HEAVY_TOOLS", "ALL_READ_TOOLS", "question", "200"],
+    "ground_truth": "Tier 1: tokens > 300 AND task_type in (code_query, search, no_code, refactor) -> elimina TODOS los tools excepto 'question'. Tier 2a: tokens > 200 AND (code_query OR search) -> elimina HEAVY_TOOLS (grep, bash, task, task_status, webfetch, websearch, repo_clone, repo_overview, lsp, skill). Tier 2b: tokens > 200 AND (refactor OR code_gen) -> elimina ALL_READ_TOOLS (HEAVY_TOOLS + read + glob). Tier 3: tokens <= 200 o task auto -> todos disponibles.",
+    "kc_task_type": "code_query"
+  },
+  {
+    "id": "Q2",
+    "type": "code_qa",
+    "query": "En packages/leo-code/src/mcp/index.ts hay un tipo union llamado Status con 5 variantes. Lista las 5 variantes exactas con sus campos y describe en qué condición se produce cada una durante el ciclo de vida de un servidor MCP.",
+    "criterios": ["connected", "disabled", "failed", "needs_auth", "needs_client_registration", "OAuth", "error"],
+    "ground_truth": "1) connected: {status: 'connected'} - conexión exitosa. 2) disabled: {status: 'disabled'} - servidor deshabilitado en config (enabled: false). 3) failed: {status: 'failed', error: string} - error de conexión no recuperable. 4) needs_auth: {status: 'needs_auth'} - servidor OAuth requiere autenticación del usuario. 5) needs_client_registration: {status: 'needs_client_registration', error: string} - OAuth dynamic client registration necesaria.",
+    "kc_task_type": "code_query"
+  },
+  {
+    "id": "Q3",
+    "type": "code_qa",
+    "query": "Traza el flujo completo del flag --model en leo-code desde que el usuario lo escribe en el CLI hasta que el LLM recibe la primera llamada de streaming. Nombra cada archivo y función específica involucrada en la cadena.",
+    "criterios": ["PromptModel", "resolveModelInfo", "Provider", "stream", "RunInput", "SetSessionModelRequest"],
+    "ground_truth": "1. CLI parsea --model -> RunInput.model: PromptModel (ProviderID + ModelID). 2. runtime/boot.ts: resolveModelInfo() consulta Provider.Service para validar. 3. acp/agent.ts: SetSessionModelRequest enviado al server cuando cambia modelo. 4. provider/provider.ts: Provider.Service carga language model via loader chain custom (Anthropic/OpenAI/Azure...). 5. session/llm.ts: stream() llama al modelo con ProviderTransform aplicado.",
+    "kc_task_type": "code_query"
+  },
+  {
+    "id": "B1",
+    "type": "bug_detection",
+    "query": "En src/mcp/index.ts existe el siguiente patrón:\n\n```typescript\nconst TolerantListToolsResultSchema = ListToolsResultSchema.extend({\n  tools: ToolSchema.omit({ outputSchema: true }).array(),\n})\n```\n\nY existe una función `isOutputSchemaValidationError(error: Error)` que detecta errores de validación de outputSchema.\n\n¿Cuál es el problema de ingeniería en este diseño? ¿Qué errores se suprimen silenciosamente y cuál es el riesgo concreto?",
+    "criterios": ["outputSchema", "omit", "silencio", "validación", "TolerantListToolsResultSchema", "tools"],
+    "ground_truth": "TolerantListToolsResultSchema omite outputSchema de la definición de tools al parsear la respuesta del servidor MCP. Esto significa que si un servidor devuelve tools con outputSchema inválido, la validación pasa igualmente (el campo se ignora silenciosamente). El riesgo: tools con schemas de salida incorrectos se registran como válidos, causando fallos en tiempo de ejecución cuando el LLM intenta usar esa herramienta y la respuesta no coincide con el schema esperado. isOutputSchemaValidationError existe pero el schema tolerante hace que nunca se dispare para errores de outputSchema en listTools.",
+    "kc_task_type": "code_query"
+  },
+  {
+    "id": "B2",
+    "type": "bug_detection",
+    "query": "En packages/leo-code/src/cli/cmd/run/session-data.ts, la función createSessionData() bufferiza texto de mensajes antes de confirmar el role. ¿En qué condición exacta puede perderse texto ya emitido? Describe el escenario específico y el tipo de evento que nunca llegaría.",
+    "criterios": ["role", "buffer", "confirmed", "message", "text", "commit", "lost"],
+    "ground_truth": "El texto se bufferiza en un estado pendiente hasta que llega el evento que confirma el role del mensaje (message.updated o equivalent). Si el proceso se interrumpe, el stream se corta, o el mensaje nunca recibe el evento de cierre/confirmación de role, el buffer interno de texto se pierde. El escenario: stream del LLM que emite text parts pero cuyo mensaje nunca recibe el evento de commit/finalización (por timeout, error de red, o kill del proceso) -> el texto parcial acumulado se descarta.",
+    "kc_task_type": "code_query"
+  },
+  {
+    "id": "G1",
+    "type": "code_gen",
+    "query": "Implementa en TypeScript la función `isTier1(result: KcRagResponse | null): boolean` que retorne true exactamente cuando la lógica actual de packages/leo-code/src/context/plugin.ts deshabilitaría TODAS las herramientas del agente. Importa KcRagResponse desde el módulo correcto. No modifiques plugin.ts.",
+    "criterios": ["KcRagResponse", "tokens", "300", "code_query", "no_code", "refactor", "search", "boolean"],
+    "ground_truth": "import type { KcRagResponse } from '../context/kcrag'\n\nexport function isTier1(result: KcRagResponse | null): boolean {\n  if (!result || result.tokens === 0) return false\n  const isStrong = result.tokens > 300\n  const taskType = result.task_type\n  return isStrong && (\n    taskType === 'code_query' || taskType === 'search' ||\n    taskType === 'no_code' || taskType === 'refactor'\n  )\n}",
+    "kc_task_type": "code_gen"
+  },
+  {
+    "id": "G2",
+    "type": "code_gen",
+    "query": "Usando los tipos de packages/leo-code/src/mcp/index.ts, implementa la función `getAvailableMcpToolNames(status: Status): string[]` que retorne los nombres de todas las tools disponibles cuando el servidor MCP está connected, y un array vacío en cualquier otro estado. Importa Status del módulo correcto.",
+    "criterios": ["Status", "connected", "string[]", "tools", "name", "[]", "status.status"],
+    "ground_truth": "import type { Status } from '../mcp'\n\nexport function getAvailableMcpToolNames(status: Status): string[] {\n  if (status.status !== 'connected') return []\n  // Status.connected no tiene campo tools directamente en el tipo\n  // La implementación correcta requiere el Interface completo, no solo Status\n  return []\n}\n// Nota: Status.connected solo tiene {status: 'connected'}, los tools están en Interface.tools",
+    "kc_task_type": "code_gen"
+  },
+  {
+    "id": "R1",
+    "type": "refactor",
+    "query": "Si cambias la condición Tier 1 en packages/leo-code/src/context/plugin.ts de `_kcragResult.tokens > 300` a `_kcragResult.tokens > 500`, ¿cuáles de las 6 tareas del benchmark en benchmark/agent_tasks.json pasarían de Tier 1 a Tier 2? Para cada tarea afectada: indica su ctx (tokens de contexto actual), qué tools RECUPERARÍA el agente, y cómo cambiaría su comportamiento.",
+    "criterios": ["402", "Tier 2", "HEAVY_TOOLS", "read", "glob", "bfs_subgraph", "T1"],
+    "ground_truth": "Tarea T1 (bfs_subgraph, code_query): ctx=402 tokens -> pasaría de Tier 1 (noTools) a Tier 2 (HEAVY_TOOLS eliminados, pero read/glob disponibles). El agente recuperaría read y glob para verificar el código, pero no tendría grep/bash. El resto de tareas tienen ctx > 500 (T3=1441, T4=1647, T5=1221, T6=1442) o ctx < 200 (T2=68) -> no cambian de tier.",
+    "kc_task_type": "refactor"
+  },
+  {
+    "id": "R2",
+    "type": "refactor",
+    "query": "Analiza el acoplamiento entre packages/leo-code/src/context/plugin.ts y kcrag.ts. Lista TODAS las dependencias directas: imports de tipos, funciones llamadas, variables de estado compartidas. Después responde: ¿podría plugin.ts funcionar con una interfaz genérica `IRagProvider` en lugar de importar kcrag directamente? ¿Qué cambiaría?",
+    "criterios": ["KcRagResponse", "isKcRagAvailable", "getKcRagContext", "import", "interfaz", "IRagProvider"],
+    "ground_truth": "Dependencias directas: import { getKcRagContext, isKcRagAvailable, type KcRagResponse } from '../context/kcrag'. Funciones usadas: isKcRagAvailable() en chat.message hook, getKcRagContext({query, repo_path, task_type, budget_tokens}) en chat.message. Tipo usado: KcRagResponse para _kcragResult. Sí podría desacoplarse con IRagProvider: { isAvailable(): Promise<bool>, getContext(params): Promise<KcRagResponse | null> }. Cambiaría: plugin.ts recibiría el provider como parámetro en kcragPlugin(provider: IRagProvider), permitiendo inyectar cualquier implementación RAG.",
+    "kc_task_type": "refactor"
+  },
+  {
+    "id": "R3",
+    "type": "refactor",
+    "query": "En el directorio packages/leo-code/src/context/, identifica qué símbolos se exportan desde cada archivo pero NO se importan en ningún otro archivo del proyecto packages/leo-code/src/. Usa el call graph o búsqueda de imports para verificar cada export.",
+    "criterios": ["export", "unused", "context", "kcrag", "plugin", "import"],
+    "ground_truth": "kcrag.ts exporta: getKcRagContext (usado en plugin.ts), isKcRagAvailable (usado en plugin.ts), KcRagResponse type (usado en plugin.ts). plugin.ts exporta: kcragPlugin (usado en agent.ts o main entry). El símbolo _pendingQuery NO es export (es let interno). Los exports de context/ están todos en uso. Análisis requiere buscar cada export con grep de importaciones cross-file.",
+    "kc_task_type": "search"
+  }
+]

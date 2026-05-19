@@ -1,0 +1,6 @@
+{
+  "query": "En graph/traversal.py, la funcion _to_lucene_query() que hace exactamente? Describe su proposito y los parametros que recibe.",
+  "response": "La función `_to_lucene_query(text: str) -> str` convierte un texto plano en una consulta de búsqueda Lucene:\n\n1. **Escapa caracteres especiales**: Usa `re.sub` para escapar caracteres reservados de Lucene (`+ - & | ! ( ) { } [ ] ^ \" ~ * ? : \\ /`) anteponiendo una barra invertida.\n\n2. **Tokeniza y añade comodín**: Divide el texto escapado por espacios y agrega `*` a cada token para búsqueda por prefijo.\n\n3. **Parámetros**: Recibe `text` (cadena a convertir) y retorna una cadena con la consulta Lu",
+  "input_tokens": 910,
+  "output_tokens": 168
+}

@@ -1,0 +1,6 @@
+{
+  "query": "En ingestion/extractor.py, extract_entities() tiene un parametro de temperatura. Cual es su valor por defecto exacto?",
+  "response": "El valor por defecto del parámetro `temperature` en `extract_entities()` es `0.1`.",
+  "input_tokens": 960,
+  "output_tokens": 24
+}

@@ -1,6 +1,6 @@
 """Auto-detección de providers desde variables de entorno.
 
-Inspirado en OpenCode: escanea env vars y detecta qué providers están disponibles.
+Escanea env vars y detecta qué providers están disponibles.
 También verifica Ollama local vía HTTP ping.
 """
 

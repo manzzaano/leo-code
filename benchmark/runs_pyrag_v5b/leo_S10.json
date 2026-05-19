@@ -1,0 +1,6 @@
+{
+  "query": "En ingestion/pipeline.py, ingest_file() tiene logica condicional para decidir que funcion privada llamar. Bajo que condicion exacta llama a _ingest_python() y que parametros le pasa?",
+  "response": "`ingest_file()` llama a `_ingest_python()` cuando el archivo tiene extensión `.py`.\n\nLa condición es: `if path.suffix == '.py'`\n\nLe pasa los mismos parámetros que recibió: `path` y `domain`.",
+  "input_tokens": 1018,
+  "output_tokens": 55
+}

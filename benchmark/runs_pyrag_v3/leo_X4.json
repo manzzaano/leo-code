@@ -1,0 +1,6 @@
+{
+  "query": "En query/router.py, classify_intent() calcula confianza con una formula especifica. Si solo lookup_score > 0, cual es la formula exacta de confidence y cual es el maximo posible?",
+  "response": "En `classify_intent()`, si solo `lookup_score > 0` (y `relational_score == 0` y `code_score == 0`), la fórmula es:\n\n**Formula:**  \n`confidence = min(0.60 + lookup_score * 0.15, 0.95)`\n\n**Máximo posible:**  \nComo el valor está limitado a **0.95** con `min(..., 0.95)`, cualquier `lookup_score` >= 3 ya alcanza ese tope.\n\nMáximo = **0.95**",
+  "input_tokens": 937,
+  "output_tokens": 123
+}

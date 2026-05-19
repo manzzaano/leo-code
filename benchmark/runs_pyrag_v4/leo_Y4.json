@@ -1,0 +1,6 @@
+{
+  "query": "En ingestion/pipeline.py, _extract_from_ast() procesa nodos AST tipo constante (is_upper=True). Cual es el valor de precision_critical que asigna? Usa CONFIDENCE_MAP? Cual seria el valor numerico de confianza para HIGH?",
+  "response": "En `_extract_from_ast()`, para nodos AST tipo constante con `is_upper=True`, asigna `precision_critical=True`. \n\nNo usa `CONFIDENCE_MAP` directamente en esta función. El valor numérico de confianza para `HIGH` en `CONFIDENCE_MAP` es `1.0`.",
+  "input_tokens": 981,
+  "output_tokens": 74
+}

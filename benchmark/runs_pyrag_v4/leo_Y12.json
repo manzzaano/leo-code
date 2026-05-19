@@ -1,0 +1,6 @@
+{
+  "query": "En query/pipeline.py, si validate_query() lanza una excepcion ValueError, que diccionario devuelve query()? Cual es el valor del campo capa en _meta y el campo error?",
+  "response": "La función `query()` captura la excepción `ValueError` de `validate_query()` y devuelve:\n\n```python\n{\n    \"result\": None,\n    \"sources\": [],\n    \"context\": [],\n    \"_meta\": {\"capa\": \"capa0\", \"error\": str(e)},\n    \"usage\": {}\n}\n```\n\nDonde:\n- `_meta[\"capa\"]` = `\"capa0\"`\n- `_meta[\"error\"]` = el mensaje de la excepción convertido a string",
+  "input_tokens": 863,
+  "output_tokens": 113
+}

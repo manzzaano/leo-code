@@ -380,8 +380,8 @@ export function RunFooterView(props: RunFooterViewProps) {
               borderColor={theme().highlight}
               customBorderChars={{
                 ...EMPTY_BORDER,
-                vertical: "┃",
-                bottomLeft: "╹",
+                vertical: "╎",
+                bottomLeft: "╵",
               }}
             >
               <box
@@ -545,7 +545,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                   backgroundColor="transparent"
                   customBorderChars={{
                     ...EMPTY_BORDER,
-                    vertical: "┃",
+                    vertical: "╎",
                   }}
                   flexShrink={0}
                 >
@@ -700,7 +700,7 @@ export function RunFooterView(props: RunFooterViewProps) {
           borderColor={theme().highlight}
           customBorderChars={{
             ...EMPTY_BORDER,
-            vertical: "┃",
+            vertical: "╎",
           }}
         >
           <RunFooterSubagentBody

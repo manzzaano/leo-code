@@ -12,6 +12,7 @@ Ejecutar: python -m leo_mcp.server  (puerto 9898)
 """
 
 import os
+import re
 import sys
 import json
 import threading
@@ -133,20 +134,54 @@ async def get_context(req: ContextRequest):
         task_type = classify_task(req.query) if req.task_type == "auto" else req.task_type
         budget = get_budget(req.query) if req.budget_tokens <= 0 else req.budget_tokens
 
+        # no_code: devolver documentos relevantes a la query (keyword match en contenido)
+        if task_type == "no_code":
+            from kc_code.kc_rag.compressor import compress
+            query_lower = req.query.lower()
+            stopwords = {"un", "una", "de", "del", "la", "el", "los", "las", "en", "con",
+                         "para", "por", "que", "cual", "cuales", "como", "se", "su", "al",
+                         "es", "y", "o", "a", "no", "si", "le", "lo", "me", "tu", "mi"}
+            query_terms = [w for w in query_lower.split() if len(w) >= 4 and w not in stopwords]
+            doc_caps = [
+                c for c in caps.values()
+                if c.type == "document" and any(
+                    t in (c.content or "").lower() or t in (c.docstring or "").lower()
+                    for t in query_terms
+                )
+            ]
+            if not doc_caps:
+                doc_caps = [c for c in caps.values() if c.type == "document"][:10]
+            context = compress(doc_caps, list(caps.values()), budget_tokens=max(budget, 800), task_type=task_type)
+            return ContextResponse(
+                context=context,
+                tokens=len(context) // 2,
+                task_type=task_type,
+                capsules_total=len(caps),
+            )
+
         # Hybrid: exact match (one rep per file for path, name match) + semantic
-        import re as _re
-        from pathlib import Path as _Path
-        query_words = set(_re.findall(r"\w{4,}", req.query.lower()))
+        query_words = set(re.findall(r"\w{4,}", req.query.lower()))
         # Expandir: "retrieve_subgraph" → {"retrieve_subgraph", "retrieve", "subgraph"}
         query_words = query_words | {
             part for w in query_words for part in w.split("_") if len(part) >= 4
         }
 
+        # Detectar prefijos de directorio en la query: "query/", "src/", etc.
+        dir_prefixes: set[str] = set()
+        for match in re.findall(r"\b([\w_-]+)/", req.query):
+            dir_prefixes.add(match.lower())
+
+        def _dir_priority(c):
+            if not dir_prefixes:
+                return 0
+            fp = (c.file_path or "").lower().replace("\\", "/")
+            return 1 if any(f"/{d}/" in fp for d in dir_prefixes) else 0
+
         # Detect files named explicitly in query (e.g. "pipeline.py" → all capsules from that file)
         specific_file_paths: set[str] = set()
         for word in query_words:
             for c in caps.values():
-                stem = _Path(c.file_path).stem.lower()
+                stem = Path(c.file_path).stem.lower()
                 if word == stem or word == stem.replace("_", ""):
                     specific_file_paths.add(c.file_path)
 
@@ -170,21 +205,25 @@ async def get_context(req: ContextRequest):
         # path and substring scores (regex \w{4,} treats "retrieve_subgraph" as one token).
         specific_match.sort(
             key=lambda c: (
+                -_dir_priority(c),
                 -sum(1 for w in query_words if w in (c.file_path or "").lower().replace("\\", "/")),
+                # Prefer actual defs (no dots, type is function/class) over imports and modules
+                0 if (c.type in ("function", "class") and "." not in c.name) else 1,
                 -sum(1 for w in query_words if w in c.name.lower()),
             ),
         )
         # specific_match first → guarantees target file content leads the context
-        exact = specific_match[:12] + path_match[:5] + name_match[:3]
+        exact = specific_match[:20] + path_match[:5] + name_match[:3]
         exact_ids = {c.id for c in exact}
 
         top_ids = vs.search(req.query, top_k=15)
         semantic = [caps[rid] for rid in top_ids if rid in caps and rid not in exact_ids]
 
-        top_caps = (exact + semantic)[:15]
+        cap = 30 if task_type == "search" else (25 if specific_file_paths else 15)
+        top_caps = (exact + semantic)[:cap]
 
         from kc_code.kc_rag.compressor import compress
-        context = compress(top_caps, list(caps.values()), budget_tokens=budget, task_type=task_type)
+        context = compress(top_caps, list(caps.values()), budget_tokens=budget, task_type=task_type, dir_filter=dir_prefixes)
 
         return ContextResponse(
             context=context,

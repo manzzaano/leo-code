@@ -1,0 +1,6 @@
+{
+  "query": "En query/router.py hay una funcion asincrona (async def). Cual es su nombre exacto y que parametros recibe?",
+  "response": "No hay ninguna función `async def` en `query/router.py`. Las únicas funciones definidas son `classify_intent(query)` y `route(query)`, ambas síncronas.",
+  "input_tokens": 729,
+  "output_tokens": 41
+}

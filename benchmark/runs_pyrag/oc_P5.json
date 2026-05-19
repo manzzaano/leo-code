@@ -1,0 +1,6 @@
+{
+  "query": "¿Qué hace classify_intent() en query/router.py y qué tipo retorna exactamente?",
+  "response": "",
+  "input_tokens": 18631,
+  "output_tokens": 87
+}

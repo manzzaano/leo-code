@@ -1,0 +1,6 @@
+{
+  "query": "En graph/nodes.py, la funcion upsert_node() tiene un parametro de confianza con valor por defecto. Cual es ese parametro y su valor exacto?",
+  "response": "No existe un archivo `graph/nodes.py` en este repositorio.",
+  "input_tokens": 74999,
+  "output_tokens": 171
+}

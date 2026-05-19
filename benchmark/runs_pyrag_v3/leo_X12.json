@@ -1,0 +1,6 @@
+{
+  "query": "En ingestion/consensus.py, dual_model_extract() retorna un tipo complejo con dos listas. Cual es la firma completa incluyendo parametros y tipo de retorno exacto?",
+  "response": "La firma completa de `dual_model_extract` en `ingestion/consensus.py` es:\n\n```python\ndef dual_model_extract(\n    text: str,\n    entities_a: list[dict],\n    relations_a: list[dict],\n    entities_b: list[dict],\n    relations_b: list[dict]\n) -> tuple[list[dict], list[dict]]:\n```\n\n**Parámetros:**\n- `text: str` – texto original procesado\n- `entities_a/relations_a: list[dict]` – extracciones del modelo A\n- `entities_b/relations_b: list[dict]` – extracciones del modelo B\n\n**Retorno:** `tuple[list[dict]",
+  "input_tokens": 1587,
+  "output_tokens": 171
+}
