@@ -1,0 +1,6 @@
+{
+  "query": "En query/pipeline.py, la funcion query() tiene un parametro client_id con valor por defecto. Cual es ese valor exacto?",
+  "response": "Let me find the file and check the function.No file matching that path exists in the repository.No se encontró ningún archivo `pipeline.py` en el repositorio. ¿Podrías verificar la ruta exacta o el nombre del archivo?",
+  "input_tokens": 75151,
+  "output_tokens": 268
+}

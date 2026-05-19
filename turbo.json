@@ -22,23 +22,5 @@
       "outputs": [".artifacts/unit/junit.xml"],
       "passThroughEnv": ["*"]
     },
-    "@leo-code/app#test": {
-      "dependsOn": ["^build"],
-      "outputs": []
-    },
-    "@leo-code/app#test:ci": {
-      "dependsOn": ["^build"],
-      "outputs": [".artifacts/unit/junit.xml"],
-      "passThroughEnv": ["*"]
-    },
-    "@leo-code/ui#test": {
-      "dependsOn": ["^build"],
-      "outputs": []
-    },
-    "@leo-code/ui#test:ci": {
-      "dependsOn": ["^build"],
-      "outputs": [".artifacts/unit/junit.xml"],
-      "passThroughEnv": ["*"]
-    }
   }
 }

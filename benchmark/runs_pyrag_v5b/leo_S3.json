@@ -1,0 +1,6 @@
+{
+  "query": "En graph/nodes.py, upsert_node() tiene exactamente 3 parametros opcionales. Para cada uno indica: nombre exacto, tipo exacto (con anotacion) y valor por defecto exacto.",
+  "response": "Los 3 parámetros opcionales de `upsert_node()` son:\n\n1. **`confidence`** — `float` — `0.6`\n2. **`precision_critical`** — `bool` — `False`\n3. **`aliases`** — `list` — `[]`",
+  "input_tokens": 1327,
+  "output_tokens": 66
+}

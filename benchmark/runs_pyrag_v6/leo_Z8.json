@@ -1,0 +1,6 @@
+{
+  "query": "En security/audit.py, _get_logger() configura un logger con nombre especifico. Cual es el nombre exacto del logger, el path del archivo de log, el patron del formatter y el nivel? Hay propagate configurado?",
+  "response": "Basado en el contexto proporcionado de `security/audit.py`:\n\n| Elemento | Valor |\n|---|---|\n| **Nombre del logger** | `\"kg_rag.audit\"` |\n| **Path del archivo de log** | `\"logs/audit.log\"` (crea el directorio `logs/` si no existe con `Path(\"logs\").mkdir(exist_ok=True)`) |\n| **Patrón del formatter** | `\"%(message)s\"` — solo imprime el mensaje sin timestamp ni nivel |\n| **Nivel del logger** | `logging.INFO` |\n| **Propagate** | `lg.propagate = False` — **sí configurado explícitamente a `False`**, por lo que los mensajes no se propagan a los loggers ancestros. |\n\n**Resumen:** Logger `kg_rag.audit` escribe solo el mensaje plano (`%(message)s`) en `logs/audit.log` a nivel INFO, sin propagación.",
+  "input_tokens": 1773,
+  "output_tokens": 222
+}

@@ -1,0 +1,6 @@
+{
+  "query": "En graph/traversal.py existe una funcion llamada cypher_property_lookup. Cuales son sus parametros exactos y que tipo retorna?",
+  "response": "**Parámetros exactos:** `name: str`, `properties: dict`, `alias: Optional[str] = None`  \n**Retorna:** `str`",
+  "input_tokens": 1510,
+  "output_tokens": 34
+}

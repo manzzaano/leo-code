@@ -1,0 +1,6 @@
+{
+  "query": "Implementa en TypeScript la función `isTier1(result: KcRagResponse | null): boolean` que retorne true exactamente cuando la lógica actual de packages/leo-code/src/context/plugin.ts deshabilitaría TODAS las herramientas del agente. Importa KcRagResponse desde el módulo correcto. No modifiques plugin.ts.",
+  "response": "Let me start by understanding the current logic in `plugin.ts` that determines when agent tools get disabled.",
+  "input_tokens": 10447,
+  "output_tokens": 174
+}

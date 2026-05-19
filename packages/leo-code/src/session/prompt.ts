@@ -174,7 +174,7 @@ export interface Interface {
   readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/SessionPrompt") {}
+export class Service extends Context.Service<Service, Interface>()("@leo-code/SessionPrompt") {}
 
 export const layer = Layer.effect(
   Service,
@@ -1777,6 +1777,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               messages: msgs,
             })
 
+            yield* plugin.trigger(
+              "experimental.chat.tools.filter",
+              { sessionID, agent: agent.name },
+              { tools },
+            )
+
+            const forceNoTools = Object.keys(tools).every((t) => t === "question")
+
             if (lastUser.format?.type === "json_schema") {
               tools["StructuredOutput"] = createStructuredOutputTool({
                 schema: lastUser.format.schema,
@@ -1828,7 +1836,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
               tools,
               model,
-              toolChoice: format.type === "json_schema" ? "required" : undefined,
+              toolChoice: format.type === "json_schema" ? "required" : forceNoTools ? "none" : undefined,
             })
 
             if (structured !== undefined) {

@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+x #!/usr/bin/env bun
 
 import { Script } from "@leo-code/script"
 import { $ } from "bun"

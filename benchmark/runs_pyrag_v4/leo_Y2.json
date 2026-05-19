@@ -1,0 +1,6 @@
+{
+  "query": "En query/pipeline.py, cuando use_cache=True y hay un cache hit, cuantos tokens LLM se consumen? Cual es el valor de tokens_llm en el campo _meta del resultado devuelto?",
+  "response": "Basándome en el contexto proporcionado, **no hay información disponible** sobre el valor de `tokens_llm` cuando hay un cache hit en `query/pipeline.py`.\n\nLas funciones relacionadas con caché (`get_cached_result`, `cache_result`) y la función principal `query` no tienen docstring (*✗doc*), por lo que no se puede determinar:\n\n1. Si se consumen tokens LLM en un cache hit (idealmente 0, pero depende de la implementación).\n2. Cuál es el valor específico de `tokens_llm` en el campo `_meta`.\n\n**Respuesta directa:** Se desconoce. Revisa la implementación de `query` y `cache.redis_cache.get_cached_resu",
+  "input_tokens": 1574,
+  "output_tokens": 179
+}

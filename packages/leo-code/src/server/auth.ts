@@ -14,7 +14,7 @@ export type DecodedCredentials = {
   readonly password: Redacted.Redacted
 }
 
-export class Config extends ConfigService.Service<Config>()("@opencode/ServerAuthConfig", {
+export class Config extends ConfigService.Service<Config>()("@leo-code/ServerAuthConfig", {
   password: EffectConfig.string("LEO_SERVER_PASSWORD").pipe(EffectConfig.option),
   username: EffectConfig.string("LEO_SERVER_USERNAME").pipe(EffectConfig.withDefault("leo-code")),
 }) {}

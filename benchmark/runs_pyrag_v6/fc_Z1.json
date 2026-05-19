@@ -1,0 +1,6 @@
+{
+  "query": "Haz un audit completo de todos los imports de query/pipeline.py. Lista TODOS los modulos importados y las funciones especificas importadas de cada uno. Sé exhaustivo.",
+  "response": "No tengo acceso al contenido completo de los archivos importados, pero puedo listar exhaustivamente todos los imports del archivo `query/pipeline.py` basándome en el código proporcionado:\n\n## Módulos de la biblioteca estándar de Python:\n\n1. **`asyncio`**\n   - Función importada: `run`\n\n2. **`time`**\n   - Función importada: `time`\n\n## Módulos locales del proyecto:\n\n3. **`query.router`**\n   - Funciones importadas:\n     - `route`\n     - `classify_intent`\n     - `route_parallel`\n\n4. **`query.capa0`**\n   - Función importada:\n     - `try_resolve`\n\n5. **`query.capa2`**\n   - Función importada:\n     - `retrieve_subgraph`\n\n6. **`query.capa3`**\n   - Función importada:\n     - `compress`\n\n7. **`query.capa4`**\n   - Funciones importadas:\n     - `synthesize`\n     - `_extract_evidence`\n\n8. **`query.capa5`**",
+  "input_tokens": 710,
+  "output_tokens": 541
+}

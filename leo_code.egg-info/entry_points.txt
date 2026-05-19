@@ -1,0 +1,2 @@
+[console_scripts]
+leo-code = cli.app:cli

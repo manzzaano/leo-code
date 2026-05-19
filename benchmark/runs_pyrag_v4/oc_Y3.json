@@ -1,0 +1,6 @@
+{
+  "query": "Compara la temperatura de inferencia usada en extract_entities() (ingestion/extractor.py) con la de synthesize() (query/capa4.py). Son iguales o diferentes? Cuales son los valores exactos?",
+  "response": "No se encontraron archivos con esos nombres exactos en el repositorio. ¿Podrías verificar las rutas o los nombres de los archivos? Tal vez se llaman distinto (ej. `extract.py`, `synthesize.py`, o están en otro directorio).",
+  "input_tokens": 56497,
+  "output_tokens": 267
+}

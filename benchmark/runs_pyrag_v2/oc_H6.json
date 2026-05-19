@@ -1,0 +1,6 @@
+{
+  "query": "En graph/nodes.py, la funcion upsert_relation() tiene exactamente cuantos parametros? Lista sus nombres exactos.",
+  "response": "No existe el archivo `graph/nodes.py` ni la función `upsert_relation()` en este repositorio.",
+  "input_tokens": 56212,
+  "output_tokens": 191
+}

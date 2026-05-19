@@ -1723,7 +1723,7 @@ test("ModelNotFoundError suggests catalog models for unloaded providers", async 
     fn: async (ctx) => {
       remove(ctx, "LEO_API_KEY")
       try {
-        await getModel(ProviderID.opencode, ModelID.make("claude-haiku-fake-model"), ctx)
+        await getModel(ProviderID.leoCode, ModelID.make("claude-haiku-fake-model"), ctx)
         throw new Error("expected model lookup to fail")
       } catch (e) {
         if (!Provider.ModelNotFoundError.isInstance(e)) throw e
@@ -2611,7 +2611,7 @@ test("cloudflare-ai-gateway forwards config metadata options", async () => {
 test("plugin config providers persist after instance dispose", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      const configDir = path.join(dir, ".opencode")
+      const configDir = path.join(dir, ".leo-code")
       const root = path.join(configDir, "plugin")
       await mkdir(root, { recursive: true })
       await markPluginDependenciesReady(configDir)
@@ -2673,7 +2673,7 @@ test("plugin config providers persist after instance dispose", async () => {
 test("plugin config enabled and disabled providers are honored", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      const root = path.join(dir, ".opencode", "plugin")
+      const root = path.join(dir, ".leo-code", "plugin")
       await mkdir(root, { recursive: true })
       await Bun.write(
         path.join(root, "provider-filter.ts"),

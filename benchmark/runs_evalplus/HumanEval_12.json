@@ -1,0 +1,9 @@
+{
+  "task_id": "HumanEval/12",
+  "entry_point": "longest",
+  "raw_response": "```python\ndef longest(strings: List[str]) -> Optional[str]:\n    if not strings:\n        return None\n    return max(strings, key=len)\n```",
+  "extracted_code": "def longest(strings: List[str]) -> Optional[str]:\n    if not strings:\n        return None\n    return max(strings, key=len)",
+  "input_tokens": 10377,
+  "output_tokens": 35,
+  "latency_s": 5.775
+}

@@ -162,9 +162,9 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
   return withRunSpan(
     "RunInteractive.session",
     {
-      "opencode.mode": input.resolveSession ? "local" : "attach",
-      "opencode.initial_input": !!input.initialInput,
-      "opencode.demo": input.demo,
+      "leo-code.mode": input.resolveSession ? "local" : "attach",
+      "leo-code.initial_input": !!input.initialInput,
+      "leo-code.demo": input.demo,
     },
     async (span) => {
       const start = performance.now()
@@ -202,12 +202,12 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
         agent: ctx.agent,
       }
       setRunSpanAttributes(span, {
-        "opencode.directory": ctx.directory,
-        "opencode.resume": ctx.resume === true,
-        "opencode.agent.name": state.agent,
-        "opencode.model.provider": state.model?.providerID,
-        "opencode.model.id": state.model?.modelID,
-        "opencode.model.variant": state.activeVariant,
+        "leo-code.directory": ctx.directory,
+        "leo-code.resume": ctx.resume === true,
+        "leo-code.agent.name": state.agent,
+        "leo-code.model.provider": state.model?.providerID,
+        "leo-code.model.id": state.model?.modelID,
+        "leo-code.model.variant": state.activeVariant,
         "session.id": state.sessionID || undefined,
       })
       const ensureSession = () => {
@@ -224,7 +224,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
           state.sessionTitle = next.sessionTitle ?? state.sessionTitle
           state.agent = next.agent
           setRunSpanAttributes(span, {
-            "opencode.agent.name": state.agent,
+            "leo-code.agent.name": state.agent,
             "session.id": state.sessionID,
           })
         })
@@ -282,7 +282,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
           state.activeVariant = cycleVariant(state.activeVariant, state.variants)
           saveVariant(state.model, state.activeVariant)
           setRunSpanAttributes(span, {
-            "opencode.model.variant": state.activeVariant,
+            "leo-code.model.variant": state.activeVariant,
           })
           return {
             status: state.activeVariant ? `variant ${state.activeVariant}` : "variant default",
@@ -318,9 +318,9 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
           }
 
           setRunSpanAttributes(span, {
-            "opencode.model.provider": model.providerID,
-            "opencode.model.id": model.modelID,
-            "opencode.model.variant": state.activeVariant,
+            "leo-code.model.provider": model.providerID,
+            "leo-code.model.id": model.modelID,
+            "leo-code.model.variant": state.activeVariant,
           })
           return {
             modelLabel: formatModelLabel(model, state.activeVariant, state.providers),
@@ -345,7 +345,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
           state.activeVariant = variant
           saveVariant(state.model, state.activeVariant)
           setRunSpanAttributes(span, {
-            "opencode.model.variant": state.activeVariant,
+            "leo-code.model.variant": state.activeVariant,
           })
           return {
             status: state.activeVariant ? `variant ${state.activeVariant}` : "variant default",
@@ -446,7 +446,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
         if (next !== state.activeVariant) {
           state.activeVariant = next
           setRunSpanAttributes(span, {
-            "opencode.model.variant": state.activeVariant,
+            "leo-code.model.variant": state.activeVariant,
           })
         }
 
@@ -556,10 +556,10 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
                       })
                     : undefined
                   setRunSpanAttributes(span, {
-                    "opencode.agent.name": state.agent,
-                    "opencode.model.provider": state.model?.providerID,
-                    "opencode.model.id": state.model?.modelID,
-                    "opencode.model.variant": state.activeVariant,
+                    "leo-code.agent.name": state.agent,
+                    "leo-code.model.provider": state.model?.providerID,
+                    "leo-code.model.id": state.model?.modelID,
+                    "leo-code.model.variant": state.activeVariant,
                     "session.id": state.sessionID,
                   })
                   log?.write("session.new", {
@@ -618,24 +618,24 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
             return withRunSpan(
               "RunInteractive.turn",
               {
-                "opencode.agent.name": state.agent,
-                "opencode.model.provider": state.model?.providerID,
-                "opencode.model.id": state.model?.modelID,
-                "opencode.model.variant": state.activeVariant,
-                "opencode.prompt.chars": prompt.text.length,
-                "opencode.prompt.parts": prompt.parts.length,
-                "opencode.prompt.include_files": includeFiles,
-                "opencode.prompt.file_parts": includeFiles ? input.files.length : 0,
+                "leo-code.agent.name": state.agent,
+                "leo-code.model.provider": state.model?.providerID,
+                "leo-code.model.id": state.model?.modelID,
+                "leo-code.model.variant": state.activeVariant,
+                "leo-code.prompt.chars": prompt.text.length,
+                "leo-code.prompt.parts": prompt.parts.length,
+                "leo-code.prompt.include_files": includeFiles,
+                "leo-code.prompt.file_parts": includeFiles ? input.files.length : 0,
                 "session.id": state.sessionID || undefined,
               },
               async (span) => {
                 try {
                   const next = await ensureStream()
                   setRunSpanAttributes(span, {
-                    "opencode.agent.name": state.agent,
-                    "opencode.model.provider": state.model?.providerID,
-                    "opencode.model.id": state.model?.modelID,
-                    "opencode.model.variant": state.activeVariant,
+                    "leo-code.agent.name": state.agent,
+                    "leo-code.model.provider": state.model?.providerID,
+                    "leo-code.model.id": state.model?.modelID,
+                    "leo-code.model.variant": state.activeVariant,
                     "session.id": state.sessionID || undefined,
                   })
                   await next.handle.runPromptTurn({
@@ -706,13 +706,13 @@ export async function runInteractiveLocalMode(input: RunLocalInput): Promise<voi
   return withRunSpan(
     "RunInteractive.localMode",
     {
-      "opencode.directory": input.directory,
-      "opencode.initial_input": !!input.initialInput,
-      "opencode.demo": input.demo,
+      "leo-code.directory": input.directory,
+      "leo-code.initial_input": !!input.initialInput,
+      "leo-code.demo": input.demo,
     },
     async () => {
       const sdk = createOpencodeClient({
-        baseUrl: "http://opencode.internal",
+        baseUrl: "http://leo-code.internal",
         fetch: input.fetch,
         directory: input.directory,
       })
@@ -765,8 +765,8 @@ export async function runInteractiveMode(input: RunInput & { createSession?: Cre
   return withRunSpan(
     "RunInteractive.attachMode",
     {
-      "opencode.directory": input.directory,
-      "opencode.initial_input": !!input.initialInput,
+      "leo-code.directory": input.directory,
+      "leo-code.initial_input": !!input.initialInput,
       "session.id": input.sessionID,
     },
     async () =>

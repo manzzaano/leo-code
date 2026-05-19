@@ -1,0 +1,6 @@
+{
+  "query": "¿Qué funciones de graph/nodes.py tienen operaciones en batch (batch operations)?",
+  "response": "Las funciones con operaciones batch en `graph/nodes.py` son:\n\n- **`upsert_nodes_batch`**: Inserta/actualiza múltiples nodos en 1 round-trip usando `UNWIND MERGE`.\n- **`upsert_relations_batch`**: Inserta/actualiza múltiples relaciones en batch (fallback a individual para tipos dinámicos).",
+  "input_tokens": 1289,
+  "output_tokens": 80
+}

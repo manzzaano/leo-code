@@ -4,7 +4,7 @@ import { Catalog } from "@leo-code/core/catalog"
 import { Location } from "@leo-code/core/location"
 import { ModelV2 } from "@leo-code/core/model"
 import { PluginV2 } from "@leo-code/core/plugin"
-import { OpencodePlugin } from "@leo-code/core/plugin/provider/opencode"
+import { OpencodePlugin } from "@leo-code/core/plugin/provider/leo-code"
 import { ProviderV2 } from "@leo-code/core/provider"
 import { it, model, provider, withEnv } from "./provider-helper"
 
@@ -173,7 +173,7 @@ describe("OpencodePlugin", () => {
   it.effect("prefers gpt-5-nano as the opencode small model", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
-      const providerID = ProviderV2.ID.opencode
+      const providerID = ProviderV2.ID.leoCode
 
       yield* catalog.provider.update(providerID, () => {})
       yield* catalog.model.update(providerID, ModelV2.ID.make("cheap-mini"), (model) => {

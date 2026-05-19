@@ -70,7 +70,14 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
                 ))
 
         elif isinstance(node, ast.FunctionDef):
-            params = [a.arg for a in node.args.args]
+            def _param_str(arg, default=None) -> str:
+                p = f"{arg.arg}: {ast.unparse(arg.annotation)}" if arg.annotation else arg.arg
+                return f"{p} = {ast.unparse(default)}" if default is not None else p
+
+            all_args = node.args.args
+            defaults = node.args.defaults
+            pad = len(all_args) - len(defaults)
+            params = [_param_str(a, defaults[i - pad] if i >= pad else None) for i, a in enumerate(all_args)]
             returns = ast.unparse(node.returns) if node.returns else "None"
             doc = ast.get_docstring(node)
             lines = (node.end_lineno or node.lineno) - node.lineno + 1
@@ -80,6 +87,9 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
             for child in ast.walk(node):
                 if isinstance(child, ast.Call) and isinstance(child.func, ast.Name):
                     calls.append(child.func.id)
+
+            if not doc and lines <= 15:
+                doc = (ast.get_source_segment(content, node) or "")[:300]
 
             capsules.append(Capsule(
                 id=_make_id(file_path, node.lineno, sig),
@@ -128,16 +138,78 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
             for t in targets:
                 if isinstance(t, ast.Name):
                     ctype = "constant" if t.id.isupper() else "variable"
+                    raw = ast.get_source_segment(content, node) or ast.unparse(node)
+                    sig = raw if len(raw) <= 120 else f"{t.id} = ..."
                     capsules.append(Capsule(
                         id=_make_id(file_path, node.lineno, f"{ctype} {t.id}"),
                         type=ctype, name=t.id, file_path=file_path,
                         start_line=node.lineno, end_line=node.end_lineno or node.lineno,
-                        language="python", signature=f"{t.id} = ...",
-                        content=ast.get_source_segment(content, node) or ast.unparse(node),
+                        language="python", signature=sig,
+                        content=raw,
                         properties={"module": module_name},
                     ))
 
+    header = _extract_file_header(content, file_path)
+    if header is not None:
+        capsules.append(header)
+
     return capsules
+
+
+def _extract_file_header(content: str, file_path: str) -> Optional[Capsule]:
+    """Cápsula tipo file_header: bloque de imports + constantes top-level hasta la primera función/clase."""
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        return None
+
+    lines = content.splitlines()
+    module_name = Path(file_path).stem
+    module_docstring = ast.get_docstring(tree) or None
+
+    header_end = 0
+    imports_list: list[str] = []
+    constants: list[str] = []
+
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            break
+        line_end = getattr(node, "end_lineno", node.lineno)
+        header_end = max(header_end, line_end)
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                imports_list.append(alias.name)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            names = ", ".join(a.name for a in node.names)
+            imports_list.append(f"{node.module}: {names}")
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for t in targets:
+                if isinstance(t, ast.Name) and t.id.isupper():
+                    constants.append(t.id)
+
+    if header_end == 0:
+        return None
+
+    header_content = "\n".join(lines[:header_end])
+    return Capsule(
+        id=_make_id(file_path, 1, f"file_header:{module_name}"),
+        type="file_header",
+        name=f"{module_name}.__header__",
+        file_path=file_path,
+        start_line=1,
+        end_line=header_end,
+        language="python",
+        signature=f"[imports] {module_name}",
+        content=header_content,
+        docstring=module_docstring,
+        imports=imports_list,
+        properties={
+            "module": module_name,
+            "constants": ", ".join(constants),
+            "import_lines": header_end,
+        },
+    )
 
 
 def extract_from_txt(content: str, file_path: str) -> list[Capsule]:

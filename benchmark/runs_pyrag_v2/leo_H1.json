@@ -1,0 +1,6 @@
+{
+  "query": "En graph/traversal.py, cuales son los valores por defecto exactos de limit en find_nodes_by_name() y en find_nodes_by_type()? Dame los numeros exactos.",
+  "response": "En `graph/traversal.py`:\n\n- `find_nodes_by_name()`: `limit=10`\n- `find_nodes_by_type()`: `limit=50`",
+  "input_tokens": 1509,
+  "output_tokens": 35
+}

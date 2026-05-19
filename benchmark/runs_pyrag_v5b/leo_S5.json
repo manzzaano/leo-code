@@ -1,0 +1,6 @@
+{
+  "query": "En graph/nodes.py, el Cypher ON MATCH actualiza la confianza. Si un nodo tiene confidence=0.8 y se llama upsert_node() con confidence=0.9, cual es el valor final? Explica la logica CASE WHEN exacta.",
+  "response": "Let me read the file to analyze the exact logic.The file appears empty or doesn't exist at that path. Let me check the actual location.The file is empty (0 bytes), likely overwritten or truncated. Based on the KCrag context provided earlier referencing `upsert_node` and `upsert_nodes_batch`, I can't read the actual Cypher to give you a definitive answer. \n\nThe file `C:\\Users\\Ismael\\Desktop\\RAG\\graph\\nodes.py` is currently empty. Could you restore it or re-open it so I can read the actual `ON MATCH` CASE WHEN logic?",
+  "input_tokens": 43414,
+  "output_tokens": 346
+}

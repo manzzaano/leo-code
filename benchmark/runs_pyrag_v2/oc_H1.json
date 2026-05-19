@@ -1,0 +1,6 @@
+{
+  "query": "En graph/traversal.py, cuales son los valores por defecto exactos de limit en find_nodes_by_name() y en find_nodes_by_type()? Dame los numeros exactos.",
+  "response": "Let me read the file to find the exact default values.El archivo `kc_core/graph.py` en este repositorio define:\n\n- `find_nodes_by_name`: `limit: int = 5`\n- `find_nodes_by_type`: no existe en este archivo (solo está en `kc_core/__init__.py` como re-export, pero no hay definición local).\n\nNo hay un archivo `graph/traversal.py` en el código actual; la función relevante está en `kc_core/graph.py`. El default de `limit` en `find_nodes_by_name` es **5**.",
+  "input_tokens": 115720,
+  "output_tokens": 469
+}

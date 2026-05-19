@@ -1,0 +1,6 @@
+{
+  "query": "En el directorio packages/leo-code/src/context/, identifica qué símbolos se exportan desde cada archivo pero NO se importan en ningún otro archivo del proyecto packages/leo-code/src/. Usa el call graph o búsqueda de imports para verificar cada export.",
+  "response": "Para identificar los símbolos exportados pero no importados en el proyecto, necesito acceso al código fuente de `packages/leo-code/src/context/`. Sin embargo, basándome en el contexto proporcionado, no tengo información sobre ese directorio ni sus archivos.\n\nCon la información disponible, no puedo realizar el análisis solicitado.",
+  "input_tokens": 659,
+  "output_tokens": 72
+}

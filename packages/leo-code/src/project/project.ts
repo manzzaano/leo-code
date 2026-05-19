@@ -124,7 +124,7 @@ export interface Interface {
   readonly removeSandbox: (id: ProjectID, directory: string) => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Project") {}
+export class Service extends Context.Service<Service, Interface>()("@leo-code/Project") {}
 
 type GitResult = { code: number; text: string; stderr: string }
 

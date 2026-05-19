@@ -1,0 +1,6 @@
+{
+  "query": "En graph/traversal.py, la funcion _to_lucene_query() que hace exactamente? Describe su proposito y los parametros que recibe.",
+  "response": "The file no longer exists in the current codebase. The function `_to_lucene_query` is only referenced in historical benchmark data. Based on that:\n\n**`_to_lucene_query(text: str) -> str`** — Convierte texto plano en una query válida para full-text search de Lucene (usado en Neo4j). Escapa caracteres especiales reservados de Lucene y agrega un comodín `*` a cada token para búsqueda por prefijo. Recibe un solo parámetro `text` (la cadena a convertir).",
+  "input_tokens": 114669,
+  "output_tokens": 419
+}

@@ -1,6 +1,6 @@
 """Catálogo estático de modelos LLM con costes, límites y capacidades.
 
-Inspirado en OpenCode's models.dev — metadata estructurada para cada modelo.
+Metadata estructurada para cada modelo, costes y capacidades.
 Costes en $/1M tokens (precios orientativos mayo 2026).
 """
 

@@ -110,7 +110,7 @@ export interface Interface {
   readonly refresh: (force?: boolean) => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/ModelsDev") {}
+export class Service extends Context.Service<Service, Interface>()("@leo-code/ModelsDev") {}
 
 type Requirements = AppFileSystem.Service | HttpClient.HttpClient
 

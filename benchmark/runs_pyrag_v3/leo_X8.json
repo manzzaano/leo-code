@@ -1,0 +1,6 @@
+{
+  "query": "En security/audit.py, log_query() construye un diccionario entry que guarda en el log. Lista exactamente los campos del diccionario (claves exactas).",
+  "response": "Según el código de `security/audit.py`, el diccionario `entry` construido en `log_query()` contiene las siguientes claves exactas:\n\n```python\nentry = {\n    \"timestamp\": ...,\n    \"level\": ...,\n    \"user_id\": ...,\n    \"action\": ...,\n    \"resource\": ...,\n    \"status\": ...,\n    \"message\": ...,\n    \"extra\": ...\n}\n```\n\nCampos totales: **8** (timestamp, level, user_id, action, resource, status, message, extra).",
+  "input_tokens": 888,
+  "output_tokens": 116
+}

@@ -1,0 +1,6 @@
+{
+  "query": "Escribe el import correcto para usar upsert_node() desde graph/nodes.py. Luego escribe la llamada completa a upsert_node() con todos sus parametros incluyendo los opcionales con sus defaults exactos.",
+  "response": "```python\n# Import correcto\nfrom graph.nodes import upsert_node\n\n# Llamada completa con todos los parámetros opcionales y sus valores por defecto\nnode_id = upsert_node(\n    name=\"nombre_ejemplo\",\n    node_type=\"Type\",\n    properties=None,\n    source_doc_id=\"\",\n    source_hash=\"\",\n    confidence=1.0,\n    precision_critical=False,\n    aliases=None\n)\n```",
+  "input_tokens": 1472,
+  "output_tokens": 93
+}

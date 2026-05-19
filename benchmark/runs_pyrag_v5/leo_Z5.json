@@ -1,0 +1,6 @@
+{
+  "query": "En query/capa4.py, la funcion synthesize() usa ciertos parametros de inferencia. Si alguien llama synthesize() pasando subgraph=None cuando tiene el subgrafo completo disponible, que impacto tiene? Ademas, cuales son los valores exactos de temperature y max_tokens que usa internamente?",
+  "response": "En **`query/capa4.py`**, la función `synthesize()` tiene docstring, por lo que los parámetros de inferencia deben estar documentados allí.\n\nSin acceso directo al código fuente:\n\n1. **Si `subgraph=None` y el subgrafo completo está disponible**: La función fallaría (típicamente un `TypeError` o `ValueError`) porque `_extract_evidence(subgraph)` y la construcción del prompt dependen de un subgrafo no nulo. El pipeline se rompería antes de llegar a la generación.\n\n2. **Valores exactos de `temperature` y `max_tokens`**: Debes consultar el docstring de `synthesize()` en `capa4.py`. Por convención típica en RAG:\n   - `temperature`: suele ser `0.7` para equilibrio creatividad/consistencia o `0.0` para respuestas factuales.\n   - `max_tokens`: generalmente entre `1024` y `2048`.\n\n**Recomendación**: ",
+  "input_tokens": 1569,
+  "output_tokens": 278
+}

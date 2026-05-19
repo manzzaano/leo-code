@@ -1,0 +1,6 @@
+{
+  "query": "En query/pipeline.py, cuando use_cache=True y hay un cache hit, cuantos tokens LLM se consumen? Cual es el valor de tokens_llm en el campo _meta del resultado devuelto?",
+  "response": "No existe un archivo `query/pipeline.py` en este repositorio. El nombre `query/pipeline.py` solo aparece como referencia textual en un benchmark, no como archivo real. El proyecto actual no tiene ese archivo.\n\n¿Quizás te referías a otro repositorio o a un archivo con otro nombre?",
+  "input_tokens": 196134,
+  "output_tokens": 602
+}

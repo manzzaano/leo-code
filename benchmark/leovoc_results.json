@@ -1,0 +1,293 @@
+{
+  "run_timestamp": "2026-05-18T21-28-15",
+  "model": "deepseek-chat",
+  "temperature": 0.2,
+  "target_repo": "C:\\Users\\Ismael\\Desktop\\leo-code\\packages\\leo-code",
+  "metrics": {
+    "n_tasks": 10,
+    "total_tokens": {
+      "leo": 86516,
+      "opencode": 187977,
+      "no_ctx": 5298
+    },
+    "latency": {
+      "leo": 340.25,
+      "opencode": 294.44,
+      "no_ctx": 57.73
+    },
+    "avg_criteria": {
+      "leo": 0.081,
+      "opencode": 0.014,
+      "no_ctx": 0.468
+    },
+    "judge_ok": {
+      "leo": 0,
+      "opencode": 0,
+      "no_ctx": 1
+    },
+    "leo_vs_opencode_criteria": 0.067,
+    "leo_vs_noctx_criteria": -0.387
+  },
+  "results": [
+    {
+      "id": "Q1",
+      "type": "code_qa",
+      "query": "En el archivo packages/leo-code/src/context/plugin.ts existe un sistema de tiers que controla qué herramientas tiene disponibles el agente. Describe: (1) las condiciones exactas de tokens y task_type para activar Tier 1, Tier 2 y Tier 3, (2) qué herramientas se eliminan en cada tier, (3) qué constantes (HEAVY_TOOLS, ALL_READ_TOOLS) contienen.",
+      "leo": {
+        "tokens": 7448,
+        "latency": 32.945,
+        "criteria": 0.0,
+        "judge": false,
+        "answer": "Let me read the file to answer precisely."
+      },
+      "opencode": {
+        "tokens": 18786,
+        "latency": 32.279,
+        "criteria": 0.0,
+        "judge": false,
+        "answer": "Let me read the file to analyze the tier system."
+      },
+      "no_ctx": {
+        "tokens": 616,
+        "latency": 5.864,
+        "criteria": 0.38,
+        "judge": false,
+        "answer": "## Sistema de Tiers en `plugin.ts`\n\n### (1) Condiciones de activación\n\n```typescript\n// Lógica de selección de tier\nconst tier = (() => {\n  if (tokens < 2000 && task_type === 'code') return 1;\n  if (tokens < 4000 && task_type === 'code') return 2;\n  return 3; // Default: tier completo\n})();\n```\n\n- *"
+      }
+    },
+    {
+      "id": "Q2",
+      "type": "code_qa",
+      "query": "En packages/leo-code/src/mcp/index.ts hay un tipo union llamado Status con 5 variantes. Lista las 5 variantes exactas con sus campos y describe en qué condición se produce cada una durante el ciclo de vida de un servidor MCP.",
+      "leo": {
+        "tokens": 10538,
+        "latency": 34.962,
+        "criteria": 0.0,
+        "judge": false,
+        "answer": ""
+      },
+      "opencode": {
+        "tokens": 18739,
+        "latency": 32.258,
+        "criteria": 0.0,
+        "judge": false,
+        "answer": ""
+      },
+      "no_ctx": {
+        "tokens": 370,
+        "latency": 4.798,
+        "criteria": 0.14,
+        "judge": false,
+        "answer": "Basado en el análisis del archivo `packages/leo-code/src/mcp/index.ts`, las 5 variantes exactas del tipo `Status` son:\n\n1. **`starting`** - Sin campos adicionales. Se produce cuando el servidor MCP está iniciando su proceso de conexión/configuración inicial.\n\n2. **`started`** - Sin campos adicionale"
+      }
+    },
+    {
+      "id": "Q3",
+      "type": "code_qa",
+      "query": "Traza el flujo completo del flag --model en leo-code desde que el usuario lo escribe en el CLI hasta que el LLM recibe la primera llamada de streaming. Nombra cada archivo y función específica involucrada en la cadena.",
+      "leo": {
+        "tokens": 7534,
+        "latency": 33.384,
+        "criteria": 0.17,
+        "judge": false,
+        "answer": "Let me trace the full flow of `--model` from CLI to LLM streaming call."
+      },
+      "opencode": {
+        "tokens": 18757,
+        "latency": 32.422,
+        "criteria": 0.0,
+        "judge": false,
+        "answer": ""
+      },
+      "no_ctx": {
+        "tokens": 778,
+        "latency": 8.079,
+        "criteria": 0.33,
+        "judge": false,
+        "answer": "## Flujo completo de `--model` en leo-code\n\n### 1. **Parseo del CLI** → `src/cli/index.ts`\n- **Función**: `parseArgs()` o `yargs.parse()`\n- Lee `process.argv` y extrae `--model` como string\n- Valida que sea un modelo soportado (ej: `gpt-4`, `claude-3`)\n\n### 2. **Configuración inicial** → `src/config"
+      }
+    },
+    {
+      "id": "B1",
+      "type": "bug_detection",
+      "query": "En src/mcp/index.ts existe el siguiente patrón:\n\n```typescript\nconst TolerantListToolsResultSchema = ListToolsResultSchema.extend({\n  tools: ToolSchema.omit({ outputSchema: true }).array(),\n})\n```\n\nY existe una función `isOutputSchemaValidationError(error: Error)` que detecta errores de validación de outputSchema.\n\n¿Cuál es el problema de ingeniería en este diseño? ¿Qué errores se suprimen silenciosamente y cuál es el riesgo concreto?",
+      "leo": {
+        "tokens": 10567,
+        "latency": 34.834,
+        "criteria": 0.0,
+        "judge": false,
+        "answer": ""
+      },
+      "opencode": {
+        "tokens": 18774,
+        "latency": 32.443,
+        "criteria": 0.0,
+        "judge": false,
+        "answer": "Let me explore the codebase to understand the pattern in `src/mcp/index.ts` and the validation error detection function."
+      },
+      "no_ctx": {
+        "tokens": 572,
+        "latency": 6.558,
+        "criteria": 1.0,
+        "judge": true,
+        "answer": "El problema de ingeniería es la **supresión silenciosa de errores de validación estructurales** que pueden ocultar bugs críticos.\n\n## Errores suprimidos silenciosamente:\n\n1. **Errores en `outputSchema` de herramientas individuales**: Si una herramienta tiene un `outputSchema` mal formado, se ignora "
+      }
+    },
+    {
+      "id": "B2",
+      "type": "bug_detection",
+      "query": "En packages/leo-code/src/cli/cmd/run/session-data.ts, la función createSessionData() bufferiza texto de mensajes antes de confirmar el role. ¿En qué condición exacta puede perderse texto ya emitido? Describe el escenario específico y el tipo de evento que nunca llegaría.",
+      "leo": {
+        "tokens": 7427,
+        "latency": 33.291,
+        "criteria": 0.0,
+        "judge": false,
+        "answer": "Let me read the file to understand the logic."
+      },
+      "opencode": {
+        "tokens": 18753,
+        "latency": 32.938,
+        "criteria": 0.0,
+        "judge": false,
+        "answer": ""
+      },
+      "no_ctx": {
+        "tokens": 381,
+        "latency": 5.271,
+        "criteria": 0.43,
+        "judge": false,
+        "answer": "El escenario específico donde se puede perder texto ocurre cuando:\n\n**Condición exacta**: El stream emite un evento `data` con contenido textual **después** de que se haya emitido el evento `end` (o `finish`), pero **antes** de que se ejecute la lógica de confirmación del role en el buffer.\n\n**Tipo "
+      }
+    },
+    {
+      "id": "G1",
+      "type": "code_gen",
+      "query": "Implementa en TypeScript la función `isTier1(result: KcRagResponse | null): boolean` que retorne true exactamente cuando la lógica actual de packages/leo-code/src/context/plugin.ts deshabilitaría TODAS las herramientas del agente. Importa KcRagResponse desde el módulo correcto. No modifiques plugin.ts.",
+      "leo": {
+        "tokens": 10621,
+        "latency": 34.59,
+        "criteria": 0.0,
+        "judge": false,
+        "answer": "Let me start by understanding the current logic in `plugin.ts` that determines when agent tools get disabled."
+      },
+      "opencode": {
+        "tokens": 18836,
+        "latency": 21.007,
+        "criteria": 0.0,
+        "judge": false,
+        "answer": "Let me start by exploring the relevant files."
+      },
+      "no_ctx": {
+        "tokens": 315,
+        "latency": 3.953,
+        "criteria": 0.25,
+        "judge": false,
+        "answer": "```typescript\nimport { KcRagResponse } from '@sede/leo-code/src/context/plugin';\n\nexport function isTier1(result: KcRagResponse | null): boolean {\n  if (!result) return false;\n  \n  // La lógica actual en plugin.ts deshabilita TODAS las herramientas cuando:\n  // - result.tier === 1\n  // - result.tool"
+      }
+    },
+    {
+      "id": "G2",
+      "type": "code_gen",
+      "query": "Usando los tipos de packages/leo-code/src/mcp/index.ts, implementa la función `getAvailableMcpToolNames(status: Status): string[]` que retorne los nombres de todas las tools disponibles cuando el servidor MCP está connected, y un array vacío en cualquier otro estado. Importa Status del módulo correcto.",
+      "leo": {
+        "tokens": 10639,
+        "latency": 34.335,
+        "criteria": 0.0,
+        "judge": false,
+        "answer": ""
+      },
+      "opencode": {
+        "tokens": 18824,
+        "latency": 32.23,
+        "criteria": 0.0,
+        "judge": false,
+        "answer": "Let me first explore the relevant files."
+      },
+      "no_ctx": {
+        "tokens": 261,
+        "latency": 3.692,
+        "criteria": 0.86,
+        "judge": false,
+        "answer": "```typescript\nimport { Status } from './types'; // Ajusta la ruta según la estructura real\n\nexport function getAvailableMcpToolNames(status: Status): string[] {\n  if (status === 'connected') {\n    // Aquí deberías tener acceso a la lista de herramientas disponibles\n    // Asumiendo que hay un store "
+      }
+    },
+    {
+      "id": "R1",
+      "type": "refactor",
+      "query": "Si cambias la condición Tier 1 en packages/leo-code/src/context/plugin.ts de `_kcragResult.tokens > 300` a `_kcragResult.tokens > 500`, ¿cuáles de las 6 tareas del benchmark en benchmark/agent_tasks.json pasarían de Tier 1 a Tier 2? Para cada tarea afectada: indica su ctx (tokens de contexto actual), qué tools RECUPERARÍA el agente, y cómo cambiaría su comportamiento.",
+      "leo": {
+        "tokens": 10517,
+        "latency": 34.372,
+        "criteria": 0.14,
+        "judge": false,
+        "answer": "Let me start by reading the relevant files to understand the tier logic and benchmark tasks."
+      },
+      "opencode": {
+        "tokens": 18836,
+        "latency": 32.215,
+        "criteria": 0.14,
+        "judge": false,
+        "answer": "Let me start by reading the relevant files to understand the change and then analyze the impact."
+      },
+      "no_ctx": {
+        "tokens": 760,
+        "latency": 7.086,
+        "criteria": 0.29,
+        "judge": false,
+        "answer": "Para determinar qué tareas pasarían de Tier 1 a Tier 2 al cambiar el umbral de `tokens > 300` a `tokens > 500`, primero necesito analizar las tareas en `benchmark/agent_tasks.json` que tienen un `ctx` (tokens de contexto) entre 301 y 500 (inclusive), ya que esas son las que actualmente están en Tier"
+      }
+    },
+    {
+      "id": "R2",
+      "type": "refactor",
+      "query": "Analiza el acoplamiento entre packages/leo-code/src/context/plugin.ts y kcrag.ts. Lista TODAS las dependencias directas: imports de tipos, funciones llamadas, variables de estado compartidas. Después responde: ¿podría plugin.ts funcionar con una interfaz genérica `IRagProvider` en lugar de importar kcrag directamente? ¿Qué cambiaría?",
+      "leo": {
+        "tokens": 10494,
+        "latency": 35.079,
+        "criteria": 0.0,
+        "judge": false,
+        "answer": ""
+      },
+      "opencode": {
+        "tokens": 18918,
+        "latency": 25.854,
+        "criteria": 0.0,
+        "judge": false,
+        "answer": "I'll start by reading both files and exploring the codebase for kcrag-related dependencies."
+      },
+      "no_ctx": {
+        "tokens": 710,
+        "latency": 6.666,
+        "criteria": 0.5,
+        "judge": false,
+        "answer": "## Análisis de acoplamiento entre `plugin.ts` y `kcrag.ts`\n\n### Dependencias directas identificadas:\n\n1. **Imports de tipos**:\n   - `KcRagConfig` (interfaz de configuración)\n   - `KcRagResult` (tipo de resultado)\n   - `KcRagOptions` (opciones de consulta)\n\n2. **Funciones llamadas**:\n   - `new KcRag("
+      }
+    },
+    {
+      "id": "R3",
+      "type": "refactor",
+      "query": "En el directorio packages/leo-code/src/context/, identifica qué símbolos se exportan desde cada archivo pero NO se importan en ningún otro archivo del proyecto packages/leo-code/src/. Usa el call graph o búsqueda de imports para verificar cada export.",
+      "leo": {
+        "tokens": 731,
+        "latency": 32.461,
+        "criteria": 0.5,
+        "judge": false,
+        "answer": "Para identificar los símbolos exportados pero no importados en el proyecto, necesito acceso al código fuente de `packages/leo-code/src/context/`. Sin embargo, basándome en el contexto proporcionado, no tengo información sobre ese directorio ni sus archivos.\n\nCon la información disponible, no puedo r"
+      },
+      "opencode": {
+        "tokens": 18754,
+        "latency": 20.799,
+        "criteria": 0.0,
+        "judge": false,
+        "answer": ""
+      },
+      "no_ctx": {
+        "tokens": 535,
+        "latency": 5.767,
+        "criteria": 0.5,
+        "judge": false,
+        "answer": "Basado en el análisis de los archivos en `packages/leo-code/src/context/`, estos son los símbolos exportados que **no** tienen imports en ningún otro archivo dentro de `packages/leo-code/src/`:\n\n## Símbolos no importados\n\n### `packages/leo-code/src/context/ThemeContext.tsx`\n- **`ThemeProvider`** - C"
+      }
+    }
+  ]
+}

@@ -18,7 +18,7 @@ CODE_SIGNALS = [
 
 # Presupuesto de tokens por tipo de tarea
 TOKEN_BUDGET = {
-    "code_gen": 200,      # solo estructura de directorios
+    "code_gen": 800,      # actual code content (signatures, bodies)
     "code_edit": 800,     # función target + dependencias directas
     "code_query": 1500,   # top 5 con docstrings, sin cuerpos completos
     "refactor": 2000,     # target + callers + callees
@@ -39,13 +39,13 @@ TASK_SIGNALS = {
     "code_query": [
         "explica", "que hace", "qué hace", "como funciona", "cómo funciona",
         "describe", "explain", "how does", "what does", "para que sirve",
+        # análisis call-graph (lectura pura — no implican escritura)
+        "que llama", "qué llama", "funciones llama", "métodos llama", "metodos llama",
+        "quien llama", "quién llama", "dependencias de", "callers", "callees",
     ],
     "refactor": [
         "refactor", "refactoriza", "reestructura", "extrae", "extraer",
         "separa", "unifica", "simplifica",
-        # call-graph queries
-        "que llama", "qué llama", "funciones llama", "métodos llama", "metodos llama",
-        "quien llama", "quién llama", "dependencias de", "callers", "callees",
     ],
     "search": [
         "encuentra", "busca", "lista", "cuantas", "cuántas", "cuantos",
@@ -57,16 +57,28 @@ TASK_SIGNALS = {
 def needs_code_context(query: str) -> bool:
     """Determina si la query necesita contexto del código del repositorio."""
     q = query.lower()
-    return any(s in q for s in CODE_SIGNALS)
+    if any(s in q for s in CODE_SIGNALS):
+        return True
+    # Heurística: snake_case o CamelCase → probablemente nombres de funciones/clases
+    import re
+    if re.search(r"\w+_\w+", query) or re.search(r"[a-záéíóúüñ]+[A-ZÁÉÍÓÚÜÑ]", query):
+        return True
+    return False
 
 
 def classify_task(query: str) -> str:
     """Clasifica el tipo de tarea según palabras clave en la query."""
+    import re
     q = query.lower()
 
     scores = {}
     for task_type, signals in TASK_SIGNALS.items():
-        scores[task_type] = sum(1 for s in signals if s in q)
+        count = 0
+        for s in signals:
+            # Use word boundary matching to avoid false positives (e.g. "escribe" inside "describe")
+            if re.search(r'(?<!\w)' + re.escape(s) + r'(?!\w)', q):
+                count += 1
+        scores[task_type] = count
 
     best = max(scores, key=scores.get)
     if scores[best] == 0:

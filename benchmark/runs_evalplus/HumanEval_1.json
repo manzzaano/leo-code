@@ -1,0 +1,9 @@
+{
+  "task_id": "HumanEval/1",
+  "entry_point": "separate_paren_groups",
+  "raw_response": "```python\nfrom typing import List\n\n\ndef separate_paren_groups(paren_string: str) -> List[str]:\n    result = []\n    current = []\n    depth = 0\n    for ch in paren_string:\n        if ch == ' ':\n            continue\n        current.append(ch)\n        if ch == '(':\n            depth += 1\n        elif ch == ')':\n            depth -= 1\n        if depth == 0:\n            result.append(''.join(current))\n            current = []\n    return result\n```",
+  "extracted_code": "from typing import List\n\n\ndef separate_paren_groups(paren_string: str) -> List[str]:\n    result = []\n    current = []\n    depth = 0\n    for ch in paren_string:\n        if ch == ' ':\n            continue\n        current.append(ch)\n        if ch == '(':\n            depth += 1\n        elif ch == ')':\n            depth -= 1\n        if depth == 0:\n            result.append(''.join(current))\n            current = []\n    return result",
+  "input_tokens": 10395,
+  "output_tokens": 109,
+  "latency_s": 6.19
+}

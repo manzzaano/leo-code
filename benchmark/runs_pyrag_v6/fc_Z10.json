@@ -1,0 +1,6 @@
+{
+  "query": "En query/pipeline.py, cuando el intent es parallel, describe exactamente como se ejecuta route_parallel(). Cual es la llamada asyncio exacta y como se decide si usar el resultado o continuar con el flujo normal?",
+  "response": "No tengo acceso al contenido del archivo `query/router.py` donde está definida la función `route_parallel()`. Sin embargo, puedo describir exactamente lo que veo en el código proporcionado de `query/pipeline.py`:\n\n## Llamada asyncio exacta\n\n```python\nparallel_result = asyncio.run(route_parallel(user_query, try_resolve, retrieve_subgraph))\n```\n\nEsta es la llamada exacta. `asyncio.run()` ejecuta la corrutina `route_parallel()` con tres argumentos:\n- `user_query`: el string de consulta del usuario\n- `try_resolve`: la función de capa 0 (resolución directa Neo4j)\n- `retrieve_subgraph`: la función de capa 2 (recuperación de subgrafo)\n\n## Decisión de usar el resultado vs continuar\n\nLa decisión se basa en dos condiciones:\n\n```python\nneeds_full_context = parallel_result.get(\"needs_full_context\", Fa",
+  "input_tokens": 721,
+  "output_tokens": 445
+}

@@ -1,0 +1,6 @@
+{
+  "query": "En query/pipeline.py, cuando Capa 0 resuelve la query directamente (fast-path), cuantos tokens LLM se usan? Lista los valores exactos de tokens_llm, input_tokens y output_tokens en _meta.",
+  "response": "Let me read the pipeline file and check what happens in the Capa 0 fast-path.The file `query/pipeline.py` doesn't exist in this repository. Let me search for something that could match — maybe the repo has a different structure or filename.No `query/pipeline.py` exists anywhere in this project. There are no Python files inside a `query` directory (outside `node_modules`).\n\nThe file `query/pipeline.py` does not exist in this repository.",
+  "input_tokens": 145519,
+  "output_tokens": 936
+}

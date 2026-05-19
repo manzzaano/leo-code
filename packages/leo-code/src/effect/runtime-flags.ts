@@ -11,7 +11,7 @@ const experimental = bool("LEO_EXPERIMENTAL")
 const enabledByExperimental = (name: string) =>
   Config.all({ experimental, enabled: bool(name) }).pipe(Config.map((flags) => flags.experimental || flags.enabled))
 
-export class Service extends ConfigService.Service<Service>()("@opencode/RuntimeFlags", {
+export class Service extends ConfigService.Service<Service>()("@leo-code/RuntimeFlags", {
   autoShare: bool("LEO_AUTO_SHARE"),
   pure: bool("LEO_PURE"),
   disableDefaultPlugins: bool("LEO_DISABLE_DEFAULT_PLUGINS"),

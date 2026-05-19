@@ -1,0 +1,6 @@
+{
+  "query": "Segun la documentacion del sistema (docs/), cuales son exactamente las condiciones C01 y C05 para obtener descuentos?",
+  "response": "En ese documento no existen condiciones C01 ni C05. El sistema de descuentos del documento se compone de:\n\n1. **Descuentos por volumen** (sección 2): según cantidad mínima (0%, 5%, 12%, 20%, 30%)\n2. **Descuentos por membresía** (sección 3): según tier (`basico` 0%, `silver` 5%, `gold` 10%, `platinum` 15%)\n3. **Reglas cruzadas** (sección 7): restricciones como `platinum + electrónica + volumen` y `libros + platinum + Export`\n\nNo hay referencias a códigos C01 o C05. Si esos códigos existen, están ",
+  "input_tokens": 102162,
+  "output_tokens": 594
+}

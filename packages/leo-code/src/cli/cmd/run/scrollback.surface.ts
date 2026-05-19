@@ -374,8 +374,8 @@ export class RunScrollbackStream {
     return withRunSpan(
       "RunScrollbackStream.complete",
       {
-        "opencode.entry.active": !!this.active,
-        "opencode.trailing_newline": trailingNewline,
+        "leo-code.entry.active": !!this.active,
+        "leo-code.trailing_newline": trailingNewline,
         "session.id": this.sessionID?.() || undefined,
       },
       async () => {

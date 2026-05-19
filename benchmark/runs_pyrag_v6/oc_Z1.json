@@ -1,0 +1,6 @@
+{
+  "query": "Haz un audit completo de todos los imports de query/pipeline.py. Lista TODOS los modulos importados y las funciones especificas importadas de cada uno. Sé exhaustivo.",
+  "response": "",
+  "input_tokens": 0,
+  "output_tokens": 0
+}

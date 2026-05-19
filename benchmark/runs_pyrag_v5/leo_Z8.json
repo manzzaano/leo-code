@@ -1,0 +1,6 @@
+{
+  "query": "En security/audit.py, _get_logger() configura un logger con nombre especifico. Cual es el nombre exacto del logger, el path del archivo de log, el patron del formatter y el nivel? Hay propagate configurado?",
+  "response": "**Nombre del logger:** `\"kg_rag.audit\"`  \n**Path del archivo:** `\"logs/audit.log\"` (relativo al CWD)  \n**Formato:** `\"%(message)s\"`  \n**Nivel:** `logging.INFO`  \n**Propagate:** Sí, está configurado como `False` (`lg.propagate = False`)",
+  "input_tokens": 665,
+  "output_tokens": 84
+}

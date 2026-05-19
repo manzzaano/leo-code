@@ -1,0 +1,6 @@
+{
+  "query": "En src/mcp/index.ts existe el siguiente patrón:\n\n```typescript\nconst TolerantListToolsResultSchema = ListToolsResultSchema.extend({\n  tools: ToolSchema.omit({ outputSchema: true }).array(),\n})\n```\n\nY existe una función `isOutputSchemaValidationError(error: Error)` que detecta errores de validación de outputSchema.\n\n¿Cuál es el problema de ingeniería en este diseño? ¿Qué errores se suprimen silenciosamente y cuál es el riesgo concreto?",
+  "response": "Let me explore the codebase to understand the pattern in `src/mcp/index.ts` and the validation error detection function.",
+  "input_tokens": 18678,
+  "output_tokens": 96
+}

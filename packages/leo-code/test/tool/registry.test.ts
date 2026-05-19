@@ -112,7 +112,7 @@ describe("tool.registry", () => {
       const build = yield* agent.get("build")
       if (!build) throw new Error("build agent not found")
       const task = (yield* registry.tools({
-        providerID: ProviderID.leo-code,
+        providerID: ProviderID.leoCode,
         modelID: ModelID.make("test"),
         agent: build,
       })).find((tool) => tool.id === "task")
@@ -134,8 +134,8 @@ describe("tool.registry", () => {
   it.instance("loads tools from .leo-code/tool (singular)", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance
-      const leo-code = path.join(test.directory, ".leo-code")
-      const tool = path.join(leo-code, "tool")
+      const leoCodeDir = path.join(test.directory, ".leo-code")
+      const tool = path.join(leoCodeDir, "tool")
       yield* Effect.promise(() => fs.mkdir(tool, { recursive: true }))
       yield* Effect.promise(() =>
         Bun.write(
@@ -188,8 +188,8 @@ describe("tool.registry", () => {
   it.instance("loads tools from .leo-code/tools (plural)", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance
-      const leo-code = path.join(test.directory, ".leo-code")
-      const tools = path.join(leo-code, "tools")
+      const leoCodeDir = path.join(test.directory, ".leo-code")
+      const tools = path.join(leoCodeDir, "tools")
       yield* Effect.promise(() => fs.mkdir(tools, { recursive: true }))
       yield* Effect.promise(() =>
         Bun.write(
@@ -248,7 +248,7 @@ describe("tool.registry", () => {
 
       const agents = yield* Agent.Service
       const promptTools = yield* registry.tools({
-        providerID: ProviderID.leo-code,
+        providerID: ProviderID.leoCode,
         modelID: ModelID.make("test"),
         agent: yield* agents.defaultInfo(),
       })
@@ -268,13 +268,13 @@ describe("tool.registry", () => {
     () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
-        const leo-code = path.join(test.directory, ".leo-code")
-        const customTools = path.join(leo-code, "tools")
-        const plugin = path.join(leo-code, "node_modules", "@leo-code-ai", "plugin")
+        const leoCodeDir = path.join(test.directory, ".leo-code")
+        const customTools = path.join(leoCodeDir, "tools")
+        const plugin = path.join(leoCodeDir, "node_modules", "@leo-code-ai", "plugin")
         yield* Effect.promise(() => fs.mkdir(path.join(plugin, "dist"), { recursive: true }))
         yield* Effect.promise(() => fs.mkdir(customTools, { recursive: true }))
         yield* Effect.promise(() =>
-          fs.cp(path.dirname(fileURLToPath(import.meta.resolve("zod"))), path.join(leo-code, "node_modules", "zod"), {
+          fs.cp(path.dirname(fileURLToPath(import.meta.resolve("zod"))), path.join(leoCodeDir, "node_modules", "zod"), {
             dereference: true,
             recursive: true,
           }),
@@ -410,12 +410,12 @@ describe("tool.registry", () => {
   it.instance("loads tools with external dependencies without crashing", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance
-      const leo-code = path.join(test.directory, ".leo-code")
-      const tools = path.join(leo-code, "tools")
+      const leoCodeDir = path.join(test.directory, ".leo-code")
+      const tools = path.join(leoCodeDir, "tools")
       yield* Effect.promise(() => fs.mkdir(tools, { recursive: true }))
       yield* Effect.promise(() =>
         Bun.write(
-          path.join(leo-code, "package.json"),
+          path.join(leoCodeDir, "package.json"),
           JSON.stringify({
             name: "custom-tools",
             dependencies: {
@@ -427,7 +427,7 @@ describe("tool.registry", () => {
       )
       yield* Effect.promise(() =>
         Bun.write(
-          path.join(leo-code, "package-lock.json"),
+          path.join(leoCodeDir, "package-lock.json"),
           JSON.stringify({
             name: "custom-tools",
             lockfileVersion: 3,
@@ -443,7 +443,7 @@ describe("tool.registry", () => {
         ),
       )
 
-      const cowsay = path.join(leo-code, "node_modules", "cowsay")
+      const cowsay = path.join(leoCodeDir, "node_modules", "cowsay")
       yield* Effect.promise(() => fs.mkdir(cowsay, { recursive: true }))
       yield* Effect.promise(() =>
         Bun.write(

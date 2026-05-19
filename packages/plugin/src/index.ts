@@ -330,4 +330,12 @@ export interface Hooks {
    * Modify tool definitions (description and parameters) sent to LLM
    */
   "tool.definition"?: (input: { toolID: string }, output: { description: string; parameters: any }) => Promise<void>
+  /**
+   * Called before tools are sent to the LLM. Plugins can delete tool keys
+   * from the output.tools object to disable them for this turn.
+   */
+  "experimental.chat.tools.filter"?: (
+    input: { sessionID: string; agent: string },
+    output: { tools: Record<string, unknown> },
+  ) => Promise<void>
 }

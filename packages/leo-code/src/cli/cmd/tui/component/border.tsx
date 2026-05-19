@@ -19,3 +19,19 @@ export const SplitBorder = {
     vertical: "┃",
   },
 }
+
+export const RoundedBorder = {
+  customBorderChars: {
+    topLeft: "╭",
+    topRight: "╮",
+    bottomLeft: "╰",
+    bottomRight: "╯",
+    horizontal: "─",
+    vertical: "│",
+    leftT: "├",
+    rightT: "┤",
+    topT: "┬",
+    bottomT: "┴",
+    cross: "┼",
+  },
+}

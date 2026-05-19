@@ -1,0 +1,6 @@
+{
+  "query": "Compara la temperatura de inferencia usada en extract_entities() (ingestion/extractor.py) con la de synthesize() (query/capa4.py). Son iguales o diferentes? Cuales son los valores exactos?",
+  "response": "Son diferentes.\n\n- **extract_entities()** en `ingestion/extractor.py`: sin temperatura definida; hereda el valor por defecto de la API de OpenAI (`temperature=1.0`) o usa la del cliente configurado.\n- **synthesize()** en `query/capa4.py`: temperatura explícita en el código, valor **0.1**.\n\nValores exactos: `1.0` (implícito) vs `0.1` (explícito).",
+  "input_tokens": 1626,
+  "output_tokens": 107
+}

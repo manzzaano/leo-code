@@ -367,7 +367,7 @@ export function generateSystem(colors: TerminalColors, pick: "dark" | "light"): 
 
   const diff_alpha = isDark ? 0.22 : 0.14
   const diff_context_bg = grays[2]
-  const primary = ansi.cyan
+  const primary = ansi.blue
   const secondary = ansi.magenta
 
   return {
@@ -434,8 +434,8 @@ function splashTheme(theme: TuiThemeCurrent, indexed: RGBA[]): RunSplashTheme {
   return {
     left,
     right,
-    leftShadow: splashShadow(indexed, theme.background, left, 0.14),
-    rightShadow: splashShadow(indexed, theme.background, right, 0.14),
+    leftShadow: splashShadow(indexed, theme.background, left, 0.1),
+    rightShadow: splashShadow(indexed, theme.background, right, 0.1),
   }
 }
 
@@ -508,13 +508,13 @@ function map(
 }
 
 const seed = {
-  highlight: RGBA.fromIndex(6, rgba("#38bdf8")),
-  muted: RGBA.fromIndex(8, rgba("#64748b")),
-  text: RGBA.defaultForeground(rgba("#f8fafc")),
-  panel: rgba("#0f172a"),
-  success: RGBA.fromIndex(2, rgba("#22c55e")),
-  warning: RGBA.fromIndex(3, rgba("#f59e0b")),
-  error: RGBA.fromIndex(1, rgba("#ef4444")),
+  highlight: RGBA.fromIndex(4, rgba("#4DA6FF")),
+  muted: RGBA.fromIndex(8, rgba("#6B7899")),
+  text: RGBA.defaultForeground(rgba("#E8EEFF")),
+  panel: rgba("#0E1122"),
+  success: RGBA.fromIndex(2, rgba("#4DFFB8")),
+  warning: RGBA.fromIndex(3, rgba("#FFD166")),
+  error: RGBA.fromIndex(1, rgba("#FF6B6B")),
 }
 
 function tone(body: ColorInput, start?: ColorInput): Tone {
@@ -525,8 +525,8 @@ function tone(body: ColorInput, start?: ColorInput): Tone {
 }
 
 const fallbackSplashIndexed = Array.from({ length: 256 }, (_, index) => RGBA.fromIndex(index))
-const fallbackSplashLeft = RGBA.fromIndex(67)
-const fallbackSplashRight = RGBA.fromIndex(110)
+const fallbackSplashLeft = RGBA.fromIndex(60)
+const fallbackSplashRight = RGBA.fromIndex(33)
 
 export const RUN_THEME_FALLBACK: RunTheme = {
   background: RGBA.fromValues(0, 0, 0, 0),
@@ -554,8 +554,8 @@ export const RUN_THEME_FALLBACK: RunTheme = {
   splash: {
     left: fallbackSplashLeft,
     right: fallbackSplashRight,
-    leftShadow: splashShadow(fallbackSplashIndexed, RGBA.fromValues(0, 0, 0, 0), fallbackSplashLeft, 0.14),
-    rightShadow: splashShadow(fallbackSplashIndexed, RGBA.fromValues(0, 0, 0, 0), fallbackSplashRight, 0.14),
+    leftShadow: splashShadow(fallbackSplashIndexed, RGBA.fromValues(0, 0, 0, 0), fallbackSplashLeft, 0.1),
+    rightShadow: splashShadow(fallbackSplashIndexed, RGBA.fromValues(0, 0, 0, 0), fallbackSplashRight, 0.1),
   },
   block: {
     text: seed.text,

@@ -1,0 +1,6 @@
+{
+  "query": "En el archivo packages/leo-code/src/context/plugin.ts existe un sistema de tiers que controla qué herramientas tiene disponibles el agente. Describe: (1) las condiciones exactas de tokens y task_type para activar Tier 1, Tier 2 y Tier 3, (2) qué herramientas se eliminan en cada tier, (3) qué constantes (HEAVY_TOOLS, ALL_READ_TOOLS) contienen.",
+  "response": "Let me read the file to answer precisely.",
+  "input_tokens": 7372,
+  "output_tokens": 76
+}

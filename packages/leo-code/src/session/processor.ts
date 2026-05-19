@@ -83,7 +83,7 @@ interface ProcessorContext extends Input {
 
 type StreamEvent = Event
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/SessionProcessor") {}
+export class Service extends Context.Service<Service, Interface>()("@leo-code/SessionProcessor") {}
 
 export const layer = Layer.effect(
   Service,

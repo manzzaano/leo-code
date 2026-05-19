@@ -1,0 +1,6 @@
+{
+  "query": "En ingestion/pipeline.py, ingest_directory() tiene 3 parametros con sus valores por defecto. Cuales son los 3 parametros y sus defaults exactos?",
+  "response": "Los 3 parámetros y sus valores por defecto en `ingest_directory()` son:\n\n1. `directory: Path`  \n2. `batch_size: int = 10`  \n3. `parallel: bool = True`",
+  "input_tokens": 1570,
+  "output_tokens": 48
+}

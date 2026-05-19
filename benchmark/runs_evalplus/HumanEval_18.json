@@ -1,0 +1,9 @@
+{
+  "task_id": "HumanEval/18",
+  "entry_point": "how_many_times",
+  "raw_response": "```python\ndef how_many_times(string: str, substring: str) -> int:\n    if not substring:\n        return 0\n    count = 0\n    start = 0\n    while True:\n        start = string.find(substring, start)\n        if start == -1:\n            return count\n        count += 1\n        start += 1\n```",
+  "extracted_code": "def how_many_times(string: str, substring: str) -> int:\n    if not substring:\n        return 0\n    count = 0\n    start = 0\n    while True:\n        start = string.find(substring, start)\n        if start == -1:\n            return count\n        count += 1\n        start += 1",
+  "input_tokens": 10367,
+  "output_tokens": 81,
+  "latency_s": 6.218
+}

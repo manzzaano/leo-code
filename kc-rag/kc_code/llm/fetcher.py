@@ -1,6 +1,6 @@
 """ModelFetcher: carga catálogo de modelos desde models.dev con cache en disco.
 
-Patrón copiado de OpenCode (packages/core/src/models.ts):
+Patrón:
 - Cache en disco (5 min TTL)
 - Fetch remoto con timeout
 - Graceful degradation (fallback a vacío)

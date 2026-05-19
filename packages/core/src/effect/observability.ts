@@ -45,9 +45,9 @@ export function resource(): { serviceName: string; serviceVersion: string; attri
     attributes: {
       ...attributes,
       "deployment.environment.name": InstallationChannel,
-      "opencode.client": Flag.LEO_CLIENT,
-      "opencode.process_role": processMetadata.processRole,
-      "opencode.run_id": processMetadata.runID,
+      "leo-code.client": Flag.LEO_CLIENT,
+      "leo-code.process_role": processMetadata.processRole,
+      "leo-code.run_id": processMetadata.runID,
       "service.instance.id": processID,
     },
   }

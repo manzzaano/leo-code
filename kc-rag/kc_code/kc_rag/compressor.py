@@ -18,6 +18,7 @@ def compress(
     all_capsules: list[Capsule],
     budget_tokens: int = 1500,
     task_type: str = "code_query",
+    dir_filter: set[str] | None = None,
 ) -> str:
     """Compresión adaptativa según tipo de tarea."""
 
@@ -25,25 +26,25 @@ def compress(
         doc_caps = [c for c in top_capsules if c.type == "document"]
         if doc_caps:
             return _compress_query(doc_caps, budget_tokens)
-        return ""
+        return _compress_query(top_capsules, max(budget_tokens, 800))
 
     # Para code tasks: excluir docs de dominio del contexto
     top_capsules = [c for c in top_capsules if c.type != "document"]
     all_capsules  = [c for c in all_capsules  if c.type != "document"]
 
     if task_type == "code_gen":
-        return _compress_code_gen(all_capsules)
+        # code_gen queries need actual code content (signatures, bodies) not just directory structure
+        return _compress_query(top_capsules, budget_tokens)
 
     if task_type == "code_edit":
         return _compress_code_edit(top_capsules)
 
     if task_type == "search":
-        return _compress_search(top_capsules, all_capsules, budget_tokens)
+        return _compress_search(top_capsules, all_capsules, budget_tokens, dir_filter)
 
     if task_type == "refactor":
         return _compress_refactor(top_capsules, all_capsules)
 
-    # Default: code_query
     return _compress_query(top_capsules, budget_tokens)
 
 
@@ -114,9 +115,11 @@ def _compress_query(top_capsules: list[Capsule], budget_tokens: int) -> str:
         seen.add(c.name)
 
         # Primera cápsula relevante: incluir cuerpo completo si cabe
-        if i == 0 and c.content and c.type in ("function", "class", "document"):
+        if i == 0 and c.content and c.type in ("function", "class", "document", "file_header"):
             if c.type == "document":
                 body_text = f"[{c.name}|doc] {c.file_path}\n{c.content}"
+            elif c.type == "file_header":
+                body_text = f"[{c.name}|file_header] {c.file_path}\n```python\n{c.content}\n```"
             else:
                 body_text = f"[{c.name}|{c.type}] {c.file_path}\n```\n{c.content}\n```"
             if total_chars + len(body_text) <= char_budget:
@@ -209,11 +212,20 @@ def _compress_search(
     top_capsules: list[Capsule],
     all_capsules: list[Capsule],
     budget_tokens: int = 500,
+    dir_filter: set[str] | None = None,
 ) -> str:
     """Mini-mapa ligero ordenado por relevancia. Trunca a budget_tokens."""
+    # Filtrar por directorio si se especifica
+    all_caps = all_capsules
+    if dir_filter:
+        all_caps = [
+            c for c in all_capsules
+            if any(f"/{d}/" in (c.file_path or "").lower().replace("\\", "/") for d in dir_filter)
+        ]
+
     # Sección explícita: funciones SIN docstring (responde directamente la query de búsqueda)
-    no_doc = [c for c in all_capsules if not c.docstring and c.type in ("function", "class")]
-    with_doc = [c for c in all_capsules if c.docstring and c.type in ("function", "class")]
+    no_doc = [c for c in all_caps if not c.docstring and c.type in ("function", "class")]
+    with_doc = [c for c in all_caps if c.docstring and c.type in ("function", "class")]
     summary: list[str] = [
         f"RESUMEN: {len(no_doc)} funciones/clases SIN docstring, {len(with_doc)} CON docstring.",
         "FUNCIONES SIN DOCSTRING:",
@@ -226,29 +238,33 @@ def _compress_search(
     # Archivos con capsulas top primero, luego el resto
     top_files = list(dict.fromkeys(c.file_path for c in top_capsules))
     by_file: dict[str, list[Capsule]] = {}
-    for c in all_capsules:
+    for c in all_caps:
         by_file.setdefault(c.file_path, []).append(c)
 
     ordered_files = top_files + [f for f in sorted(by_file) if f not in top_files]
 
     map_lines: list[str] = []
     char_budget = budget_tokens * 4
-    total_chars = sum(len(s) for s in summary)
+    # El summary tiene su propio espacio; el file map usa el presupuesto restante
+    # con un mínimo del 40% del total para garantizar que los flags ✓doc/✗doc aparezcan
+    summary_chars = sum(len(s) for s in summary)
+    map_budget = max(char_budget - summary_chars, int(char_budget * 0.4))
+    total_chars = 0
 
     for file_path in ordered_files:
         caps = by_file.get(file_path, [])
         file_line = f"\n{file_path}:"
-        if total_chars + len(file_line) > char_budget:
+        if total_chars + len(file_line) > map_budget:
             break
         map_lines.append(file_line)
         total_chars += len(file_line)
         for c in caps[:10]:
             doc_flag = " ✓doc" if c.docstring else " ✗doc"
             cap_line = f"  [{c.type}] {c.name}{doc_flag}"
-            if total_chars + len(cap_line) > char_budget:
+            if total_chars + len(cap_line) > map_budget:
                 break
             map_lines.append(cap_line)
             total_chars += len(cap_line)
 
-    map_lines.append(f"\nTotal: {len(all_capsules)} capsulas en {len(by_file)} archivos")
+    map_lines.append(f"\nTotal: {len(all_caps)} capsulas en {len(by_file)} archivos")
     return "\n".join(summary + map_lines)

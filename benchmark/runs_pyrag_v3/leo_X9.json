@@ -1,0 +1,6 @@
+{
+  "query": "En query/capa4.py, synthesize() llama al LLM con parametros especificos. Cuales son los valores exactos de temperature y max_tokens usados en esa llamada?",
+  "response": "Basado en el código de `query/capa4.py`, la función `synthesize()` — que no tiene docstring — llama al LLM con estos valores:\n\n- **`temperature`**: `0.2`\n- **`max_tokens`**: `1024`",
+  "input_tokens": 1571,
+  "output_tokens": 58
+}

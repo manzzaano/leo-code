@@ -1,0 +1,6 @@
+{
+  "query": "En query/pipeline.py, cuando Capa 0 resuelve la query directamente (fast-path), cuantos tokens LLM se usan? Lista los valores exactos de tokens_llm, input_tokens y output_tokens en _meta.",
+  "response": "En `query/pipeline.py`, cuando Capa 0 resuelve la query (fast-path), **no se usa el LLM**. Los valores en `_meta` son:\n\n- `tokens_llm`: 0\n- `input_tokens`: 0\n- `output_tokens`: 0",
+  "input_tokens": 1572,
+  "output_tokens": 66
+}

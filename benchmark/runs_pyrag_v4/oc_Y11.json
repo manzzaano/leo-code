@@ -1,0 +1,6 @@
+{
+  "query": "En query/router.py, classify_intent() tiene un caso por defecto cuando ninguna categoria tiene score. Cual es el intent_type devuelto y cuanto vale la confidence en ese caso?",
+  "response": "",
+  "input_tokens": 0,
+  "output_tokens": 0
+}

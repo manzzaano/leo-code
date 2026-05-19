@@ -1,0 +1,6 @@
+{
+  "query": "En graph/nodes.py, la funcion upsert_nodes_batch() recibe un tipo especifico. Cual es el tipo exacto del parametro nodes_data y que tipo retorna la funcion?",
+  "response": "El tipo exacto del parámetro `nodes_data` es `list[dict]` (lista de diccionarios). La función retorna `list[str]` (lista de strings con los IDs de los nodos creados/actualizados).",
+  "input_tokens": 1318,
+  "output_tokens": 51
+}
