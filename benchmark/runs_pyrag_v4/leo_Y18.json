@@ -1,6 +1,0 @@
-{
-  "query": "En security/audit.py, log_query() usa un logger configurado en _get_logger(). Cual es el path exacto del archivo de log, el nombre del formatter pattern y el nivel de logging?",
-  "response": "El archivo de log está en **`logs/audit.log`** (relativo al directorio de trabajo).\n\n- **Formato (pattern):** `%(message)s` (solo el mensaje, sin timestamp ni nivel).\n- **Nivel de logging:** `logging.INFO`.",
-  "input_tokens": 695,
-  "output_tokens": 62
-}

@@ -18,6 +18,7 @@ dependencies = [
     "kc-core>=0.1.0",
     "qdrant-client>=1.9",
     "sentence-transformers>=2.7",
+    "orjson>=3.9",
 ]
 
 [project.optional-dependencies]

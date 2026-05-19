@@ -1,6 +1,0 @@
-{
-  "query": "En query/pipeline.py, la funcion query() tiene un parametro client_id con valor por defecto. Cual es ese valor exacto?",
-  "response": "El valor por defecto del parámetro `client_id` en la función `query()` en `query/pipeline.py` es `None`.",
-  "input_tokens": 858,
-  "output_tokens": 29
-}

@@ -1,6 +1,0 @@
-{
-  "query": "Analiza el acoplamiento entre packages/leo-code/src/context/plugin.ts y kcrag.ts. Lista TODAS las dependencias directas: imports de tipos, funciones llamadas, variables de estado compartidas. Después responde: ¿podría plugin.ts funcionar con una interfaz genérica `IRagProvider` en lugar de importar kcrag directamente? ¿Qué cambiaría?",
-  "response": "",
-  "input_tokens": 10361,
-  "output_tokens": 133
-}

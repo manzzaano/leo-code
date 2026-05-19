@@ -1,46 +1,41 @@
-.DS_Store
-nul
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+*.so
 
-# Python sidecar + libs + CLI (monorepo)
-sidecar/cache/
-sidecar/**/__pycache__/
-sidecar/*.egg-info/
-kc-rag/**/__pycache__/
-kc-rag/*.egg-info/
-kc-core/**/__pycache__/
-kc-core/*.egg-info/
-cli/**/__pycache__/
-cli/*.egg-info/
-node_modules
-.worktrees
-.sst
+# Virtualenv
+.venv/
+venv/
+env/
+
+# Env
 .env
 .env.local
-.idea
-.vscode
-.codex
-*~
-playground
-tmp
-dist
-ts-dist
-.turbo
-**/.serena
-.serena/
-/result
-refs
-Session.vim
-/leo-code.json
-/opencode.json
-a.out
-target
-.scripts
-.direnv/
 
-# Local dev files
-opencode-dev
-leo-code-dev
-UPCOMING_CHANGELOG.md
+# IDE
+.idea/
+.vscode/
+.codex/
+.serena/
+
+# OS
+.DS_Store
+Thumbs.db
+nul
+
+# Sidecar cache
+sidecar/cache/
+cache/
+
+# Temp
+tmp/
 logs/
-*.bun-build
-tsconfig.tsbuildinfo
+*.log
+
+# Local dev
+leo-code-dev

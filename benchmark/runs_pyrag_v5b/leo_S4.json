@@ -1,6 +1,0 @@
-{
-  "query": "En query/capa4.py, el SYSTEM_PROMPT da instrucciones al LLM. Describe que formatos prohíbe explicitamente y que tipo de informacion exige incluir en la respuesta.",
-  "response": "Let me read the file to answer your question.Let me read the actual file content using a different approach.I'm unable to read the file due to a tool error — the `read` tool is not available in my current session, and I cannot access the file content.\n\nFor context, here's what I know from the KCRag context you provided: `C:\\Users\\Ismael\\Desktop\\RAG\\query\\capa4.py` exists (alongside `capa0.py`, `capa3.py`, `capa5.py`, etc.), but I cannot see its contents.\n\nCould you share the content of `C:\\Users\\Ismael\\Desktop\\RAG\\query\\capa4.py` so I can answer your question about the `SYSTEM_PROMPT`?",
-  "input_tokens": 46855,
-  "output_tokens": 512
-}

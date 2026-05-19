@@ -6,6 +6,8 @@ Determina:
 3. El presupuesto de tokens recomendado para el contexto
 """
 
+import re
+
 # Señales de que la query está relacionada con el código del repo
 CODE_SIGNALS = [
     "función", "funcion", "function", "módulo", "modulo", "module",
@@ -18,12 +20,12 @@ CODE_SIGNALS = [
 
 # Presupuesto de tokens por tipo de tarea
 TOKEN_BUDGET = {
-    "code_gen": 800,      # actual code content (signatures, bodies)
-    "code_edit": 800,     # función target + dependencias directas
-    "code_query": 1500,   # top 5 con docstrings, sin cuerpos completos
-    "refactor": 2000,     # target + callers + callees
-    "search": 500,        # mini-mapa ligero
-    "no_code": 0,         # sin contexto de código
+    "code_gen": 800,
+    "code_edit": 800,
+    "code_query": 1500,
+    "refactor": 2000,
+    "search": 500,
+    "no_code": 0,
 }
 
 # Señales por tipo de tarea
@@ -39,7 +41,6 @@ TASK_SIGNALS = {
     "code_query": [
         "explica", "que hace", "qué hace", "como funciona", "cómo funciona",
         "describe", "explain", "how does", "what does", "para que sirve",
-        # análisis call-graph (lectura pura — no implican escritura)
         "que llama", "qué llama", "funciones llama", "métodos llama", "metodos llama",
         "quien llama", "quién llama", "dependencias de", "callers", "callees",
     ],
@@ -53,38 +54,37 @@ TASK_SIGNALS = {
     ],
 }
 
+_SNAKE_RE = re.compile(r"\w+_\w+")
+_CAMEL_RE = re.compile(r"[a-záéíóúüñ]+[A-ZÁÉÍÓÚÜÑ]")
+_TASK_SIGNAL_RES: dict[str, list[re.Pattern]] = {
+    task_type: [re.compile(r"(?<!\w)" + re.escape(s) + r"(?!\w)") for s in signals]
+    for task_type, signals in TASK_SIGNALS.items()
+}
+
 
 def needs_code_context(query: str) -> bool:
     """Determina si la query necesita contexto del código del repositorio."""
     q = query.lower()
     if any(s in q for s in CODE_SIGNALS):
         return True
-    # Heurística: snake_case o CamelCase → probablemente nombres de funciones/clases
-    import re
-    if re.search(r"\w+_\w+", query) or re.search(r"[a-záéíóúüñ]+[A-ZÁÉÍÓÚÜÑ]", query):
+    if _SNAKE_RE.search(query) or _CAMEL_RE.search(query):
         return True
     return False
 
 
 def classify_task(query: str) -> str:
     """Clasifica el tipo de tarea según palabras clave en la query."""
-    import re
     q = query.lower()
 
     scores = {}
-    for task_type, signals in TASK_SIGNALS.items():
-        count = 0
-        for s in signals:
-            # Use word boundary matching to avoid false positives (e.g. "escribe" inside "describe")
-            if re.search(r'(?<!\w)' + re.escape(s) + r'(?!\w)', q):
-                count += 1
+    for task_type, patterns in _TASK_SIGNAL_RES.items():
+        count = sum(1 for p in patterns if p.search(q))
         scores[task_type] = count
 
     best = max(scores, key=scores.get)
     if scores[best] == 0:
-        # Check if any code signal is present
         if needs_code_context(query):
-            return "code_query"  # default para queries de código
+            return "code_query"
         return "no_code"
 
     return best

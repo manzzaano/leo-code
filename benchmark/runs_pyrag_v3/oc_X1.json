@@ -1,6 +1,0 @@
-{
-  "query": "En query/pipeline.py, que dos funciones exactas importa del modulo security? Dame los nombres exactos de las funciones importadas de security.",
-  "response": "No existe el archivo `query/pipeline.py` en el repositorio. ¿Estás seguro del nombre del archivo o podría estar en otra ubicación?",
-  "input_tokens": 75023,
-  "output_tokens": 209
-}

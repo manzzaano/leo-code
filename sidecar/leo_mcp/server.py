@@ -5,22 +5,27 @@ Endpoints:
   POST /context             — KC-RAG: indexer → Qdrant → compress → contexto
   POST /search              — Búsqueda semántica en el KG
   POST /index               — Indexar un repositorio
+  POST /preindex            — Pre-indexar sin consultar (background)
   GET  /stats               — Estadísticas del índice
 
 Ejecutar: python -m leo_mcp.server  (puerto 9898)
-         leo-code-mcp                (si instalado vía pip)
+         leo-code-mcp --workers 4  (si instalado vía pip)
 """
 
+import argparse
+import asyncio
+import json
 import os
 import re
 import sys
-import json
 import threading
-from pathlib import Path
+import time
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
@@ -30,10 +35,49 @@ _ROOT = Path(__file__).parent.parent.parent  # leo-code/
 sys.path.insert(0, str(_ROOT / "kc-rag"))
 sys.path.insert(0, str(_ROOT / "kc-core"))
 
+_CACHE_DIR = Path("./cache")
+_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+_INDEX_PATH = _CACHE_DIR / "kc_index.json.gz"
+_REPOS_PATH = _CACHE_DIR / "kc_indexed_repos.json"
+_LOCK_PATH = _CACHE_DIR / "kc_index.lock"
+
 _indexer = None
-_vector_store = None
+_vector_stores: dict[str, object] = {}
 _indexed_repos: set[str] = set()
 _index_lock = threading.Lock()
+_index_executor = ThreadPoolExecutor(max_workers=1)
+
+
+def _acquire_file_lock(timeout: int = 30) -> bool:
+    start = time.time()
+    while True:
+        try:
+            _LOCK_PATH.mkdir()
+            return True
+        except FileExistsError:
+            if time.time() - start > timeout:
+                return False
+            time.sleep(0.1)
+
+
+def _release_file_lock():
+    try:
+        _LOCK_PATH.rmdir()
+    except (FileNotFoundError, OSError):
+        pass
+
+
+def _load_indexed_repos():
+    global _indexed_repos
+    if _REPOS_PATH.exists():
+        try:
+            _indexed_repos = set(json.loads(_REPOS_PATH.read_text(encoding="utf-8")))
+        except Exception:
+            _indexed_repos = set()
+
+
+def _save_indexed_repos():
+    _REPOS_PATH.write_text(json.dumps(sorted(_indexed_repos)), encoding="utf-8")
 
 
 class ContextRequest(BaseModel):
@@ -82,30 +126,115 @@ def _get_indexer():
 
 
 def _get_vector_store(repo_path: str):
-    global _vector_store
-    if _vector_store is None:
+    if repo_path not in _vector_stores:
         from kc_code.kc_rag.vector_store import VectorStore
-        _vector_store = VectorStore(
+        _vector_stores[repo_path] = VectorStore(
             collection_name=f"leo_mcp_{abs(hash(repo_path)) % 10000}",
             path="./cache/qdrant_leo",
         )
-    return _vector_store
+    return _vector_stores[repo_path]
 
 
-def _ensure_indexed(repo_path: str):
+def _repo_caps(idx, repo_path: str) -> list:
+    """Devuelve solo las capsulas del repo especificado del indexer global."""
+    repo_prefix = repo_path + os.sep
+    return [
+        v for v in idx.get_capsules().values()
+        if os.path.abspath(v.file_path).startswith(repo_prefix) or
+           os.path.abspath(v.file_path) == repo_path
+    ]
+
+
+async def _ensure_indexed(repo_path: str):
     global _indexed_repos
+    repo = os.path.abspath(repo_path)
     with _index_lock:
-        if repo_path not in _indexed_repos:
-            idx = _get_indexer()
-            idx.build(repo_path, languages=["python", "text"], verbose=False)
-            vs = _get_vector_store(repo_path)
-            vs.add(list(idx.get_capsules().values()))
-            _indexed_repos.add(repo_path)
+        if repo in _indexed_repos:
+            return
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(_index_executor, _do_index, repo)
+
+
+def _do_index(repo: str, languages: list[str] | None = None, verbose: bool = False) -> int:
+    """Ejecuta la indexación (bloqueante). Se llama desde run_in_executor o /index."""
+    global _indexed_repos
+    idx = _get_indexer()
+    if _acquire_file_lock():
+        try:
+            _load_index_from_disk()
+            count = idx.build(repo, languages=languages or ["python", "text"], verbose=verbose)
+            vs = _get_vector_store(repo)
+            vs.add(_repo_caps(idx, repo))
+            _indexed_repos.add(repo)
+            _save_index_to_disk()
+            _save_indexed_repos()
+            return count
+        finally:
+            _release_file_lock()
+    # Fallback without lock
+    count = idx.build(repo, languages=languages or ["python", "text"], verbose=verbose)
+    vs = _get_vector_store(repo)
+    vs.add(_repo_caps(idx, repo))
+    with _index_lock:
+        _indexed_repos.add(repo)
+    return count
+
+
+def _load_index_from_disk():
+    global _indexed_repos
+    if _INDEX_PATH.exists():
+        idx = _get_indexer()
+        idx.load(str(_INDEX_PATH))
+        _load_indexed_repos()
+
+
+def _save_index_to_disk():
+    idx = _get_indexer()
+    idx.save(str(_INDEX_PATH))
+
+
+def _cache_context_result(key: str, result: dict):
+    try:
+        from kc_core.cache import cache_result
+        cache_result(key, result, ttl=60)
+    except Exception:
+        pass
+
+
+def _invalidate_cache():
+    try:
+        from kc_core.cache import clear_cache
+        clear_cache("query:*")
+    except Exception:
+        pass
+
+
+_rate_limits: dict[str, list[float]] = {}
+_RATE_LIMIT_WINDOW = 10
+_RATE_LIMIT_MAX = 30
+
+
+def _check_rate_limit(ip: str) -> bool:
+    now = time.time()
+    _rate_limits.setdefault(ip, [])
+    _rate_limits[ip] = [t for t in _rate_limits[ip] if now - t < _RATE_LIMIT_WINDOW]
+    if len(_rate_limits[ip]) >= _RATE_LIMIT_MAX:
+        return False
+    _rate_limits[ip].append(now)
+    return True
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("[leo-mcp] Arrancando servidor KC-RAG en puerto 9898...")
+    _load_index_from_disk()
+    try:
+        from kc_core.cache import init as cache_init, is_available
+        cache_init()
+        if is_available():
+            print("[leo-mcp] Redis cache conectado")
+    except Exception:
+        pass
     yield
     print("[leo-mcp] Apagando.")
 
@@ -120,14 +249,33 @@ async def health():
 
 
 @app.post("/context", response_model=ContextResponse)
-async def get_context(req: ContextRequest):
+async def get_context(req: ContextRequest, request: Request):
     """KC-RAG: indexer → Qdrant → compress → contexto comprimido."""
+    client_ip = request.client.host if request.client else "unknown"
+    if not _check_rate_limit(client_ip):
+        raise HTTPException(status_code=429, detail="Too many requests")
     try:
         repo = os.path.abspath(req.repo_path)
-        _ensure_indexed(repo)
+        await _ensure_indexed(repo)
+
+        cache_key = f"{req.query}|{repo}|{req.task_type}|{req.budget_tokens}"
+        try:
+            from kc_core.cache import get_cached_result
+            cached = get_cached_result(cache_key)
+            if cached:
+                return ContextResponse(**cached)
+        except Exception:
+            pass
 
         idx = _get_indexer()
-        caps = idx.get_capsules()
+        all_caps = idx.get_capsules()
+        # Filter to only capsules from this repo (prevents cross-repo contamination)
+        repo_prefix = repo + os.sep
+        caps = {
+            k: v for k, v in all_caps.items()
+            if os.path.abspath(v.file_path).startswith(repo_prefix) or
+               os.path.abspath(v.file_path) == repo
+        }
         vs = _get_vector_store(repo)
 
         from kc_code.kc_rag.classifier import classify_task, get_budget
@@ -152,12 +300,9 @@ async def get_context(req: ContextRequest):
             if not doc_caps:
                 doc_caps = [c for c in caps.values() if c.type == "document"][:10]
             context = compress(doc_caps, list(caps.values()), budget_tokens=max(budget, 800), task_type=task_type)
-            return ContextResponse(
-                context=context,
-                tokens=len(context) // 2,
-                task_type=task_type,
-                capsules_total=len(caps),
-            )
+            result = {"context": context, "tokens": len(context) // 2, "task_type": task_type, "capsules_total": len(caps)}
+            _cache_context_result(cache_key, result)
+            return ContextResponse(**result)
 
         # Hybrid: exact match (one rep per file for path, name match) + semantic
         query_words = set(re.findall(r"\w{4,}", req.query.lower()))
@@ -225,12 +370,9 @@ async def get_context(req: ContextRequest):
         from kc_code.kc_rag.compressor import compress
         context = compress(top_caps, list(caps.values()), budget_tokens=budget, task_type=task_type, dir_filter=dir_prefixes)
 
-        return ContextResponse(
-            context=context,
-            tokens=len(context) // 2,
-            task_type=task_type,
-            capsules_total=len(caps),
-        )
+        result = {"context": context, "tokens": len(context) // 2, "task_type": task_type, "capsules_total": len(caps)}
+        _cache_context_result(cache_key, result)
+        return ContextResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -240,10 +382,16 @@ async def search(req: SearchRequest):
     """Búsqueda semántica en el KG de código."""
     try:
         repo = os.path.abspath(req.repo_path)
-        _ensure_indexed(repo)
+        await _ensure_indexed(repo)
 
         idx = _get_indexer()
-        caps = idx.get_capsules()
+        all_caps = idx.get_capsules()
+        repo_prefix = repo + os.sep
+        caps = {
+            k: v for k, v in all_caps.items()
+            if os.path.abspath(v.file_path).startswith(repo_prefix) or
+               os.path.abspath(v.file_path) == repo
+        }
         vs = _get_vector_store(repo)
 
         top_ids = vs.search(req.query, top_k=req.top_k)
@@ -269,20 +417,48 @@ async def index_repo(req: IndexRequest):
     try:
         repo = os.path.abspath(req.repo_path)
         langs = [l.strip() for l in req.languages.split(",")]
-        idx = _get_indexer()
-        count = idx.build(repo, languages=langs, verbose=True)
-        vs = _get_vector_store(repo)
-        vs.add(list(idx.get_capsules().values()))
-        _indexed_repos.add(repo)
+        loop = asyncio.get_event_loop()
+        count = await loop.run_in_executor(_index_executor, _do_index, repo, langs, True)
+        _invalidate_cache()
         return {"status": "ok", "capsules": count, "repo": repo}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/preindex")
+async def preindex(req: IndexRequest):
+    """Pre-indexa en background sin esperar."""
+    repo = os.path.abspath(req.repo_path)
+    langs = [l.strip() for l in req.languages.split(",")]
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(_index_executor, _do_index, repo, langs, True)
+    return {"status": "indexing", "repo": repo}
+
+
 @app.get("/stats", response_model=StatsResponse)
-async def stats():
-    """Estadísticas del índice actual."""
+async def stats(repo_path: Optional[str] = None):
+    """Estadísticas del índice. Si repo_path se especifica, filtra por repo."""
     idx = _get_indexer()
+    if repo_path:
+        repo = os.path.abspath(repo_path)
+        repo_prefix = repo + os.sep
+        all_caps = idx.get_capsules()
+        caps = {
+            k: v for k, v in all_caps.items()
+            if os.path.abspath(v.file_path).startswith(repo_prefix) or
+               os.path.abspath(v.file_path) == repo
+        }
+        by_type: dict[str, int] = {}
+        files: set[str] = set()
+        for c in caps.values():
+            by_type[c.type] = by_type.get(c.type, 0) + 1
+            files.add(c.file_path)
+        return StatsResponse(
+            total_capsules=len(caps),
+            total_files=len(files),
+            by_type=by_type,
+            repos_indexed=list(_indexed_repos),
+        )
     s = idx.stats()
     return StatsResponse(
         total_capsules=s["total_capsules"],
@@ -293,14 +469,21 @@ async def stats():
 
 
 def main():
-    print("[leo-mcp] Leo-Code MCP Server v0.1.0")
+    parser = argparse.ArgumentParser(description="Leo-Code MCP Server")
+    parser.add_argument("--workers", type=int, default=1, help="Número de workers uvicorn (default 1)")
+    parser.add_argument("--port", type=int, default=9898, help="Puerto (default 9898)")
+    parser.add_argument("--host", default="0.0.0.0", help="Host (default 0.0.0.0)")
+    args = parser.parse_args()
+
+    print(f"[leo-mcp] Leo-Code MCP Server v0.1.0 (workers={args.workers})")
     print("[leo-mcp] Endpoints:")
-    print("  GET  http://localhost:9898/health")
-    print("  POST http://localhost:9898/context")
-    print("  POST http://localhost:9898/search")
-    print("  POST http://localhost:9898/index")
-    print("  GET  http://localhost:9898/stats")
-    uvicorn.run(app, host="0.0.0.0", port=9898, log_level="info")
+    print(f"  GET  http://{args.host}:{args.port}/health")
+    print(f"  POST http://{args.host}:{args.port}/context")
+    print(f"  POST http://{args.host}:{args.port}/search")
+    print(f"  POST http://{args.host}:{args.port}/index")
+    print(f"  POST http://{args.host}:{args.port}/preindex")
+    print(f"  GET  http://{args.host}:{args.port}/stats")
+    uvicorn.run(app, host=args.host, port=args.port, log_level="info", workers=args.workers)
 
 
 if __name__ == "__main__":

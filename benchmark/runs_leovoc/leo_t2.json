@@ -1,6 +1,0 @@
-{
-  "query": "En packages/leo-code/src/mcp/index.ts hay un tipo union llamado Status con 5 variantes. Lista las 5 variantes exactas con sus campos y describe en qué condición se produce cada una durante el ciclo de vida de un servidor MCP.",
-  "response": "",
-  "input_tokens": 10470,
-  "output_tokens": 68
-}

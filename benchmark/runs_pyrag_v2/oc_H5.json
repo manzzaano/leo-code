@@ -1,6 +1,0 @@
-{
-  "query": "En graph/traversal.py existe una funcion llamada cypher_property_lookup. Cuales son sus parametros exactos y que tipo retorna?",
-  "response": "**Parámetros:** `entity_name: str`, `property_name: str`\n\n**Retorna:** `str | None`",
-  "input_tokens": 37524,
-  "output_tokens": 94
-}

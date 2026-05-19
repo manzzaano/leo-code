@@ -1,6 +1,0 @@
-{
-  "query": "Escribe el import correcto para usar upsert_node() desde graph/nodes.py. Luego escribe la llamada completa a upsert_node() con todos sus parametros incluyendo los opcionales con sus defaults exactos.",
-  "response": "Let me find the function definition first.No existe un archivo `graph/nodes.py` en el proyecto. Tampoco hay un directorio `graph/` con archivos Python. No puedo darte el import ni los parámetros sin la definición real de la función.\n\n¿Podrías indicarme en qué directorio está `graph/nodes.py`?",
-  "input_tokens": 75066,
-  "output_tokens": 233
-}

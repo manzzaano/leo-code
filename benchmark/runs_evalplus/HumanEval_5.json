@@ -1,9 +1,0 @@
-{
-  "task_id": "HumanEval/5",
-  "entry_point": "intersperse",
-  "raw_response": "```python\nfrom typing import List\n\n\ndef intersperse(numbers: List[int], delimeter: int) -> List[int]:\n    result = []\n    for i, num in enumerate(numbers):\n        result.append(num)\n        if i < len(numbers) - 1:\n            result.append(delimeter)\n    return result\n```",
-  "extracted_code": "from typing import List\n\n\ndef intersperse(numbers: List[int], delimeter: int) -> List[int]:\n    result = []\n    for i, num in enumerate(numbers):\n        result.append(num)\n        if i < len(numbers) - 1:\n            result.append(delimeter)\n    return result",
-  "input_tokens": 10369,
-  "output_tokens": 68,
-  "latency_s": 6.124
-}

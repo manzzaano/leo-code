@@ -1,6 +1,0 @@
-{
-  "query": "En ingestion/extractor.py, extract_entities() tiene un parametro de temperatura. Cual es su valor por defecto exacto?",
-  "response": "No existe un archivo `ingestion/extractor.py` ni ningún `extractor.py` en el repositorio.",
-  "input_tokens": 74972,
-  "output_tokens": 185
-}

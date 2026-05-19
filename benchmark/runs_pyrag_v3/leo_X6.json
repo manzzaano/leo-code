@@ -1,6 +1,0 @@
-{
-  "query": "En graph/vector_index.py hay exactamente 3 funciones publicas de busqueda vectorial. Cuales son sus nombres exactos y cual es el valor por defecto del parametro n_results?",
-  "response": "Las 3 funciones públicas de búsqueda vectorial en `graph/vector_index.py` son:\n\n1. `search_similar` → n_results=5\n2. `search_by_text` → n_results=5  \n3. `hybrid_search` → n_results=5",
-  "input_tokens": 1520,
-  "output_tokens": 59
-}

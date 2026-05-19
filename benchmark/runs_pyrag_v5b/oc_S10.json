@@ -1,6 +1,0 @@
-{
-  "query": "En ingestion/pipeline.py, ingest_file() tiene logica condicional para decidir que funcion privada llamar. Bajo que condicion exacta llama a _ingest_python() y que parametros le pasa?",
-  "response": "No existe ningún archivo `ingestion/pipeline.py` ni ningún archivo con \"ingest\" o \"pipeline\" en el repositorio. ¿Podrías confirmar la ruta exacta o si el archivo está en otro lugar?",
-  "input_tokens": 113076,
-  "output_tokens": 329
-}

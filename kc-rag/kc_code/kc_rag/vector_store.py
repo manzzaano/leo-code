@@ -44,23 +44,29 @@ class VectorStore:
         return self._encoder
 
     def add(self, capsules: list[Capsule]):
-        """Añade cápsulas al índice vectorial con embeddings."""
+        """Añade cápsulas al índice vectorial con embeddings en batch."""
         if not capsules:
             return
         from qdrant_client.models import PointStruct
 
-        points = []
+        docs = []
         for c in capsules:
             doc = f"{c.name} {c.type}: {c.signature}"
             if c.docstring:
                 doc += f" {c.docstring}"
-            vec = self.encoder.encode(doc)
-            points.append(PointStruct(
+            docs.append(doc)
+
+        vecs = self.encoder.encode_batch(docs)
+
+        points = [
+            PointStruct(
                 id=c.id,
                 vector=vec,
                 payload={"name": c.name, "type": c.type, "file_path": c.file_path,
                           "signature": c.signature, "docstring": c.docstring or ""},
-            ))
+            )
+            for c, vec in zip(capsules, vecs)
+        ]
 
         for i in range(0, len(points), 100):
             self.client.upsert(collection_name=self.collection, points=points[i:i+100])

@@ -1,6 +1,0 @@
-{
-  "query": "En query/pipeline.py, cuando el routing decide intent==parallel, se usa asyncio para ejecutar route_parallel(). Escribe la llamada exacta incluyendo los argumentos pasados a route_parallel().",
-  "response": "Let me look at the relevant code.The file content is already in the kcrag_context. Looking at the summary, I only have the file listing, not the content. Let me read it via the edit tool's read requirement... I can't read files. But the kcrag_context says \"Usa search_code para explorar el codigo si necesitas detalles\" — however no search tool is available.\n\nI only have `edit`, `write`, and `todowrite`. I'll work with what's in the kcrag_context. The file is `query/pipeline.py`, but its content isn't included in the context beyond the filename.\n\nLet me try to read it:\n\nI can't read files direct",
-  "input_tokens": 27677,
-  "output_tokens": 370
-}

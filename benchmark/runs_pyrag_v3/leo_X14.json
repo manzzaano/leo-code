@@ -1,6 +1,0 @@
-{
-  "query": "En graph/nodes.py existe un set llamado _RESERVED con campos protegidos. Cuantos campos contiene y cuales son exactamente?",
-  "response": "El set `_RESERVED` en `graph/nodes.py` contiene **3 campos**:\n\n1. `id`\n2. `type`\n3. `name`",
-  "input_tokens": 1512,
-  "output_tokens": 36
-}

@@ -1,6 +1,0 @@
-{
-  "query": "En query/router.py, cual es la diferencia entre route() y classify_intent()? Cuantos valores distintos de intent puede retornar classify_intent() y cuales son? Puede route() retornar un intent que classify_intent() no puede?",
-  "response": "En `query/router.py`:\n\n**Diferencia:**\n- `classify_intent()`: Clasifica una consulta en una categoría de intención (devuelve un string con el intent).\n- `route()`: Usa `classify_intent()` para determinar la intención y luego decide qué pipeline/capa ejecutar para procesar la consulta.\n\n**`classify_intent()`** retorna **3 valores**:\n1. `\"lookup\"` - búsqueda por código/producto\n2. `\"relational\"` - preguntas relacionales\n3. `\"code\"` - consultas sobre códigos\n\n**¿Puede `route()` retornar un intent que `classify_intent()` no puede?**\nNo, `route()` solo retorna los intents que `classify_intent()` produce. No añade intents adicionales.",
-  "input_tokens": 1587,
-  "output_tokens": 194
-}

@@ -1,6 +1,0 @@
-{
-  "query": "En graph/nodes.py, upsert_node() tiene logica Cypher ON MATCH. Cuando el nodo ya existe, como actualiza la confianza? Escribe la expresion Cypher exacta usada.",
-  "response": "Let me read the file first.I don't have a `read` tool available. Based on the KC-RAG context I already have, let me answer from what I know.\n\nThe function `upsert_node()` in `graph/nodes.py` uses Cypher's `MERGE` with `ON MATCH SET`. Looking at the cached context, the exact expression would be something like:\n\n```cypher\nMERGE (n:Entity {name: $name})\nON MATCH SET n.confidence = $confidence\n```\n\nBut I need to see the actual code to give you the exact line. Since I can't read the file with the tools available, could you share the relevant snippet from `graph/nodes.py`?",
-  "input_tokens": 37080,
-  "output_tokens": 335
-}

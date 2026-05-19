@@ -1,6 +1,0 @@
-{
-  "query": "En ingestion/pipeline.py, identifica exactamente que funciones importa del modulo graph.nodes. Lista cada funcion importada de graph.nodes con su nombre exacto.",
-  "response": "Basado en el contenido del archivo `ingestion/pipeline.py`, las funciones importadas exactamente del módulo `graph.nodes` son:\n\n1. `upsert_node`\n2. `upsert_relation`\n3. `upsert_nodes_batch`\n4. `upsert_relations_batch`\n5. `mark_orphans`\n6. `_node_id`\n\nLa línea de importación completa es:\n```python\nfrom graph.nodes import upsert_node, upsert_relation, upsert_nodes_batch, upsert_relations_batch, mark_orphans, _node_id\n```",
-  "input_tokens": 2866,
-  "output_tokens": 126
-}

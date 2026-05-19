@@ -1,6 +1,0 @@
-{
-  "query": "En ingestion/pipeline.py existe una constante llamada CONFIDENCE_MAP. Cuales son los dos pares clave-valor exactos? Dame los valores numericos.",
-  "response": "No existe ningún archivo `ingestion/pipeline.py` en este repositorio ni ningún directorio `ingestion/`. ¿Podrías verificar la ruta exacta o el nombre del proyecto?",
-  "input_tokens": 75013,
-  "output_tokens": 206
-}

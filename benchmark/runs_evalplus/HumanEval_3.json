@@ -1,9 +1,0 @@
-{
-  "task_id": "HumanEval/3",
-  "entry_point": "below_zero",
-  "raw_response": "```python\ndef below_zero(operations: List[int]) -> bool:\n    balance = 0\n    for op in operations:\n        balance += op\n        if balance < 0:\n            return True\n    return False\n```",
-  "extracted_code": "def below_zero(operations: List[int]) -> bool:\n    balance = 0\n    for op in operations:\n        balance += op\n        if balance < 0:\n            return True\n    return False",
-  "input_tokens": 10391,
-  "output_tokens": 49,
-  "latency_s": 5.735
-}

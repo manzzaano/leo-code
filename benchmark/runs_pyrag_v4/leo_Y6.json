@@ -1,6 +1,0 @@
-{
-  "query": "En query/router.py, cuando classify_intent() detecta code_score > 0, cual es la base numerica de confidence y cuanto suma por cada CODE_PATTERNS matched? Cual es el maximo?",
-  "response": "En `classify_intent()`, cuando `code_score > 0`:\n\n- **Base numérica de `confidence`**: 0.0\n- **Suma por cada `CODE_PATTERNS` matched**: 0.15 por cada uno\n- **Máximo**: No tiene límite explícito, pero depende del número de patrones coincidentes (teóricamente ilimitado si hay muchos matches).",
-  "input_tokens": 732,
-  "output_tokens": 92
-}

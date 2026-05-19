@@ -1,6 +1,0 @@
-{
-  "query": "En graph/nodes.py, upsert_node() tiene un parametro aliases. Cual es su tipo exacto de anotacion y su valor por defecto? Tambien nombra el bool parametro que existe junto a aliases.",
-  "response": "El tipo exacto de `aliases` es `list` (sin anotación genérica) y su valor por defecto es `None`.\n\nEl parámetro bool que existe junto a `aliases` es `precision_critical`.",
-  "input_tokens": 1361,
-  "output_tokens": 49
-}

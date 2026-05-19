@@ -1,9 +1,0 @@
-{
-  "task_id": "HumanEval/10",
-  "entry_point": "make_palindrome",
-  "raw_response": "```python\ndef make_palindrome(string: str) -> str:\n    \"\"\" Find the shortest palindrome that begins with a supplied string.\n    Algorithm idea is simple:\n    - Find the longest postfix of supplied string that is a palindrome.\n    - Append to the end of the string reverse of a string prefix that comes before the palindromic suffix.\n    >>> make_palindrome('')\n    ''\n    >>> make_palindrome('cat')\n    'catac'\n    >>> make_palindrome('cata')\n    'catac'\n    \"\"\"\n    if not string:\n        return \"\"\n\n    palindromic_suffix_start = 0\n    for i in range(len(string)):\n        if is_palindrome(string[i:]):\n            palindromic_suffix_start = i\n            break\n\n    prefix = string[:palindromic_suffix_start]\n    return string + prefix[::-1]\n```",
-  "extracted_code": "def make_palindrome(string: str) -> str:\n    \"\"\" Find the shortest palindrome that begins with a supplied string.\n    Algorithm idea is simple:\n    - Find the longest postfix of supplied string that is a palindrome.\n    - Append to the end of the string reverse of a string prefix that comes before the palindromic suffix.\n    >>> make_palindrome('')\n    ''\n    >>> make_palindrome('cat')\n    'catac'\n    >>> make_palindrome('cata')\n    'catac'\n    \"\"\"\n    if not string:\n        return \"\"\n\n    palin",
-  "input_tokens": 10425,
-  "output_tokens": 185,
-  "latency_s": 7.064
-}

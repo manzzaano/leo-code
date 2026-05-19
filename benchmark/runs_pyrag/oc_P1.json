@@ -1,6 +1,0 @@
-{
-  "query": "¿Qué parámetros exactos acepta la función bfs_subgraph() en graph/traversal.py y cuáles son sus tipos y valores por defecto?",
-  "response": "",
-  "input_tokens": 18642,
-  "output_tokens": 63
-}

@@ -1,6 +1,0 @@
-{
-  "query": "En graph/nodes.py existen funciones para operaciones en batch. Cuales son sus nombres exactos y que tipo de parametro reciben?",
-  "response": "En `graph/nodes.py` no hay funciones para operaciones en batch. Las funciones definidas son:\n\n- **`upsert_node`** ✗doc: recibe `tx` (transacción), `node_type` (str), `properties` (dict)\n- **`upsert_relation`** ✗doc: recibe `tx` (transacción), `source_id` (str), `target_id` (str), `rel_type` (str), `properties` (dict)  \n- **`_node_id`** ✗doc: recibe `name` (str), `node_type` (str)\n- **`mark_orphans`** ✗doc: recibe `tx` (transacción)\n- **`get_node_by_name`** ✗doc: recibe `tx` (transacción), `name`",
-  "input_tokens": 1513,
-  "output_tokens": 256
-}

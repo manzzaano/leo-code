@@ -1,6 +1,0 @@
-{
-  "query": "En graph/nodes.py existen funciones para operaciones en batch. Cuales son sus nombres exactos y que tipo de parametro reciben?",
-  "response": "No existe el archivo `graph/nodes.py` en el repositorio. El nombre del archivo es incorrecto o el proyecto no tiene esa estructura. ¿Podrías verificar la ruta exacta o el nombre del archivo?",
-  "input_tokens": 56164,
-  "output_tokens": 155
-}

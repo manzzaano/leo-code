@@ -1,6 +1,0 @@
-{
-  "query": "En query/pipeline.py, cuando validate_query() lanza ValueError, que diccionario exacto devuelve query()? Describe cada campo: respuesta, evidencia, inferencias, _meta (con capa y error), _grounding (con score).",
-  "response": "Let me find and read the relevant code.No existe ese archivo en el repositorio.El archivo `query/pipeline.py` no existe en este repositorio. No puedo responder la pregunta sin el código fuente.",
-  "input_tokens": 56333,
-  "output_tokens": 194
-}
