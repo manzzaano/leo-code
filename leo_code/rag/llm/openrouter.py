@@ -1,7 +1,9 @@
-"""OpenRouterProvider: passthrough a 100+ modelos vía OpenRouter API."""
+"""OpenRouterProvider: passthrough a 200+ modelos vía OpenRouter API (OpenAI-compatible)."""
 
+import os
 from typing import Optional
-from leo_code.rag.llm.provider import LLMProvider, Response
+
+from leo_code.rag.llm.provider import LLMProvider, Response, TokenUsage, ToolCall
 
 
 class OpenRouterProvider(LLMProvider):
@@ -11,8 +13,19 @@ class OpenRouterProvider(LLMProvider):
 
     def __init__(self, api_key: Optional[str] = None, model: str = "anthropic/claude-sonnet-4"):
         super().__init__(model=model)
-        self.api_key = api_key
+        self.api_key = api_key or os.getenv("OPENROUTER_API_KEY", "")
         self.model = model
+        self._client = None
+
+    @property
+    def client(self):
+        if self._client is None:
+            from openai import OpenAI
+            self._client = OpenAI(
+                api_key=self.api_key,
+                base_url="https://openrouter.ai/api/v1",
+            )
+        return self._client
 
     async def generate(
         self,
@@ -20,12 +33,44 @@ class OpenRouterProvider(LLMProvider):
         tools: Optional[list[dict]] = None,
         temperature: float = 0.2,
     ) -> Response:
-        # TODO: Implementar vía OpenRouter API (base_url = https://openrouter.ai/api/v1)
-        return Response(text="[OpenRouterProvider.generate() — pendiente de implementar]")
+        kwargs = dict(model=self.model, messages=messages, temperature=temperature, max_tokens=4096)
+        if tools:
+            kwargs["tools"] = tools
+            kwargs["tool_choice"] = "auto"
 
-    async def stream(
-        self,
-        messages: list[dict],
-        tools: Optional[list[dict]] = None,
-    ):
-        yield "[OpenRouterProvider.stream() — pendiente de implementar]"
+        extra_headers = {
+            "HTTP-Referer": "https://github.com/manzzaano/leo-code",
+            "X-Title": "leo-code",
+        }
+        resp = self.client.chat.completions.create(**kwargs, extra_headers=extra_headers)
+        choice = resp.choices[0]
+        msg = choice.message
+
+        tool_calls = []
+        if msg.tool_calls:
+            import json
+            for tc in msg.tool_calls:
+                try:
+                    args = json.loads(tc.function.arguments)
+                except Exception:
+                    args = {}
+                tool_calls.append(ToolCall(name=tc.function.name, arguments=args, id=tc.id))
+
+        return Response(
+            text=msg.content or "",
+            tool_calls=tool_calls,
+            usage=TokenUsage(
+                input_tokens=resp.usage.prompt_tokens,
+                output_tokens=resp.usage.completion_tokens,
+            ) if resp.usage else TokenUsage(),
+            finish_reason=choice.finish_reason or "stop",
+        )
+
+    async def stream(self, messages: list[dict], tools: Optional[list[dict]] = None):
+        kwargs = dict(model=self.model, messages=messages, temperature=0.2, max_tokens=4096, stream=True)
+        if tools:
+            kwargs["tools"] = tools
+        stream = self.client.chat.completions.create(**kwargs)
+        for chunk in stream:
+            if chunk.choices and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content

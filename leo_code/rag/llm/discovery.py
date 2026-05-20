@@ -17,6 +17,9 @@ _PROVIDER_ENV_VARS = {
     "mistral": ["MISTRAL_API_KEY"],
     "groq": ["GROQ_API_KEY"],
     "cohere": ["COHERE_API_KEY"],
+    "together": ["TOGETHER_API_KEY"],
+    "azure": ["AZURE_OPENAI_API_KEY"],
+    "bedrock": ["AWS_ACCESS_KEY_ID"],
 }
 
 
