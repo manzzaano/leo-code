@@ -65,11 +65,84 @@ _LANG_PATTERNS: dict[str, dict[str, str]] = {
         "class": r"(?:public\s+)?class\s+(\w+)",
         "using": r"using\s+([^;]+);",
     },
+    "php": {
+        "function": r"function\s+(\w+)\s*\((.*?)\)",
+        "class": r"class\s+(\w+)",
+        "import": r"(?:require(?:_once)?|include(?:_once)?|use)\s+['\x22](.+?)['\x22]",
+    },
+    "swift": {
+        "function": r"func\s+(\w+)\s*\((.*?)\)",
+        "class": r"class\s+(\w+)(?:\s*:\s*\w+)?",
+        "struct": r"struct\s+(\w+)(?:\s*:\s*\w+)?",
+        "import": r"import\s+(\w+)",
+    },
+    "kotlin": {
+        "function": r"fun\s+(\w+)\s*\((.*?)\)",
+        "class": r"class\s+(\w+)",
+        "import": r"import\s+([\w.]+)",
+    },
+    "scala": {
+        "function": r"def\s+(\w+)\s*\((.*?)\)",
+        "class": r"class\s+(\w+)",
+        "object": r"object\s+(\w+)",
+        "import": r"import\s+([\w.]+)",
+    },
+    "dart": {
+        "function": r"(?:Future<\w+>|void|String|int|bool|Widget)\s+(\w+)\s*\((.*?)\)",
+        "class": r"class\s+(\w+)",
+        "import": r"import\s+['\x22](.+?)['\x22]",
+    },
+    "lua": {
+        "function": r"function\s+(\w+)\s*\((.*?)\)",
+        "local_function": r"local\s+function\s+(\w+)\s*\((.*?)\)",
+        "module": r"require\s*['\x22](.+?)['\x22]",
+    },
+    "r": {
+        "function": r"(\w+)\s*<-\s*function\s*\((.*?)\)",
+        "import": r"library\((\w+)\)|source\(['\x22](.+?)['\x22]\)",
+    },
+    "elixir": {
+        "function": r"def\s+(\w+)\s*\((.*?)\)",
+        "module": r"defmodule\s+(\w+)",
+        "import": r"(?:import|alias|require)\s+([\w.]+)",
+    },
+    "haskell": {
+        "type_sig": r"(\w+)\s*::",
+        "import": r"import\s+(?:qualified\s+)?([\w.]+)",
+    },
+    "perl": {
+        "function": r"sub\s+(\w+)\s*\{",
+        "package": r"package\s+(\w+)",
+        "import": r"use\s+([\w:]+)",
+    },
+    "julia": {
+        "function": r"function\s+(\w+)\s*\((.*?)\)",
+        "struct": r"struct\s+(\w+)",
+        "import": r"(?:import|using)\s+([\w.]+)",
+    },
+    "objectivec": {
+        "method": r"[-+]\s*\([^)]*\)\s*(\w+)",
+        "class": r"@interface\s+(\w+)",
+        "import": r'#import\s+[<"](.+?)[>"]',
+    },
+    "shell": {
+        "function": r"(\w+)\s*\(\s*\)\s*\{",
+        "import": r"(?:source|\.)\s+['\x22]?(.+?)['\x22]?$",
+    },
+    "sql": {
+        "function": r"CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(\w+)\s*\(?(.*?)\)?",
+        "table": r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)",
+        "view": r"CREATE\s+(?:OR\s+REPLACE\s+)?VIEW\s+(\w+)",
+    },
 }
 
 _LANG_COMMENT: dict[str, str] = {
     "javascript": "//", "typescript": "//", "go": "//", "rust": "//",
-    "java": "//", "c": "//", "cpp": "//", "csharp": "//", "ruby": "#",
+    "java": "//", "c": "//", "cpp": "//", "csharp": "//",
+    "php": "//", "swift": "//", "kotlin": "//", "scala": "//",
+    "dart": "//", "objectivec": "//", "julia": "#", "ruby": "#",
+    "perl": "#", "r": "#", "shell": "#", "sql": "--",
+    "haskell": "--", "elixir": "#", "lua": "--",
 }
 
 _FUNC_DECORATION = r"^\s*(?:pub|export|static|async|virtual|inline|const|fn|func|def|function|class)\b"
@@ -159,7 +232,11 @@ def _is_comment(lines: list[str], lineno: int, language: str) -> bool:
 def _build_signature(language: str, ptype: str, name: str, params: str) -> str:
     keyword_map = {
         "javascript": "function", "typescript": "function", "go": "func",
-        "rust": "fn", "java": "def", "ruby": "def", "c": "func", "cpp": "func", "csharp": "def",
+        "rust": "fn", "java": "def", "ruby": "def", "c": "func", "cpp": "func",
+        "csharp": "def", "php": "function", "swift": "func", "kotlin": "fun",
+        "scala": "def", "dart": "func", "lua": "function", "r": "function",
+        "elixir": "def", "haskell": "func", "perl": "sub", "julia": "function",
+        "objectivec": "def", "shell": "function", "sql": "FUNCTION",
     }
     kw = keyword_map.get(language, "def")
 
@@ -178,7 +255,8 @@ def _find_block_end(lines: list[str], start_lineno: int, language: str) -> int:
     if start_lineno < 1 or start_lineno > len(lines):
         return min(start_lineno + 10, len(lines))
 
-    brace_langs = {"javascript", "typescript", "go", "rust", "java", "c", "cpp", "csharp"}
+    brace_langs = {"javascript", "typescript", "go", "rust", "java", "c", "cpp", "csharp",
+                   "php", "swift", "kotlin", "scala", "dart", "objectivec", "perl", "shell"}
     if language in brace_langs:
         depth = 0
         started = False
@@ -191,15 +269,28 @@ def _find_block_end(lines: list[str], start_lineno: int, language: str) -> int:
                 return i + 1
         return min(start_lineno + 20, len(lines))
 
-    if language == "ruby":
+    if language in ("ruby", "lua", "elixir", "julia"):
         match = re.match(r"^\s*", lines[start_lineno - 1])
         base_indent = len(match.group()) if match else 0
         for i in range(start_lineno, len(lines)):
-            if lines[i].strip() == "end":
+            line = lines[i].strip()
+            if line == "end":
                 return i + 1
-            if lines[i].strip() and not lines[i].startswith(" " * (base_indent + 1)):
+            if line and not line.startswith(" " * (base_indent + 1)):
                 if i > start_lineno + 1:
                     return i
+        return min(start_lineno + 30, len(lines))
+
+    if language == "sql":
+        depth = 0
+        started = False
+        for i in range(start_lineno - 1, len(lines)):
+            line = lines[i].upper().strip()
+            depth += line.count("BEGIN") - line.count("END")
+            if "BEGIN" in line:
+                started = True
+            if started and depth == 0:
+                return i + 1
         return min(start_lineno + 30, len(lines))
 
     return min(start_lineno + 10, len(lines))
@@ -216,6 +307,20 @@ def _find_calls_in_block(content: str, language: str) -> list[str]:
         "c": r"(\w+)\s*\(",
         "cpp": r"(\w+)\s*\(",
         "csharp": r"(\w+)\s*\(",
+        "php": r"(\w+)\s*\(",
+        "swift": r"(\w+)\s*\(",
+        "kotlin": r"(\w+)\s*\(",
+        "scala": r"(\w+)\s*\(",
+        "dart": r"(\w+)\s*\(",
+        "lua": r"(\w+)\s*\(",
+        "r": r"(\w+)\s*\(",
+        "elixir": r"(\w+)\s*\(",
+        "haskell": r"(\w+)\s",
+        "perl": r"(\w+)\s*\(",
+        "julia": r"(\w+)\s*\(",
+        "objectivec": r"\[\w+\s+(\w+)",
+        "shell": r"(\w+)\s",
+        "sql": r"\bEXEC(?:UTE)?\s+(\w+)|\bCALL\s+(\w+)",
     }
     pattern = call_patterns.get(language, r"(\w+)\s*\(")
     stopwords = {"if", "for", "while", "switch", "return", "new", "throw", "catch",
