@@ -8,7 +8,7 @@ Capas:
 - cli: terminal UI con click + rich
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from leo_code.rag.encoder import Encoder
 from leo_code.rag.vector_store import VectorStore

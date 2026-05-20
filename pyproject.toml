@@ -26,12 +26,6 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
-[project.urls]
-Homepage = "https://github.com/manzzaano/leo-code"
-Documentation = "https://github.com/manzzaano/leo-code#readme"
-Repository = "https://github.com/manzzaano/leo-code.git"
-Issues = "https://github.com/manzzaano/leo-code/issues"
-
 dependencies = [
     "fastapi>=0.115",
     "uvicorn>=0.30",
@@ -44,6 +38,12 @@ dependencies = [
     "sentence-transformers>=2.7",
     "orjson>=3.9",
 ]
+
+[project.urls]
+Homepage = "https://github.com/manzzaano/leo-code"
+Documentation = "https://github.com/manzzaano/leo-code#readme"
+Repository = "https://github.com/manzzaano/leo-code.git"
+Issues = "https://github.com/manzzaano/leo-code/issues"
 
 [project.optional-dependencies]
 dev = [
@@ -74,6 +74,7 @@ all = [
 ]
 
 [project.scripts]
+leo-code = "leo_code.rag.cli.app:cli"
 leo-code-mcp = "leo_code.server.server:main"
 
 [tool.setuptools.packages.find]

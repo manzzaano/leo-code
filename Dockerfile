@@ -11,8 +11,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc g++ && \
     rm -rf /var/lib/apt/lists/*
 
-# Instalar leo-code desde PyPI con providers opcionales
-RUN pip install --no-cache-dir leo-code[all]
+# Instalar leo-code desde el repo local (modo editable)
+COPY . /app
+RUN pip install --no-cache-dir -e ".[all]"
 
 # Cache dir para Qdrant local e índices
 RUN mkdir -p /cache

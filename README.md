@@ -192,7 +192,7 @@ Capa model-agnostic con auto-descubrimiento de providers vía variables de entor
 
 ### Cache (`leo_code/core/cache.py`)
 
-Cache Redis L1/L2/L3 con circuit breaker. Resultados de `/context` se cachean por 60s (TTL configurable). Se invalida al indexar.
+Cache Redis con circuit breaker. Resultados de `/context` se cachean por 60s. Se invalida al indexar. Degrada gracefully si Redis no está disponible.
 
 ### Rate limiting
 
