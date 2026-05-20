@@ -167,16 +167,7 @@ class ToolRegistry:
                 matches = sorted(base.rglob(pattern))
             else:
                 matches = sorted(base.rglob("*"))
-            lines = []
-            for p in matches:
-                if p.is_dir():
-                    continue
-                rel = p.relative_to(base)
-                if len(rel.parts) > depth:
-                    continue
-                size = p.stat().st_size
-                lines.append(f"  {rel} ({size} B)" if size < 1024 else f"  {rel} ({size // 1024} KB)")
-            return "\n".join(lines[:80]) if lines else "[Directorio vacio]"
+            return _render_file_tree(base, matches, depth)
         except Exception as e:
             return f"[Error listando {base}: {e}]"
 
@@ -275,3 +266,45 @@ class ToolRegistry:
                 except Exception:
                     continue
             return "\n".join(matches[:20]) or "[No encontrado]"
+
+
+def _render_file_tree(base: Path, matches: list[Path], max_depth: int) -> str:
+    """Render file tree with Rich Tree or fallback text."""
+    try:
+        from rich.tree import Tree
+        tree = Tree(f"📁 {base.name or '.'}")
+        nodes: dict[str, object] = {".": tree}
+        count = 0
+        for p in matches[:100]:
+            if p.is_dir():
+                continue
+            rel = p.relative_to(base)
+            if len(rel.parts) > max_depth:
+                continue
+            count += 1
+            parent = tree
+            for i, part in enumerate(rel.parts[:-1]):
+                key = "/".join(rel.parts[:i + 1])
+                if key not in nodes:
+                    nodes[key] = parent.add(f"📁 {part}")
+                parent = nodes[key]
+            name = rel.parts[-1]
+            size = p.stat().st_size
+            suffix = f"  ({size} B)" if size < 1024 else f"  ({size // 1024} KB)"
+            parent.add(f"📄 {name}{suffix}")
+        if count == 0:
+            return "[Directorio vacío]"
+        return str(tree)
+    except ImportError:
+        lines = []
+        count = 0
+        for p in matches[:80]:
+            if p.is_dir():
+                continue
+            rel = p.relative_to(base)
+            if len(rel.parts) > max_depth:
+                continue
+            count += 1
+            size = p.stat().st_size
+            lines.append(f"  {rel} ({size} B)" if size < 1024 else f"  {rel} ({size // 1024} KB)")
+        return "\n".join(lines) if lines else "[Directorio vacío]"
