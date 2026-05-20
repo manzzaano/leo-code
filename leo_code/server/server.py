@@ -566,6 +566,20 @@ async def list_plugins():
     }
 
 
+@app.get("/skills")
+async def list_skills():
+    """Lista skills disponibles y sus triggers."""
+    from leo_code.skills import SkillManager
+    sm = SkillManager()
+    sm.load_skills(".")
+    return {
+        "skills": [{"name": s.name, "description": s.description, "source": s.source,
+                    "task_types": s.task_types, "triggers": s.triggers[:5], "priority": s.priority}
+                   for s in sm.list_all()],
+        "total": len(sm.list_all()),
+    }
+
+
 def main():
     global _global_plugin_manager
     parser = argparse.ArgumentParser(description="Leo-Code MCP Server")

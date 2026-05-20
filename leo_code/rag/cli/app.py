@@ -142,7 +142,17 @@ def chat(model: str, repo: str, image: tuple[str]):
         if running:
             total_plugin_tools = sum(getattr(p, 'tool_count', 0) for p in running)
             console.print(f"[dim]Plugins: {len(running)} cargados, {total_plugin_tools} tools extra[/dim]")
-            console.print(f"[dim]  {', '.join(p.name for p in running)}[/dim]\n")
+            console.print(f"[dim]  {', '.join(p.name for p in running)}[/dim]")
+
+    # Init auto-skills
+    from leo_code.skills import SkillManager
+    skill_mgr = SkillManager()
+    skill_mgr.load_skills(repo_abs)
+    all_skills = skill_mgr.list_all()
+    if all_skills:
+        console.print(f"[dim]Skills: {len(all_skills)} disponibles ({', '.join(s.name for s in all_skills[:6])})[/dim]\n")
+    else:
+        console.print()
 
     while True:
         user_input = _read_multiline(console)
@@ -180,7 +190,7 @@ def chat(model: str, repo: str, image: tuple[str]):
             async for event in agent.stream_run(
                 user_input, repo_path=repo, model=state["model"],
                 session_id=sid, images=images if images else None,
-                plugin_manager=pm,
+                plugin_manager=pm, skill_manager=skill_mgr,
             ):
                 if _cancel.cancelled:
                     agent.interrupt = True
@@ -193,6 +203,10 @@ def chat(model: str, repo: str, image: tuple[str]):
                         running = [p for p in plugins if p.get("running")]
                         total = sum(p.get("tool_count", 0) for p in running)
                         console.print(f"[dim]  plugins: {', '.join(p['name'] for p in running)} ({total} tools)[/dim]\n")
+                elif etype == "skills":
+                    skills = event.get("skills", [])
+                    if skills:
+                        console.print(f"[dim]  skills activados: {', '.join(s['name'] for s in skills)}[/dim]\n")
                 elif etype == "context":
                     console.print(f"[dim italic]  contexto KC-RAG · {event['tokens']} tokens · {event['task_type']}[/dim italic]\n")
                 elif etype == "token":
