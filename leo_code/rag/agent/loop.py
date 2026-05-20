@@ -14,10 +14,11 @@ class AgentLoop:
     """Bucle principal del agente: razona, ejecuta tools, itera hasta terminar."""
 
     def __init__(self, llm=None, tools: Optional[ToolRegistry] = None,
-                 max_iterations: int = 10):
+                 max_iterations: int = 10, permission_manager=None):
         self.llm = llm
         self.tools = tools or ToolRegistry()
         self.max_iterations = max_iterations
+        self.perms = permission_manager
         self._indexer = None
         self._vector_store = None
         self._indexed_repos = set()
@@ -294,12 +295,20 @@ class AgentLoop:
 
             # Execute tools
             for tc in tool_calls:
-                yield {"type": "tool_start", "name": tc["name"], "args": tc.get("args", {})}
-                result = self.tools.execute(tc["name"], tc.get("args", {}), repo_path)
+                args = tc.get("args", {})
+                # Permission check
+                if self.perms:
+                    allowed, reason = self.perms.check(tc["name"], args)
+                    if not allowed:
+                        yield {"type": "tool_start", "name": tc["name"], "args": args}
+                        yield {"type": "tool_result", "name": tc["name"], "output": f"[Bloqueado: {reason}]"}
+                        continue
+                yield {"type": "tool_start", "name": tc["name"], "args": args}
+                result = self.tools.execute(tc["name"], args, repo_path)
                 yield {"type": "tool_result", "name": tc["name"], "output": result[:2000]}
                 messages.append({"role": "assistant", "content": text or "",
                                  "tool_calls": [{"id": tc.get("id", ""), "type": "function",
-                                                  "function": {"name": tc["name"], "arguments": str(tc.get("args", {}))}}]})
+                                                  "function": {"name": tc["name"], "arguments": str(args)}}]})
                 messages.append({"role": "tool", "tool_call_id": tc.get("id", ""), "content": result[:4000]})
                 total_tokens += len(result) // 4
 
