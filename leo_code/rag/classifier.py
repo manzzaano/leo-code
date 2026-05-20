@@ -29,6 +29,7 @@ TOKEN_BUDGET = {
     "optimize": 1500,
     "audit": 1000,
     "onboard": 600,
+    "design_review": 1500,
     "no_code": 0,
 }
 
@@ -90,6 +91,15 @@ TASK_SIGNALS = {
         "resumen", "summary", "overview", "arquitectura", "architecture",
         "estructura", "structure", "cómo empezar", "como empezar",
         "getting started", "guía", "guia", "guide",
+    ],
+    "design_review": [
+        "diseño", "design", "ui", "ux", "landing", "página", "pagina",
+        "copy", "color", "layout", "tipografía", "tipografia", "font",
+        "imagen", "screenshot", "captura", "paleta", "palette",
+        "accesibilidad", "accessibility", "wcag", "contraste", "contrast",
+        "jerarquía", "hierarchy", "visual", "estilo", "style",
+        "marca", "brand", "branding", "hero", "cta", "botón", "boton",
+        "espaciado", "spacing", "responsive", "mobile", "desktop",
     ],
 }
 

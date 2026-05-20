@@ -173,10 +173,12 @@ class AgentLoop:
                          model: str = "deepseek/deepseek-v4-flash",
                          use_kc_rag: bool = True,
                          history: list[dict] | None = None,
-                         session_id: str | None = None):
+                         session_id: str | None = None,
+                         images: list[str] | None = None):
         """Streaming: KC-RAG context → LLM tokens → tool calls → repeat.
 
         Yields dicts: {"type": "context"|"token"|"tool_start"|"tool_result"|"tool_end"|"done"}
+        images: lista de paths a imágenes para análisis de visión.
         """
         t0 = time.time()
         self.interrupt = False
@@ -199,7 +201,10 @@ class AgentLoop:
             messages.extend(sm.get_history(session_id, limit=40))
         elif history:
             messages.extend(history)
-        messages.append({"role": "user", "content": query})
+
+        # Build user message con texto + imágenes como content array
+        user_content = _build_user_content(query, images or [], repo_path)
+        messages.append({"role": "user", "content": user_content})
 
         # KC-RAG context
         context = ""
@@ -334,4 +339,22 @@ Reglas:
 - Usa run_tests para verificar que los cambios no rompen nada.
 - Haz cambios minimos y precisos.
 - Si no sabes algo, dilo. No inventes.
-- Para execute_command en Windows: usa comandos PowerShell o python."""
+- Para execute_command en Windows: usa comandos PowerShell o python.
+- Si recibes imagenes, analizalas visualmente: colores, layout, tipografia, jerarquia."""
+
+
+def _build_user_content(query: str, images: list[str], repo_path: str) -> list[dict]:
+    """Construye content array con texto + imágenes para modelos de visión."""
+    content = [{"type": "text", "text": query}]
+    for img_path in images:
+        try:
+            from leo_code.core.parser import extract_image_capsule
+            capsules = extract_image_capsule(img_path)
+            if capsules:
+                content.append({
+                    "type": "image_url",
+                    "image_url": {"url": capsules[0].content},
+                })
+        except Exception:
+            content.append({"type": "text", "text": f"[No se pudo cargar imagen: {img_path}]"})
+    return content

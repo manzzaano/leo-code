@@ -121,7 +121,12 @@ class AnthropicProvider(LLMProvider):
                 i += 1
 
             else:
-                result.append({"role": role, "content": m.get("content", "")})
+                content = m.get("content", "")
+                if isinstance(content, list):
+                    blocks = _convert_content_array(content)
+                    result.append({"role": role, "content": blocks})
+                else:
+                    result.append({"role": role, "content": content})
                 i += 1
 
         return result
@@ -138,3 +143,25 @@ class AnthropicProvider(LLMProvider):
                 }),
             })
         return result
+
+
+def _convert_content_array(content: list[dict]) -> list[dict]:
+    """Convierte OpenAI content array → Anthropic content blocks."""
+    blocks = []
+    for item in content:
+        if item.get("type") == "text":
+            blocks.append({"type": "text", "text": item["text"]})
+        elif item.get("type") == "image_url":
+            url = item["image_url"]["url"]
+            if url.startswith("data:"):
+                header, b64 = url.split(",", 1)
+                mime = header.split(":")[1].split(";")[0]
+                blocks.append({
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": mime,
+                        "data": b64,
+                    },
+                })
+    return blocks if blocks else [{"type": "text", "text": ""}]

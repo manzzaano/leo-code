@@ -69,6 +69,9 @@ def compress(
     if task_type == "onboard":
         return _compress_onboard(all_capsules)
 
+    if task_type == "design_review":
+        return _compress_design_review(top_capsules, all_capsules)
+
     return _compress_query(top_capsules, budget_tokens)
 
 
@@ -545,3 +548,51 @@ def _compress_onboard(all_capsules: list[Capsule]) -> str:
     lines.append("Usa search_code y list_files para explorar en detalle.")
 
     return "\n".join(lines)
+
+
+def _compress_design_review(top_capsules: list[Capsule], all_capsules: list[Capsule]) -> str:
+    """Imágenes + HTML/CSS estructural + instrucciones de diseño."""
+    nodes = []
+
+    # Imágenes primero
+    images = [c for c in all_capsules if c.type == "image"]
+    for img in images[:3]:
+        nodes.append({
+            "id": img.id, "name": img.name, "type": "image",
+            "properties": {
+                "file_path": img.file_path,
+                "mime": img.properties.get("mime", ""),
+                "size_bytes": img.properties.get("size_bytes", 0),
+            },
+        })
+
+    # HTML/CSS del repo
+    html_caps = [c for c in all_capsules if c.language in ("html", "css")]
+    for c in html_caps[:5]:
+        props = {"file_path": c.file_path}
+        for key in ("tags", "css_classes", "meta_tags", "headings", "selectors",
+                     "colors", "fonts", "media_queries"):
+            if key in c.properties:
+                props[key] = c.properties[key]
+        nodes.append({"id": c.id, "name": c.name, "type": c.type, "properties": props})
+
+    # Top code capsules por si hay componentes React/Vue/Svelte
+    code_caps = [c for c in top_capsules if c.language in ("javascript", "typescript")][:3]
+    for c in code_caps:
+        nodes.append({
+            "id": c.id, "name": c.name, "type": c.type,
+            "properties": {
+                "signature": c.signature,
+                "file_path": c.file_path,
+                "docstring": c.docstring or "",
+            },
+        })
+
+    context = serialize_context(nodes) if nodes else ""
+    context += "\n\nAnaliza el diseño, copy, colores, accesibilidad, jerarquía visual y UX."
+    if images:
+        context += f" Hay {len(images)} imagen(es) para analizar."
+        context += " Revisa: paleta de colores, tipografía, espaciado, contraste, CTA, copy, estructura visual."
+    if html_caps:
+        context += f" {len(html_caps)} archivo(s) HTML/CSS disponibles."
+    return context
