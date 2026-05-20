@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from benchmark.judge import judge, score_summary
 
-MODEL = "deepseek/deepseek-v4-pro"
+MODEL = "deepseek/deepseek-chat"  # V3 - fiable con tool calling en streaming
 RUNNER = str(Path(__file__).parent / "leo_runner.py")
 RESULTS_DIR = Path("benchmark/results_real")
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -28,7 +28,7 @@ def run_leo_subprocess(query: str, repo_path: str) -> dict:
         env = {**os.environ, "DEEPSEEK_API_KEY": os.getenv("DEEPSEEK_API_KEY", "")}
         r = subprocess.run(
             [sys.executable, RUNNER, query, repo_path, MODEL],
-            capture_output=True, text=True, timeout=180, env=env,
+            capture_output=True, text=True,             timeout=300, env=env,
         )
         response = (r.stdout or "").strip() or (r.stderr or "").strip()
         return {"system": "LEO", "response": response[:4000], "tokens": len(response) // 4,
@@ -44,16 +44,15 @@ def run_oc_subprocess(query: str, repo_path: str) -> dict:
     try:
         env = {**os.environ, "DEEPSEEK_API_KEY": os.getenv("DEEPSEEK_API_KEY", "")}
         r = subprocess.run(
-            ["opencode", "run", query, "-m", "deepseek/deepseek-v4-pro"],
+            ["opencode", "run", query, "-m", "deepseek/deepseek-chat"],
             capture_output=True, text=True, timeout=180, cwd=repo_path, env=env,
         )
-        lines = []
-        for line in (r.stdout + "\n" + (r.stderr or "")).split("\n"):
-            s = line.strip()
-            if not s or s[:4] in ("INFO", "WARN", "ERRO", "   ") or s[0] in "┌│└●":
-                continue
-            lines.append(s)
-        response = "\n".join(lines).strip()
+        # Keep all output, just strip ANSI codes
+        out = r.stdout or ""
+        err = r.stderr or ""
+        import re as _re
+        out = _re.sub(r'\x1b\[[0-9;]*m', '', out)
+        response = (out + "\n" + err).strip()
         return {"system": "OC", "response": response[:4000], "tokens": len(response) // 4,
                 "duration_ms": int((time.time() - t0) * 1000)}
     except subprocess.TimeoutExpired:

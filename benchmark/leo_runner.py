@@ -17,9 +17,9 @@ from leo_code.rag.agent.tools import ToolRegistry
 async def main():
     query = sys.argv[1]
     repo = sys.argv[2] if len(sys.argv) > 2 else "."
-    model = sys.argv[3] if len(sys.argv) > 3 else "deepseek/deepseek-v4-pro"
+    model = sys.argv[3] if len(sys.argv) > 3 else "deepseek/deepseek-chat"
     try:
-        agent = AgentLoop(tools=ToolRegistry(), max_iterations=12)
+        agent = AgentLoop(tools=ToolRegistry(), max_iterations=10)
         result = await agent.run(query, repo_path=repo, model=model, use_kc_rag=True)
         resp = result.get("respuesta", "")
         print(resp)

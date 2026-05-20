@@ -15,10 +15,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-JUDGE_SYSTEM = """Eres un juez experto en código y agentes de programación. Evalúas respuestas de agentes 
-de código contra criterios objetivos. Sé estricto pero justo. 
-Responde SOLO con JSON: {"relevancia": N, "correccion": N, "completitud": N, "accionabilidad": N}
-donde N es un entero de 1 a 10."""
+JUDGE_SYSTEM = """Eres un juez de respuestas de agentes de codigo. Evalua de 1 a 10.
+Se realista: una respuesta parcial que acierta en lo principal merece 6-8.
+Responde SOLO con JSON: {"relevancia": N, "correccion": N, "completitud": N, "accionabilidad": N}"""
 
 
 def judge(response: str, task: dict, model: str = "deepseek/deepseek-v4-flash") -> dict:

@@ -4,6 +4,7 @@ Flujo: consulta → indexer → Qdrant search → compress → LLM → tool call
 """
 
 import os
+import json
 import time
 import asyncio
 from typing import Optional
@@ -30,22 +31,98 @@ class AgentLoop:
                    use_kc_rag: bool = True,
                    history: list[dict] | None = None,
                    session_id: str | None = None) -> dict:
-        """Ejecuta una consulta completa vía stream_run (wrapper)."""
-        result = {
-            "respuesta": "", "steps": [], "iterations": 0,
-            "total_tokens": 0, "duration_ms": 0, "finish": "stop",
-            "model": model, "session_id": session_id,
-        }
+        """Ejecuta con generate() para tool calling fiable (no streaming)."""
+        t0 = time.time()
         self._recent_calls.clear()
-        async for event in self.stream_run(
-            query, repo_path=repo_path, model=model,
-            use_kc_rag=use_kc_rag, history=history, session_id=session_id,
-        ):
-            if event["type"] == "done":
-                for key in ("respuesta", "total_tokens", "iterations", "duration_ms", "finish"):
-                    if key in event:
-                        result[key] = event[key]
-        return result
+        self._tool_call_count = 0
+        self.interrupt = False
+
+        if self.llm is None:
+            self.llm = self._init_llm(model)
+        repo_path = os.path.abspath(repo_path)
+
+        messages = [{"role": "system", "content": self._system_prompt()}]
+        if session_id:
+            from leo_code.session import SessionManager
+            sm = SessionManager()
+            session = sm.get_session(session_id)
+            if session:
+                repo_path = session.repo_path
+                messages.extend(sm.get_history(session_id, limit=30))
+        elif history:
+            messages.extend(history)
+
+        # KC-RAG context
+        context = ""
+        if use_kc_rag:
+            from leo_code.rag.classifier import classify_task
+            task_type = classify_task(query)
+            ctx = self._build_context(query, repo_path, task_type)
+            if ctx:
+                context = ctx
+                messages.insert(1, {"role": "system", "content": f"Contexto del codigo:\n{context}"})
+
+        messages.append({"role": "user", "content": query})
+
+        tool_defs = self.tools.get_definitions()
+        total_tokens = 0
+        all_text = ""
+
+        for iteration in range(self.max_iterations):
+            if self.interrupt:
+                return {"respuesta": "[Interrumpido]", "total_tokens": total_tokens,
+                        "iterations": iteration, "duration_ms": int((time.time() - t0) * 1000)}
+
+            # Compactar historial
+            messages = _compact_messages(messages, keep_last=8)
+
+            resp = await self.llm.generate(messages, tool_defs, temperature=0.2)
+            total_tokens += resp.usage.input_tokens + resp.usage.output_tokens
+            text = resp.text or ""
+            all_text += text
+
+            if not resp.tool_calls:
+                if session_id:
+                    self._persist_turn(session_id, query, text, model, total_tokens)
+                return {"respuesta": text, "total_tokens": total_tokens,
+                        "iterations": iteration + 1,
+                        "duration_ms": int((time.time() - t0) * 1000)}
+
+            # Execute tools
+            for tc in resp.tool_calls:
+                if iteration >= 20:
+                    break
+                args = tc.arguments if isinstance(tc.arguments, dict) else {}
+                if isinstance(args, str):
+                    try:
+                        import json as _json
+                        args = _json.loads(args)
+                    except Exception:
+                        args = {}
+                tc_id = tc.id or f"call_{iteration}_{hash(tc.name) % 10000}"
+                call_key = f"{tc.name}:{str(args)[:80]}"
+                if call_key in self._recent_calls:
+                    continue
+                self._recent_calls.add(call_key)
+                self._tool_call_count += 1
+
+                result = self.tools.execute(tc.name, args, repo_path)
+                if len(result) > 1500:
+                    result = result[:1500] + f"\n[{len(result)} chars total]"
+
+                messages.append({"role": "assistant", "content": text or "(using tool)",
+                                 "tool_calls": [{"id": tc_id, "type": "function",
+                                                  "function": {"name": tc.name,
+                                                               "arguments": json.dumps(args, ensure_ascii=False)}}]})
+                messages.append({"role": "tool", "tool_call_id": tc_id, "content": result[:2000]})
+                total_tokens += len(result) // 4
+
+            if iteration >= 20:
+                messages.append({"role": "system", "content": "URGENTE: Da tu respuesta final AHORA."})
+
+        return {"respuesta": all_text or f"[No completado en {self.max_iterations} iteraciones. {self._tool_call_count} tools ejecutadas.]",
+                "total_tokens": total_tokens, "iterations": self.max_iterations,
+                "duration_ms": int((time.time() - t0) * 1000)}
 
     def _persist_turn(self, session_id: str, query: str, answer: str, model: str, tokens: int):
         try:
@@ -229,8 +306,8 @@ class AgentLoop:
                 total_tokens += len(result) // 4
 
             # After tools, prompt to finish
-            if tool_calls and iteration >= self.max_iterations - 1:
-                messages.append({"role": "system", "content": "Ya tienes suficientes datos. Da tu respuesta final AHORA. No pidas mas herramientas."})
+            if tool_calls and iteration >= 8:
+                messages.append({"role": "system", "content": "URGENTE: Da tu respuesta final AHORA. No pidas mas herramientas."})
 
             text = ""
 
@@ -248,9 +325,6 @@ class AgentLoop:
 
         if provider_name in ("deepseek", "openai"):
             base_url = "https://api.deepseek.com" if provider_name == "deepseek" or "deepseek" in model else "https://api.openai.com/v1"
-            # Strip reasoning/thinking mode — not supported in streaming tool use
-            if "deepseek" in model:
-                model_name = "deepseek-chat"  # fallback to non-thinking
             return get_provider("openai",
                 api_key=os.getenv("DEEPSEEK_API_KEY", os.getenv("OPENAI_API_KEY", "")),
                 base_url=base_url,
