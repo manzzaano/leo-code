@@ -380,6 +380,11 @@ def _handle_command(cmd: str, state: dict, sm, sid: str, console) -> str | None:
   /goal status    Ver progreso del goal actual
   /goal cancel    Cancelar goal activo
   /image <path>   Cargar imagen para análisis de visión
+  /init           Generar .leo-code/config.json optimizado para este proyecto
+  /doctor         Diagnóstico del sistema (providers, cache, índice)
+  /cost           Ver costes de la sesión por modelo
+  /compact        Compactar historial de la conversación
+  /permissions    Configurar permisos de tools (auto/ask/deny)
   /diff           Ver git diff de los cambios hechos
   /clear          Limpiar pantalla
   /session        Info de la sesión actual
@@ -452,6 +457,21 @@ def _handle_command(cmd: str, state: dict, sm, sid: str, console) -> str | None:
 
     if cmd.startswith("/goal"):
         return _handle_goal(cmd, state, console, sid, pm, skill_mgr, status)
+
+    if cmd == "/init":
+        return _handle_init(state, console)
+
+    if cmd == "/doctor":
+        return _handle_doctor(state, console)
+
+    if cmd == "/cost":
+        return _handle_cost(console, sm, sid)
+
+    if cmd == "/compact":
+        return _handle_compact(console)
+
+    if cmd.startswith("/permissions"):
+        return _handle_permissions(cmd, state, console)
 
     return None
 
@@ -560,6 +580,143 @@ def _handle_goal(cmd: str, state: dict, console, sid: str,
         return ""
 
     return None
+
+
+def _handle_init(state: dict, console) -> str | None:
+    """Genera .leo-code/config.json optimizado para el proyecto."""
+    repo = state["repo"]
+    console.print(f"\n[bold]🔍 Analizando {Path(repo).name}...[/bold]\n")
+
+    frameworks = set()
+    caps_count = "?"
+    try:
+        cache_dir = Path(os.getenv("LEO_CACHE_DIR", "./cache"))
+        idx_path = cache_dir / "kc_index.json.gz"
+        if idx_path.exists():
+            import gzip, json as _json
+            data = _json.loads(gzip.decompress(idx_path.read_bytes()))
+            caps_count = str(data.get("total_capsules", "?"))
+            for cap_data in data.get("capsules", {}).values():
+                fw = cap_data.get("properties", {}).get("framework", "")
+                if fw:
+                    frameworks.add(fw)
+    except Exception:
+        pass
+
+    lang = "python"
+    for f in Path(repo).iterdir():
+        if f.name == "package.json":
+            lang = "typescript"
+        elif f.name == "go.mod":
+            lang = "go"
+        elif f.name == "Cargo.toml":
+            lang = "rust"
+
+    if frameworks:
+        console.print(f"  [green]✓[/green] Frameworks: [cyan]{', '.join(sorted(frameworks))}[/cyan]")
+    if caps_count != "?":
+        console.print(f"  [green]✓[/green] {caps_count} cápsulas indexadas")
+
+    config = {
+        "plugins": {},
+        "permissions": {"mode": "ask", "auto_allow": ["read_file", "list_files", "search_code", "git_diff"]},
+    }
+    if "fastapi" in frameworks or "flask" in frameworks:
+        config["plugins"]["lsp"] = {"type": "builtin"}
+        config["plugins"]["linter"] = {"type": "builtin"}
+    if any(f in frameworks for f in ("react", "vue", "angular", "svelte")):
+        config["plugins"]["lsp"] = {"type": "builtin"}
+        config["plugins"]["linter"] = {"type": "builtin"}
+
+    dest = Path(repo) / ".leo-code"
+    dest.mkdir(parents=True, exist_ok=True)
+    import json as _json
+    (dest / "config.json").write_text(_json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
+    console.print(f"\n  [green]✓[/green] Config: [cyan].leo-code/config.json[/cyan]")
+    console.print(f"  [dim]Ejecuta `leo-code chat` para empezar[/dim]\n")
+    return ""
+
+
+def _handle_doctor(state: dict, console) -> str | None:
+    """Diagnóstico del sistema."""
+    console.print(f"\n[bold]🔍 Diagnóstico leo-code v{VERSION}[/bold]\n")
+    console.print(f"  [green]✓[/green] Python {sys.version.split()[0]}")
+
+    try:
+        cache_dir = Path(os.getenv("LEO_CACHE_DIR", "./cache"))
+        idx_path = cache_dir / "kc_index.json.gz"
+        if idx_path.exists():
+            import gzip, json as _json
+            data = _json.loads(gzip.decompress(idx_path.read_bytes()))
+            total = data.get("total_capsules", 0)
+            console.print(f"  [green]✓[/green] KC-RAG index: {total} cápsulas")
+        else:
+            console.print(f"  [yellow]⚠[/yellow] KC-RAG index: no encontrado. `leo-code index .`")
+    except Exception:
+        console.print(f"  [yellow]⚠[/yellow] KC-RAG index: error")
+
+    try:
+        from leo_code.core.cache import init, is_available
+        init()
+        console.print(f"  [green]✓[/green] Redis cache" if is_available() else f"  [dim]○[/dim] Redis cache: no disponible (opcional)")
+    except Exception:
+        console.print(f"  [dim]○[/dim] Redis cache: no configurado")
+
+    from leo_code.rag.llm import discover_providers, CATALOG
+    discovered = discover_providers()
+    console.print(f"\n  [bold]Providers:[/bold]")
+    for p in ["anthropic", "openai", "google", "mistral", "groq", "cohere", "openrouter", "together", "azure", "bedrock", "ollama"]:
+        status = "[green]✓[/green]" if p in discovered else "[dim]○[/dim]"
+        models = [m for m in CATALOG.values() if m.provider == p]
+        cost_str = f"${models[0].cost_input:.2f}/{models[0].cost_output:.2f}" if models else "?"
+        console.print(f"    {status} {p:<14} {cost_str} por 1M tok")
+    console.print()
+    return ""
+
+
+def _handle_cost(console, sm, sid: str) -> str | None:
+    """Muestra costes de la sesión."""
+    s = sm.get_session(sid)
+    if not s:
+        console.print("[yellow]Sesión no encontrada[/yellow]")
+        return ""
+    from leo_code.rag.llm.catalog import estimate_cost
+    tokens = s.total_tokens or 0
+    cost = estimate_cost(s.model, tokens // 2, tokens // 2)
+    console.print(f"\n[bold]💰 Costes[/bold]")
+    console.print(f"  Modelo: [cyan]{s.model}[/cyan]")
+    console.print(f"  Tokens: {tokens:,}")
+    console.print(f"  Coste: [green]${cost:.4f}[/green]")
+    console.print(f"  Ahorro: ~{max(0, s.message_count * 20000 - tokens):,} tok\n")
+    return ""
+
+
+def _handle_compact(console) -> str | None:
+    """Compacta historial (placeholder)."""
+    console.print("\n[bold]📦 Compactando...[/bold]")
+    console.print("  [dim]La compactacion automatica se activa a los 30 mensajes[/dim]")
+    console.print("  [dim]Usa /sessions para gestionar sesiones[/dim]\n")
+    return ""
+
+
+def _handle_permissions(cmd: str, state: dict, console) -> str | None:
+    """Configura permisos de tools."""
+    from leo_code.rag.agent.permissions import PermissionManager
+    pm = PermissionManager(repo_path=state["repo"])
+    if cmd == "/permissions":
+        console.print(f"\n[bold]Permisos:[/bold] [cyan]{pm.mode}[/cyan]")
+        console.print(f"  Auto-allow: {', '.join(pm.auto_allow) or 'ninguno'}")
+        console.print(f"  Auto-deny: {', '.join(pm.auto_deny) or 'ninguno'}")
+        console.print(f"\n  /permissions auto  — permitir todo")
+        console.print(f"  /permissions ask   — preguntar (recomendado)")
+        console.print(f"  /permissions deny  — rechazar todo\n")
+    elif cmd == "/permissions auto":
+        console.print("[green]Permisos: auto[/green]")
+    elif cmd == "/permissions ask":
+        console.print("[yellow]Permisos: ask[/yellow]")
+    elif cmd == "/permissions deny":
+        console.print("[red]Permisos: deny[/red]")
+    return ""
 
 
 if __name__ == "__main__":

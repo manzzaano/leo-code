@@ -54,6 +54,18 @@ class Plugin(ABC):
     def on_post_response(self, response: str, query: str) -> str:
         return response
 
+    def on_pre_tool(self, tool_name: str, args: dict) -> bool:
+        return True
+
+    def on_post_tool(self, tool_name: str, args: dict, result: str) -> str:
+        return result
+
+    def on_pre_llm(self, messages: list[dict]) -> list[dict]:
+        return messages
+
+    def on_post_llm(self, response: str) -> str:
+        return response
+
     def on_shutdown(self):
         pass
 
@@ -258,9 +270,27 @@ class PluginManager:
         for p in self._plugins:
             try:
                 response = p.on_post_response(response, query)
+                response = p.on_post_llm(response)
             except Exception:
                 pass
         return response
+
+    def pre_tool(self, tool_name: str, args: dict) -> bool:
+        for p in self._plugins:
+            try:
+                if not p.on_pre_tool(tool_name, args):
+                    return False
+            except Exception:
+                pass
+        return True
+
+    def post_tool(self, tool_name: str, args: dict, result: str) -> str:
+        for p in self._plugins:
+            try:
+                result = p.on_post_tool(tool_name, args, result)
+            except Exception:
+                pass
+        return result
 
     def shutdown(self):
         for p in self._plugins:
