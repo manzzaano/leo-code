@@ -131,28 +131,27 @@ def chat(model: str, repo: str, image: tuple[str]):
     state = {"model": model, "repo": repo_abs, "images": pending_images}
     total_saved = 0
 
-    # Init plugins from leo-code.json
+    # Init plugins + skills
     from leo_code.rag.agent.tools import ToolRegistry
     plugins_registry = ToolRegistry()
     from leo_code.plugins import PluginManager
     pm = PluginManager(repo_path=repo_abs)
     plugin_infos = pm.init(registry=plugins_registry)
-    if plugin_infos:
-        running = [p for p in plugin_infos if p.running]
-        if running:
-            total_plugin_tools = sum(getattr(p, 'tool_count', 0) for p in running)
-            console.print(f"[dim]Plugins: {len(running)} cargados, {total_plugin_tools} tools extra[/dim]")
-            console.print(f"[dim]  {', '.join(p.name for p in running)}[/dim]")
+    active_plugins = [p.name for p in plugin_infos if p.running] if plugin_infos else []
 
-    # Init auto-skills
     from leo_code.skills import SkillManager
     skill_mgr = SkillManager()
     skill_mgr.load_skills(repo_abs)
-    all_skills = skill_mgr.list_all()
-    if all_skills:
-        console.print(f"[dim]Skills: {len(all_skills)} disponibles ({', '.join(s.name for s in all_skills[:6])})[/dim]\n")
-    else:
-        console.print()
+    active_skills = [s.name for s in skill_mgr.list_all()]
+
+    # LeoStatus HUD
+    from leo_code.tui.status import LeoStatus
+    status = LeoStatus(console, repo_path=repo_abs, model=model,
+                       plugins=active_plugins, skills=active_skills,
+                       session_id=sid)
+    status.render()  # initial header
+
+    console.print(f"[dim]  {status._line_header()}[/dim]")
 
     while True:
         user_input = _read_multiline(console)
@@ -176,10 +175,12 @@ def chat(model: str, repo: str, image: tuple[str]):
         _cancel.cancelled = False
         images = state.pop("images", [])  # consume once
 
+        # Start LeoStatus for this query
+        status.start_query(cmd, task_type="")
+
         async def stream_chat():
             from leo_code.rag.agent.loop import AgentLoop
             from leo_code.rag.agent.tools import ToolRegistry
-            # Merge agent tools with plugin tools
             merged = ToolRegistry()
             for name, fn in plugins_registry._tools.items():
                 merged._tools[name] = fn
@@ -201,14 +202,14 @@ def chat(model: str, repo: str, image: tuple[str]):
                     plugins = event.get("plugins", [])
                     if plugins:
                         running = [p for p in plugins if p.get("running")]
-                        total = sum(p.get("tool_count", 0) for p in running)
-                        console.print(f"[dim]  plugins: {', '.join(p['name'] for p in running)} ({total} tools)[/dim]\n")
+                        console.print(f"[dim]  plugins: {', '.join(p['name'] for p in running)}[/dim]")
                 elif etype == "skills":
                     skills = event.get("skills", [])
                     if skills:
-                        console.print(f"[dim]  skills activados: {', '.join(s['name'] for s in skills)}[/dim]\n")
+                        console.print(f"[dim]  skills: {', '.join(s['name'] for s in skills)}[/dim]")
                 elif etype == "context":
-                    console.print(f"[dim italic]  contexto KC-RAG · {event['tokens']} tokens · {event['task_type']}[/dim italic]\n")
+                    status.update_context(event.get("tokens", 0), event.get("task_type", ""))
+                    console.print(f"[dim italic]  KC-RAG · {event['tokens']} tok · {event['task_type']}[/dim italic]")
                 elif etype == "token":
                     console.print(event["text"], end="", markup=False)
                 elif etype == "tool_start":
@@ -224,12 +225,15 @@ def chat(model: str, repo: str, image: tuple[str]):
                 elif etype == "done":
                     dur = event.get("duration_ms", 0)
                     tokens = event.get("total_tokens", 0)
+                    its = event.get("iterations", 0)
                     saved = max(0, 20000 - tokens)
-                    console.print(f"\n[dim]  ── {event.get('iterations', 0)} iters · {tokens} tok · {dur}ms · ~{saved} ahorrados[/dim]\n")
+                    status.end_query(tokens, its, dur, saved)
+                    console.print(f"\n[dim]  {status._line_footer()}[/dim]\n")
                     nonlocal total_saved
                     total_saved += saved
 
         asyncio.run(stream_chat())
+        status.idle()
 
 
 def _read_multiline(console) -> str | None:
