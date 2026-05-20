@@ -217,6 +217,125 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
     if header is not None:
         capsules.append(header)
 
+    return detect_frameworks(capsules)
+
+
+_FRAMEWORK_SIGNALS: dict[str, list[str]] = {
+    "fastapi": ["@router.", "@app.", "fastapi", "APIRouter", "FastAPI("],
+    "flask": ["@app.route", "@bp.route", "Flask(", "Blueprint("],
+    "django": ["class ", "Model)", "admin.site.register", "path('", "urlpatterns", "manage.py"],
+    "pydantic": ["BaseModel", "Field(", "@validator", "@field_validator"],
+    "sqlalchemy": ["db.Model", "declarative_base", "Column(", "relationship(", "sessionmaker"],
+    "react": ["React.FC", "export default function", "return (", "return <", "useState("],
+    "express": ["app.get(", "app.post(", "router.get(", "express.Router", "require('express"],
+    "nextjs": ["page.tsx", "layout.tsx", "route.ts", "getServerSideProps", "getStaticProps"],
+    "nestjs": ["@Controller", "@Module(", "@Injectable(", "@Get(", "@Post("],
+    "spring": ["@RestController", "@Service", "@Repository", "@Controller", "@SpringBootApplication"],
+    "graphql": ["type Query", "type Mutation", "graphql", "@ObjectType", "buildSchema"],
+    "grpc": [".proto", "service ", "rpc ", "grpc."],
+    "vue": ["<template>", "defineComponent", "ref(", "reactive(", "<script setup"],
+    "laravel": ["public function", "Route::get", "php artisan", "Eloquent", "\\Illuminate\\"],
+    "dotnet": ["[ApiController]", "[Route(", "ControllerBase", "appsettings.json"],
+}
+
+
+def detect_frameworks(capsules: list[Capsule]) -> list[Capsule]:
+    for c in capsules:
+        content = c.content or ""
+        content_lower = content.lower()
+        decorators = c.properties.get("decorators", "")
+        hereda = c.properties.get("hereda_de", "")
+        filepath = (c.file_path or "").lower()
+        lang = c.language
+
+        # === Python frameworks ===
+        if lang == "python":
+            decos = decorators.lower()
+            if any(d in decos for d in ("router.get(", "router.post(", "router.put(", "router.delete(", "router.patch(", ".get(", ".post(")):
+                if c.type in ("function", "async_function"):
+                    c.type = "endpoint"
+                    c.properties["framework"] = "fastapi"
+            elif any(s in decos for s in (".route(", "app.route", "bp.route")):
+                c.type = "endpoint"
+                c.properties["framework"] = "flask"
+            elif c.type == "class" and "BaseModel" in hereda:
+                c.type = "model"
+                c.properties["framework"] = "pydantic"
+            elif c.type == "class" and ("Model)" in hereda or "models.Model" in hereda):
+                c.type = "model"
+                c.properties["framework"] = "django"
+            elif c.type == "class" and "db.Model" in hereda:
+                c.type = "model"
+                c.properties["framework"] = "sqlalchemy"
+
+        # === JS/TS frameworks ===
+        if lang in ("javascript", "typescript"):
+            if c.type == "function" and c.name[0].isupper():
+                has_jsx = any(s in content for s in ("return (", "return <", "React.FC", "useState(", "props.", "export default"))
+                if has_jsx:
+                    c.type = "component"
+                    c.properties["framework"] = "react"
+            elif "use client" in content_lower:
+                c.type = "component"
+                c.properties["framework"] = "nextjs"
+            elif "export async function" in content and any(kw in content_lower for kw in ("request", "response", "params")):
+                c.type = "endpoint"
+                c.properties["framework"] = "nextjs"
+
+        if lang == "typescript" and any(s in content for s in ("@Controller", "@Module(", "@Injectable(", "@Get(")):
+            c.type = "endpoint" if "@Get" in content or "@Post" in content else "controller"
+            c.properties["framework"] = "nestjs"
+
+        if lang == "javascript" and any(s in content_lower for s in ("app.get(", "app.post(", "router.get(", "express.router")):
+            c.type = "endpoint"
+            c.properties["framework"] = "express"
+
+        # === Java/Kotlin frameworks ===
+        if lang in ("java", "kotlin"):
+            if any(s in content for s in ("@RestController", "@Controller")):
+                c.type = "endpoint" if any(s in content for s in ("@GetMapping", "@PostMapping") or c.type == "function") else "controller"
+                c.properties["framework"] = "spring"
+            elif "@Service" in content or "@Repository" in content:
+                c.properties["framework"] = "spring"
+            elif "@SpringBootApplication" in content:
+                c.type = "entrypoint"
+                c.properties["framework"] = "spring"
+
+        # === PHP frameworks ===
+        if lang == "php":
+            if any(s in content for s in ("Route::", "Illuminate\\", "Eloquent")):
+                c.properties["framework"] = "laravel"
+            if "Route::get" in content or "Route::post" in content:
+                c.type = "endpoint"
+                c.properties["framework"] = "laravel"
+
+        # === C# frameworks ===
+        if lang == "csharp":
+            if "[ApiController]" in content or "ControllerBase" in hereda:
+                c.type = "controller"
+                c.properties["framework"] = "dotnet"
+            if "[Route(" in content or "[HttpGet" in content:
+                c.type = "endpoint"
+
+        # === GraphQL ===
+        if any(s in content for s in ("type Query", "type Mutation", "graphql")) or lang == "graphql":
+            c.type = "schema" if "type " in content else c.type
+            c.properties["framework"] = "graphql"
+
+        # === gRPC ===
+        if ".proto" in filepath or "service " in content and "rpc " in content:
+            if "service " in content:
+                c.type = "schema"
+            c.properties["framework"] = "grpc"
+
+        # === Middleware ===
+        is_mw_py = lang == "python" and "middleware" in (c.name or "").lower()
+        is_mw_js = lang in ("javascript", "typescript") and any(s in content_lower for s in ("next()", "res.status", "req.", "req.body"))
+        if is_mw_py or is_mw_js:
+            if c.type in ("function", "class"):
+                c.type = "middleware"
+                c.properties.setdefault("framework", "express" if lang == "javascript" else "fastapi")
+
     return capsules
 
 
@@ -355,12 +474,12 @@ def extract_from_file(path: str, language: str = "python") -> list[Capsule]:
     if language in ("html", "css"):
         try:
             from leo_code.core.parser_generic import extract_html_css
-            return extract_html_css(content, path, language)
+            return detect_frameworks(extract_html_css(content, path, language))
         except ImportError:
             return extract_from_txt(content, path)
     try:
         from leo_code.core.parser_generic import extract_generic
-        return extract_generic(content, path, language)
+        return detect_frameworks(extract_generic(content, path, language))
     except ImportError:
         pass
     try:

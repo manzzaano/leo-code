@@ -392,7 +392,7 @@ async def get_context(req: ContextRequest, request: Request):
         top_caps = top_caps[:cap]
 
         from leo_code.rag.compressor import compress
-        context = compress(top_caps, list(caps.values()), budget_tokens=budget, task_type=task_type, dir_filter=dir_prefixes)
+        context = compress(top_caps, list(caps.values()), budget_tokens=budget, task_type=task_type, dir_filter=dir_prefixes, query=req.query)
 
         result = {"context": context, "tokens": len(context) // 2, "task_type": task_type, "capsules_total": len(caps)}
         _cache_context_result(cache_key, result)
