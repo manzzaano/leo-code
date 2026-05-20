@@ -1,4 +1,4 @@
-"""Tools: herramientas del agente (read_file, write_file, execute, git_diff)."""
+"""Tools: herramientas del agente (read_file, write_file, replace_in_file, list_files, execute_command, run_tests, git_diff, search_code)."""
 
 import subprocess
 import sys
@@ -12,13 +12,15 @@ class ToolRegistry:
         self._tools = {
             "read_file": self.read_file,
             "write_file": self.write_file,
+            "replace_in_file": self.replace_in_file,
+            "list_files": self.list_files,
             "execute_command": self.execute_command,
+            "run_tests": self.run_tests,
             "git_diff": self.git_diff,
             "search_code": self.search_code,
         }
 
     def get_definitions(self) -> list[dict]:
-        """Retorna definiciones de tools en formato OpenAI/Anthropic."""
         return [
             {"type": "function", "function": {
                 "name": "read_file",
@@ -42,6 +44,31 @@ class ToolRegistry:
                 },
             }},
             {"type": "function", "function": {
+                "name": "replace_in_file",
+                "description": "Reemplaza un fragmento exacto de texto en un archivo por otro. Usa old_string para identificar qué cambiar y new_string como reemplazo. Solo reemplaza la primera ocurrencia.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string", "description": "Ruta relativa al archivo"},
+                        "old_string": {"type": "string", "description": "Texto exacto a reemplazar (debe ser único en el archivo)"},
+                        "new_string": {"type": "string", "description": "Texto de reemplazo"},
+                    },
+                    "required": ["file_path", "old_string", "new_string"],
+                },
+            }},
+            {"type": "function", "function": {
+                "name": "list_files",
+                "description": "Lista archivos y directorios del repositorio. Usa depth para limitar profundidad y pattern para filtrar (ej. '*.py').",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "description": "Directorio a listar (relativo al repo, '.' por defecto)"},
+                        "depth": {"type": "integer", "description": "Profundidad maxima (default 2)"},
+                        "pattern": {"type": "string", "description": "Filtro glob (ej. '*.py', '**/*.md')"},
+                    },
+                },
+            }},
+            {"type": "function", "function": {
                 "name": "execute_command",
                 "description": "Ejecuta un comando en la terminal y retorna la salida",
                 "parameters": {
@@ -50,6 +77,17 @@ class ToolRegistry:
                         "command": {"type": "string", "description": "Comando a ejecutar"},
                     },
                     "required": ["command"],
+                },
+            }},
+            {"type": "function", "function": {
+                "name": "run_tests",
+                "description": "Ejecuta tests del repositorio (pytest). Opcionalmente filtra por archivo, directorio o keyword.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "description": "Archivo o directorio de tests (opcional, default: todo el repo)"},
+                        "keyword": {"type": "string", "description": "Filtrar tests por keyword (ej. nombre de funcion)"},
+                    },
                 },
             }},
             {"type": "function", "function": {
@@ -71,11 +109,9 @@ class ToolRegistry:
         ]
 
     def get_openai_definitions(self) -> list[dict]:
-        """Alias para get_definitions (compatibilidad)."""
         return self.get_definitions()
 
     def execute(self, name: str, arguments: dict, repo_path: str = ".") -> str:
-        """Ejecuta una tool por nombre con sus argumentos."""
         tool_fn = self._tools.get(name)
         if tool_fn:
             return tool_fn(arguments, repo_path)
@@ -98,13 +134,52 @@ class ToolRegistry:
         except Exception as e:
             return f"[Error escribiendo {path}: {e}]"
 
+    def replace_in_file(self, args: dict, repo_path: str) -> str:
+        path = Path(repo_path) / args.get("file_path", "")
+        old = args.get("old_string", "")
+        new = args.get("new_string", "")
+        if not old:
+            return "[Error: old_string vacio]"
+        try:
+            content = path.read_text(encoding="utf-8")
+            count = content.count(old)
+            if count == 0:
+                return f"[Error: old_string no encontrado en {path}]"
+            if count > 1:
+                return f"[Error: old_string aparece {count} veces en {path}. Debe ser unico.]"
+            content = content.replace(old, new, 1)
+            path.write_text(content, encoding="utf-8")
+            return f"[Reemplazado en {path}: {len(old)} → {len(new)} chars]"
+        except Exception as e:
+            return f"[Error en replace_in_file {path}: {e}]"
+
+    def list_files(self, args: dict, repo_path: str) -> str:
+        base = Path(repo_path) / args.get("path", ".")
+        depth = args.get("depth", 2)
+        pattern = args.get("pattern", "")
+        try:
+            if pattern:
+                matches = sorted(base.rglob(pattern))
+            else:
+                matches = sorted(base.rglob("*"))
+            lines = []
+            for p in matches:
+                if p.is_dir():
+                    continue
+                rel = p.relative_to(base)
+                if len(rel.parts) > depth:
+                    continue
+                size = p.stat().st_size
+                lines.append(f"  {rel} ({size} B)" if size < 1024 else f"  {rel} ({size // 1024} KB)")
+            return "\n".join(lines[:80]) if lines else "[Directorio vacio]"
+        except Exception as e:
+            return f"[Error listando {base}: {e}]"
+
     def execute_command(self, args: dict, repo_path: str) -> str:
         cmd = args.get("command", "")
         cwd = args.get("cwd", repo_path)
-
         if sys.platform == "win32":
             cmd = self._translate_windows(cmd)
-
         try:
             result = subprocess.run(cmd, shell=True, cwd=cwd,
                                      capture_output=True, text=True, timeout=60)
@@ -115,9 +190,28 @@ class ToolRegistry:
         except Exception as e:
             return f"[Error ejecutando '{cmd[:100]}...': {e}]"
 
+    def run_tests(self, args: dict, repo_path: str) -> str:
+        parts = ["pytest"]
+        if keyword := args.get("keyword"):
+            parts.append(f"-k {keyword}")
+        if path := args.get("path"):
+            parts.append(path)
+        cmd = " ".join(parts)
+        cwd = repo_path
+        try:
+            result = subprocess.run(cmd, shell=True, cwd=cwd,
+                                     capture_output=True, text=True, timeout=120)
+            output = (result.stdout + result.stderr).strip()
+            return output if output else "[pytest sin salida]"
+        except subprocess.TimeoutExpired:
+            return f"[Timeout: pytest...]"
+        except FileNotFoundError:
+            return "[Error: pytest no instalado. pip install pytest]"
+        except Exception as e:
+            return f"[Error pytest: {e}]"
+
     @staticmethod
     def _translate_windows(cmd: str) -> str:
-        """Traduce comandos Unix comunes a PowerShell/Windows."""
         c = cmd.strip()
         if c.startswith("mkdir -p "):
             path = c[9:].strip().strip('"')
@@ -145,7 +239,7 @@ class ToolRegistry:
             parts = c.split(" ")
             if len(parts) >= 3:
                 return f'Move-Item "{parts[1]}" "{parts[2]}"'
-        if c.endswith("2>nul") or c.endswith("2>/dev/null"):
+        if c.endswith("2>nul") or c.endswith("2>/dev/null") or "pytest" in c:
             return c
         return c
 
@@ -167,7 +261,6 @@ class ToolRegistry:
             )
             return result.stdout or "[No encontrado]"
         except Exception:
-            # Fallback a grep básico si rg no está instalado
             matches = []
             for p in search_path.rglob("*.py"):
                 try:

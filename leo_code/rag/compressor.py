@@ -1,12 +1,18 @@
 """Compressor adaptativo: construye el prompt según el tipo de tarea.
 
 Estrategias:
-- code_gen: solo estructura de directorios y archivos del repo
-- code_edit: función target + sus dependencias directas (sin cuerpos completos)
-- code_query: top 5 con docstrings, sin cuerpos
+- code_gen: estructura de directorios y archivos del repo
+- code_edit: función target + dependencias directas (sin cuerpos completos)
+- code_query: primer resultado cuerpo completo, resto firma+docstring
 - refactor: target + callers + callees (BFS depth 1)
-- search: mini-mapa ligero
-- no_code: contexto vacío
+- search: mini-mapa ligero con flags ✓doc/✗doc
+- debug: función target + callers + callees depth 2 + cuerpos completos
+- test_gen: función target + tests existentes en el repo como referencia
+- review: top funciones para revisión de código
+- optimize: cuerpos completos para análisis de performance
+- audit: top funciones con foco en patrones de seguridad
+- onboard: mapa de alto nivel del proyecto (estructura + entrypoints)
+- no_code: solo cápsulas tipo documento
 """
 
 from leo_code.core.parser import Capsule
@@ -44,6 +50,24 @@ def compress(
 
     if task_type == "refactor":
         return _compress_refactor(top_capsules, all_capsules)
+
+    if task_type == "debug":
+        return _compress_debug(top_capsules, all_capsules)
+
+    if task_type == "test_gen":
+        return _compress_test_gen(top_capsules, all_capsules)
+
+    if task_type == "review":
+        return _compress_review(top_capsules, all_capsules)
+
+    if task_type == "optimize":
+        return _compress_optimize(top_capsules, all_capsules)
+
+    if task_type == "audit":
+        return _compress_audit(top_capsules, all_capsules)
+
+    if task_type == "onboard":
+        return _compress_onboard(all_capsules)
 
     return _compress_query(top_capsules, budget_tokens)
 
@@ -268,3 +292,256 @@ def _compress_search(
 
     map_lines.append(f"\nTotal: {len(all_caps)} capsulas en {len(by_file)} archivos")
     return "\n".join(summary + map_lines)
+
+
+def _compress_debug(top_capsules: list[Capsule], all_capsules: list[Capsule]) -> str:
+    """Función target + cuerpo completo + callers + callees depth 2. Máximo contexto para debugging."""
+    target = top_capsules[0] if top_capsules else None
+    if not target:
+        return _compress_query(top_capsules, 2500)
+
+    all_by_name = {c.name: c for c in all_capsules}
+    nodes = []
+
+    # Target con cuerpo completo
+    target_body = target.content or target.signature
+    if target.content and len(target.content) > 3000:
+        target_body = target.content[:3000] + "\n# ... [truncado]"
+    nodes.append({
+        "id": target.id, "name": target.name, "type": target.type,
+        "properties": {
+            "signature": target.signature,
+            "file_path": target.file_path,
+            "docstring": target.docstring or "",
+            "content": target_body,
+            "parametros": target.properties.get("parametros", ""),
+            "tipo_retorno": target.properties.get("tipo_retorno", ""),
+            "lineas": target.properties.get("lineas", target.end_line - target.start_line + 1),
+        },
+    })
+
+    # Callees depth 1
+    for call in target.calls:
+        if call in all_by_name:
+            c = all_by_name[call]
+            nodes.append({
+                "id": c.id, "name": c.name, "type": c.type,
+                "properties": {
+                    "signature": c.signature,
+                    "file_path": c.file_path,
+                    "docstring": c.docstring or "",
+                    "parametros": c.properties.get("parametros", ""),
+                },
+            })
+
+    # Callers que llaman al target
+    callers = [c for c in all_capsules if target.name in c.calls]
+    for c in callers[:5]:
+        nodes.append({
+            "id": c.id, "name": c.name, "type": c.type,
+            "properties": {
+                "signature": c.signature,
+                "file_path": c.file_path,
+                "docstring": c.docstring or "",
+                "calls": ", ".join(c.calls[:8]),
+            },
+        })
+
+    context = serialize_context(nodes)
+    context += "\n\nDepura la funcion target. Revisa callers y callees. Usa read_file si necesitas mas contexto."
+    return context
+
+
+def _compress_test_gen(top_capsules: list[Capsule], all_capsules: list[Capsule]) -> str:
+    """Función target + tests existentes en el repo como referencia."""
+    target = top_capsules[0] if top_capsules else None
+    nodes = []
+
+    if target:
+        nodes.append({
+            "id": target.id, "name": target.name, "type": target.type,
+            "properties": {
+                "signature": target.signature,
+                "file_path": target.file_path,
+                "docstring": target.docstring or "",
+                "parametros": target.properties.get("parametros", ""),
+                "tipo_retorno": target.properties.get("tipo_retorno", ""),
+                "calls": ", ".join(target.calls[:8]),
+            },
+        })
+
+    # Buscar tests existentes (funciones/clases con 'test' en nombre)
+    test_caps = [c for c in all_capsules if "test" in c.name.lower() and c.type in ("function", "class")]
+    if test_caps:
+        nodes.append({
+            "id": "__tests__", "name": "__tests__", "type": "section",
+            "properties": {
+                "descripcion": f"{len(test_caps)} tests existentes en el repo",
+            },
+        })
+        for tc in test_caps[:8]:
+            nodes.append({
+                "id": tc.id, "name": tc.name, "type": tc.type,
+                "properties": {
+                    "signature": tc.signature,
+                    "file_path": tc.file_path,
+                    "docstring": tc.docstring or "",
+                },
+            })
+
+    if not nodes:
+        return ""
+
+    context = serialize_context(nodes)
+    context += "\n\nGenera tests para la funcion target. Usa los tests existentes como referencia de estilo."
+    if test_caps:
+        context += f" Hay {len(test_caps)} tests en el repo. Lee los mas relevantes con read_file."
+    return context
+
+
+def _compress_review(top_capsules: list[Capsule], all_capsules: list[Capsule]) -> str:
+    """Top funciones modificadas + estructura de dependencias para code review."""
+    target = top_capsules[0] if top_capsules else None
+    nodes = []
+
+    if target:
+        nodes.append({
+            "id": target.id, "name": target.name, "type": target.type,
+            "properties": {
+                "signature": target.signature,
+                "file_path": target.file_path,
+                "docstring": target.docstring or "",
+                "parametros": target.properties.get("parametros", ""),
+                "tipo_retorno": target.properties.get("tipo_retorno", ""),
+                "lineas": target.properties.get("lineas", target.end_line - target.start_line + 1),
+                "calls": ", ".join(target.calls[:8]),
+            },
+        })
+
+    all_by_name = {c.name: c for c in all_capsules}
+    for c in top_capsules[1:10]:
+        if c.type not in ("function", "class", "async_function", "test"):
+            continue
+        nodes.append({
+            "id": c.id, "name": c.name, "type": c.type,
+            "properties": {
+                "signature": c.signature,
+                "file_path": c.file_path,
+                "docstring": c.docstring or "",
+                "calls": ", ".join(c.calls[:5]),
+            },
+        })
+
+    if not nodes:
+        return ""
+
+    context = serialize_context(nodes)
+    context += "\n\nRevisa este codigo. Busca bugs, problemas de estilo, seguridad, y mejoras."
+    return context
+
+
+def _compress_optimize(top_capsules: list[Capsule], all_capsules: list[Capsule]) -> str:
+    """Funciones target con cuerpos para análisis de performance."""
+    nodes = []
+    seen = set()
+    char_budget = 6000  # ~1500 tokens
+
+    total = 0
+    for c in top_capsules:
+        if c.name in seen:
+            continue
+        if c.type not in ("function", "class", "async_function"):
+            continue
+        seen.add(c.name)
+        body = c.content or ""
+        if len(body) > 2000:
+            body = body[:2000] + "\n# ... [truncado]"
+        props = {
+            "signature": c.signature,
+            "file_path": c.file_path,
+            "docstring": c.docstring or "",
+            "lineas": c.properties.get("lineas", c.end_line - c.start_line + 1),
+            "calls": ", ".join(c.calls[:8]),
+        }
+        if c.content:
+            props["content"] = body
+        node = {"id": c.id, "name": c.name, "type": c.type, "properties": props}
+        node_chars = len(str(props))
+        if total + node_chars > char_budget:
+            break
+        nodes.append(node)
+        total += node_chars
+        if len(nodes) >= 5:
+            break
+
+    if not nodes:
+        return ""
+
+    context = serialize_context(nodes)
+    context += "\n\nOptimiza este codigo. Busca: bucles innecesarios, I/O bloqueante, "
+    context += "copias de datos, complejidad algoritmica alta."
+    return context
+
+
+def _compress_audit(top_capsules: list[Capsule], all_capsules: list[Capsule]) -> str:
+    """Funciones target con foco en seguridad."""
+    nodes = []
+    seen = set()
+
+    for c in top_capsules:
+        if c.name in seen or c.type not in ("function", "class", "async_function"):
+            continue
+        seen.add(c.name)
+        props = {
+            "signature": c.signature,
+            "file_path": c.file_path,
+            "docstring": c.docstring or "",
+            "parametros": c.properties.get("parametros", ""),
+            "calls": ", ".join(c.calls[:8]),
+        }
+        nodes.append({
+            "id": c.id, "name": c.name, "type": c.type,
+            "properties": props,
+        })
+        if len(nodes) >= 10:
+            break
+
+    if not nodes:
+        return ""
+
+    context = serialize_context(nodes)
+    context += "\n\nAudita este codigo por seguridad. Busca: SQL injection, XSS, "
+    context += "path traversal, hardcoded secrets, input validation, auth bypass."
+    return context
+
+
+def _compress_onboard(all_capsules: list[Capsule]) -> str:
+    """Mapa de alto nivel: estructura de directorios + entrypoints + módulos principales."""
+    dirs = set()
+    files_by_dir: dict[str, list[str]] = {}
+    modules: list[Capsule] = []
+
+    for c in all_capsules:
+        parts = c.file_path.replace("\\", "/").split("/")
+        dirname = "/".join(parts[:-1]) if len(parts) > 1 else "."
+        for i in range(len(parts) - 1):
+            dirs.add("/".join(parts[:i + 1]))
+        files_by_dir.setdefault(dirname, []).append(parts[-1])
+        if c.type in ("entrypoint", "file_header"):
+            modules.append(c)
+
+    lines = ["ESTRUCTURA DEL PROYECTO:"]
+    for d in sorted(dirs):
+        files = files_by_dir.get(d, [])
+        if files:
+            lines.append(f"  {d}/ ({len(files)} archivos)")
+
+    if modules:
+        lines.append("\nPUNTOS DE ENTRADA:")
+        for m in modules[:10]:
+            lines.append(f"  [{m.type}] {m.name} — {m.file_path}")
+
+    lines.append(f"\nTotal: {len(all_capsules)} capsulas, {len(files_by_dir)} modulos")
+    lines.append("Usa search_code y list_files para explorar en detalle.")
+
+    return "\n".join(lines)
