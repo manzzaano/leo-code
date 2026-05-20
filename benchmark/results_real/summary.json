@@ -1,10 +1,66 @@
 [
   {
     "system": "LEO",
-    "response": "[indexer] 68 archivos, 737 cápsulas\n  python: 68 archivos, 737 cápsulas\n  Tipos: async_function=9, class=192, constant=44, dataclass=17, endpoint=13, entrypoint=7, file_header=68, function=206, middleware=1, model=6, module=99, test=51, variable=24\nVoy a leer el archivo para analizar la función `detect_frameworks`.El archivo es muy largo. Déjame buscar específicamente la función `detect_frameworks`.Parece que la función no está en `parser.py`. Revisemos el archivo completo para ver su contenido real.Ahora leo la función completa desde la línea 263.Parece que `read_file` con offset no funciona como esperaba. Vamos a leer el archivo completo y buscar la función.",
-    "tokens": 167,
-    "duration_ms": 91770,
+    "response": "Vamos a leer el archivo para entender la función `detect_frameworks`.El archivo es muy largo. Busquemos específicamente la función `detect_frameworks`:No existe una función con ese nombre exacto. Busquemos patrones similares:No hay nada relacionado con \"framework\" en el código. Veamos la estructura del repositorio:(using tool)(using tool)(using tool)(using tool)(using tool)(using tool)Let me explore the full structure more carefully:",
+    "tokens": 109,
+    "duration_ms": 60977,
     "task_id": "t1_code_query",
+    "scores": {
+      "relevancia": 2,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.3
+  },
+  {
+    "system": "LEO",
+    "response": "Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.\n\nLoading weights:   0%|          | 0/103 [00:00<?, ?it/s]\nLoading weights: 100%|##########| 103/103 [00:00<00:00, 5944.21it/s]",
+    "tokens": 66,
+    "duration_ms": 79265,
+    "task_id": "t5_search",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "LEO",
+    "response": "Voy a leer el archivo primero para hacer el code review completo.Ahora voy a leer el archivo completo del compressor:",
+    "tokens": 29,
+    "duration_ms": 61026,
+    "task_id": "t8_review",
+    "scores": {
+      "relevancia": 2,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.3
+  },
+  {
+    "system": "LEO",
+    "response": "Voy a explorar el repositorio para entender su estructura y luego explicar la arquitectura.(using tool)(using tool)(using tool)(using tool)(using tool)(using tool)(using tool)(using tool)(using tool)(using tool)(using tool)(using tool)",
+    "tokens": 58,
+    "duration_ms": 50591,
+    "task_id": "t11_onboard",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "LEO",
+    "response": "Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.\n\nLoading weights:   0%|          | 0/103 [00:00<?, ?it/s]\nLoading weights: 100%|##########| 103/103 [00:00<00:00, 5876.77it/s]",
+    "tokens": 66,
+    "duration_ms": 56336,
+    "task_id": "t12_design_review",
     "scores": {
       "relevancia": 1,
       "correccion": 1,
