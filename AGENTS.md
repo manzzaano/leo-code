@@ -72,6 +72,6 @@ class Capsule:
 
 ## Testing
 
-- Run tests from package directories: `pytest kc-rag/tests/`
+- Run tests from repo root: `pytest`
 - Avoid mocks as much as possible
 - Test actual implementation, do not duplicate logic into tests
