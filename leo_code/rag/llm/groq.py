@@ -1,4 +1,4 @@
-"""OpenRouterProvider: passthrough a 200+ modelos vía OpenRouter API (OpenAI-compatible)."""
+"""GroqProvider: Groq LPU inference (ChatGPT-compatible, high speed)."""
 
 import os
 from typing import Optional
@@ -6,14 +6,14 @@ from typing import Optional
 from leo_code.rag.llm.provider import LLMProvider, Response, TokenUsage, ToolCall
 
 
-class OpenRouterProvider(LLMProvider):
-    name = "openrouter"
+class GroqProvider(LLMProvider):
+    name = "groq"
     context_window = 128000
     supports_tools = True
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "anthropic/claude-sonnet-4"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "llama-4-scout-17b-16e-instruct"):
         super().__init__(model=model)
-        self.api_key = api_key or os.getenv("OPENROUTER_API_KEY", "")
+        self.api_key = api_key or os.getenv("GROQ_API_KEY", "")
         self.model = model
         self._client = None
 
@@ -23,7 +23,7 @@ class OpenRouterProvider(LLMProvider):
             from openai import OpenAI
             self._client = OpenAI(
                 api_key=self.api_key,
-                base_url="https://openrouter.ai/api/v1",
+                base_url="https://api.groq.com/openai/v1",
             )
         return self._client
 
@@ -38,11 +38,7 @@ class OpenRouterProvider(LLMProvider):
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
 
-        extra_headers = {
-            "HTTP-Referer": "https://github.com/manzzaano/leo-code",
-            "X-Title": "leo-code",
-        }
-        resp = self.client.chat.completions.create(**kwargs, extra_headers=extra_headers)
+        resp = self.client.chat.completions.create(**kwargs)
         choice = resp.choices[0]
         msg = choice.message
 

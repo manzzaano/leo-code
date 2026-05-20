@@ -1,4 +1,4 @@
-"""OpenRouterProvider: passthrough a 200+ modelos vía OpenRouter API (OpenAI-compatible)."""
+"""GoogleProvider: Gemini 2.5 Pro/Flash vía Google AI Studio API."""
 
 import os
 from typing import Optional
@@ -6,14 +6,14 @@ from typing import Optional
 from leo_code.rag.llm.provider import LLMProvider, Response, TokenUsage, ToolCall
 
 
-class OpenRouterProvider(LLMProvider):
-    name = "openrouter"
-    context_window = 128000
+class GoogleProvider(LLMProvider):
+    name = "google"
+    context_window = 1048576
     supports_tools = True
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "anthropic/claude-sonnet-4"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "gemini-2.5-flash"):
         super().__init__(model=model)
-        self.api_key = api_key or os.getenv("OPENROUTER_API_KEY", "")
+        self.api_key = api_key or os.getenv("GOOGLE_API_KEY", os.getenv("GEMINI_API_KEY", ""))
         self.model = model
         self._client = None
 
@@ -23,7 +23,7 @@ class OpenRouterProvider(LLMProvider):
             from openai import OpenAI
             self._client = OpenAI(
                 api_key=self.api_key,
-                base_url="https://openrouter.ai/api/v1",
+                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
             )
         return self._client
 
@@ -33,16 +33,17 @@ class OpenRouterProvider(LLMProvider):
         tools: Optional[list[dict]] = None,
         temperature: float = 0.2,
     ) -> Response:
-        kwargs = dict(model=self.model, messages=messages, temperature=temperature, max_tokens=4096)
+        kwargs = dict(
+            model=self.model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=8192,
+        )
         if tools:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
 
-        extra_headers = {
-            "HTTP-Referer": "https://github.com/manzzaano/leo-code",
-            "X-Title": "leo-code",
-        }
-        resp = self.client.chat.completions.create(**kwargs, extra_headers=extra_headers)
+        resp = self.client.chat.completions.create(**kwargs)
         choice = resp.choices[0]
         msg = choice.message
 
@@ -56,18 +57,22 @@ class OpenRouterProvider(LLMProvider):
                     args = {}
                 tool_calls.append(ToolCall(name=tc.function.name, arguments=args, id=tc.id))
 
+        usage = TokenUsage()
+        if resp.usage:
+            usage = TokenUsage(
+                input_tokens=resp.usage.prompt_tokens,
+                output_tokens=resp.usage.completion_tokens,
+            )
+
         return Response(
             text=msg.content or "",
             tool_calls=tool_calls,
-            usage=TokenUsage(
-                input_tokens=resp.usage.prompt_tokens,
-                output_tokens=resp.usage.completion_tokens,
-            ) if resp.usage else TokenUsage(),
+            usage=usage,
             finish_reason=choice.finish_reason or "stop",
         )
 
     async def stream(self, messages: list[dict], tools: Optional[list[dict]] = None):
-        kwargs = dict(model=self.model, messages=messages, temperature=0.2, max_tokens=4096, stream=True)
+        kwargs = dict(model=self.model, messages=messages, temperature=0.2, max_tokens=8192, stream=True)
         if tools:
             kwargs["tools"] = tools
         stream = self.client.chat.completions.create(**kwargs)

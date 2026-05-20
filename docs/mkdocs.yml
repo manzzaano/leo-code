@@ -1,0 +1,36 @@
+site_name: leo-code
+site_description: KC-RAG — Recuperación estructural de código por subgrafo de dependencias
+repo_url: https://github.com/manzzaano/leo-code
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+
+nav:
+  - Inicio: index.md
+  - Instalación: install.md
+  - Uso: usage.md
+  - API:
+      - Sidecar: api/sidecar.md
+      - SDK Python: api/sdk.md
+  - Arquitectura:
+      - KC-RAG: arch/kc-rag.md
+      - Compresor: arch/compressor.md
+      - Parser: arch/parser.md
+  - Providers: providers.md
+  - Desarrollo: dev.md
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - admonition
+  - tables

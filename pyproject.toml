@@ -4,12 +4,33 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "leo-code"
-version = "0.1.0"
-description = "KC-RAG — Recuperación estructural de código por subgrafo de dependencias"
+version = "0.2.0"
+description = "KC-RAG — Recuperación estructural de código por subgrafo de dependencias. 15x menos tokens que los agentes tradicionales."
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
-authors = [{name = "Ismael Manzano Leon"}]
+authors = [{name = "Ismael Manzano Leon", email = "manzzaano@pm.me"}]
+keywords = ["code-assistant", "rag", "llm", "agent", "code-search", "static-analysis", "kc-rag"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: Software Development :: Compilers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://github.com/manzzaano/leo-code"
+Documentation = "https://github.com/manzzaano/leo-code#readme"
+Repository = "https://github.com/manzzaano/leo-code.git"
+Issues = "https://github.com/manzzaano/leo-code/issues"
 
 dependencies = [
     "fastapi>=0.115",
@@ -30,9 +51,26 @@ dev = [
     "pytest-asyncio>=0.24",
     "watchdog>=4",
     "tree-sitter>=0.23",
+]
+# Providers — instala según el que uses
+anthropic = ["anthropic>=0.34"]
+openai = ["openai>=1.30"]
+google = ["openai>=1.30"]  # Gemini via OpenAI-compatible endpoint
+groq = ["openai>=1.30"]
+mistral = ["openai>=1.30"]
+cohere = ["openai>=1.30"]
+together = ["openai>=1.30"]
+openrouter = ["openai>=1.30"]
+azure = ["openai>=1.30"]
+bedrock = ["boto3>=1.34"]
+ollama = ["ollama>=0.4"]
+all = [
     "anthropic>=0.34",
     "openai>=1.30",
     "ollama>=0.4",
+    "boto3>=1.34",
+    "tree-sitter>=0.23",
+    "watchdog>=4",
 ]
 
 [project.scripts]

@@ -1,4 +1,4 @@
-"""OpenRouterProvider: passthrough a 200+ modelos vía OpenRouter API (OpenAI-compatible)."""
+"""AzureProvider: Azure OpenAI Service (GPT-4o via Azure)."""
 
 import os
 from typing import Optional
@@ -6,24 +6,28 @@ from typing import Optional
 from leo_code.rag.llm.provider import LLMProvider, Response, TokenUsage, ToolCall
 
 
-class OpenRouterProvider(LLMProvider):
-    name = "openrouter"
+class AzureProvider(LLMProvider):
+    name = "azure"
     context_window = 128000
     supports_tools = True
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "anthropic/claude-sonnet-4"):
+    def __init__(self, api_key: Optional[str] = None, endpoint: Optional[str] = None,
+                 model: str = "gpt-4o"):
         super().__init__(model=model)
-        self.api_key = api_key or os.getenv("OPENROUTER_API_KEY", "")
+        self.api_key = api_key or os.getenv("AZURE_OPENAI_API_KEY", "")
+        self.endpoint = endpoint or os.getenv("AZURE_OPENAI_ENDPOINT", "")
+        self.api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2025-01-01-preview")
         self.model = model
         self._client = None
 
     @property
     def client(self):
         if self._client is None:
-            from openai import OpenAI
-            self._client = OpenAI(
+            from openai import AzureOpenAI
+            self._client = AzureOpenAI(
                 api_key=self.api_key,
-                base_url="https://openrouter.ai/api/v1",
+                azure_endpoint=self.endpoint,
+                api_version=self.api_version,
             )
         return self._client
 
@@ -38,11 +42,7 @@ class OpenRouterProvider(LLMProvider):
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
 
-        extra_headers = {
-            "HTTP-Referer": "https://github.com/manzzaano/leo-code",
-            "X-Title": "leo-code",
-        }
-        resp = self.client.chat.completions.create(**kwargs, extra_headers=extra_headers)
+        resp = self.client.chat.completions.create(**kwargs)
         choice = resp.choices[0]
         msg = choice.message
 

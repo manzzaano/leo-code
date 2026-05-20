@@ -169,6 +169,86 @@ CATALOG: dict[str, ModelInfo] = {
         cost_input=0, cost_output=0, context_window=131072, max_output=4096,
         tier="free",
     ),
+
+    # Groq (LPU — ultra-fast inference)
+    "groq/llama-4-scout-17b-16e-instruct": ModelInfo(
+        id="groq/llama-4-scout-17b-16e-instruct", provider="groq", name="Llama 4 Scout 17B",
+        cost_input=0.10, cost_output=0.40, context_window=131072, max_output=8192,
+        tier="free",
+    ),
+    "groq/llama-4-maverick-17b-128e-instruct": ModelInfo(
+        id="groq/llama-4-maverick-17b-128e-instruct", provider="groq", name="Llama 4 Maverick 17B",
+        cost_input=0.20, cost_output=0.60, context_window=131072, max_output=8192,
+        tier="budget",
+    ),
+    "groq/deepseek-r1-distill-llama-70b": ModelInfo(
+        id="groq/deepseek-r1-distill-llama-70b", provider="groq", name="DeepSeek R1 Distill 70B",
+        cost_input=0.75, cost_output=0.99, context_window=131072, max_output=8192,
+        tier="medium",
+    ),
+
+    # Cohere
+    "cohere/command-r-plus": ModelInfo(
+        id="cohere/command-r-plus", provider="cohere", name="Command R+",
+        cost_input=2.5, cost_output=10, context_window=128000, max_output=4096,
+        tier="medium",
+    ),
+    "cohere/command-r": ModelInfo(
+        id="cohere/command-r", provider="cohere", name="Command R",
+        cost_input=0.5, cost_output=1.5, context_window=128000, max_output=4096,
+        tier="budget",
+    ),
+
+    # Together AI
+    "together/meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8": ModelInfo(
+        id="together/meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8", provider="together",
+        name="Llama 4 Maverick 17B",
+        cost_input=0.20, cost_output=0.60, context_window=131072, max_output=4096,
+        tier="budget",
+    ),
+    "together/Qwen/Qwen3-Coder-480B-A35B-Instruct": ModelInfo(
+        id="together/Qwen/Qwen3-Coder-480B-A35B-Instruct", provider="together",
+        name="Qwen 3 Coder 480B",
+        cost_input=1.20, cost_output=2.50, context_window=32768, max_output=8192,
+        tier="medium",
+    ),
+    "together/deepseek-ai/DeepSeek-V3": ModelInfo(
+        id="together/deepseek-ai/DeepSeek-V3", provider="together", name="DeepSeek V3",
+        cost_input=1.25, cost_output=1.25, context_window=65536, max_output=8192,
+        tier="medium",
+    ),
+
+    # Bedrock
+    "bedrock/anthropic.claude-sonnet-4-20250514-v1:0": ModelInfo(
+        id="bedrock/anthropic.claude-sonnet-4-20250514-v1:0", provider="bedrock",
+        name="Claude Sonnet 4 (Bedrock)",
+        cost_input=3, cost_output=15, context_window=200000, max_output=32000,
+        supports_vision=True, tier="medium",
+    ),
+    "bedrock/anthropic.claude-opus-4-20250514-v1:0": ModelInfo(
+        id="bedrock/anthropic.claude-opus-4-20250514-v1:0", provider="bedrock",
+        name="Claude Opus 4 (Bedrock)",
+        cost_input=15, cost_output=75, context_window=200000, max_output=32000,
+        supports_vision=True, supports_reasoning=True, tier="premium",
+    ),
+    "bedrock/meta.llama4-maverick-17b-instruct-v1:0": ModelInfo(
+        id="bedrock/meta.llama4-maverick-17b-instruct-v1:0", provider="bedrock",
+        name="Llama 4 Maverick (Bedrock)",
+        cost_input=0.30, cost_output=0.60, context_window=131072, max_output=4096,
+        tier="budget",
+    ),
+
+    # Azure OpenAI
+    "azure/gpt-4o": ModelInfo(
+        id="azure/gpt-4o", provider="azure", name="GPT-4o (Azure)",
+        cost_input=2.5, cost_output=10, context_window=128000, max_output=16384,
+        supports_vision=True, tier="medium",
+    ),
+    "azure/gpt-4o-mini": ModelInfo(
+        id="azure/gpt-4o-mini", provider="azure", name="GPT-4o Mini (Azure)",
+        cost_input=0.15, cost_output=0.60, context_window=128000, max_output=16384,
+        supports_vision=True, tier="budget",
+    ),
 }
 
 

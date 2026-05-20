@@ -1,4 +1,4 @@
-"""OpenRouterProvider: passthrough a 200+ modelos vía OpenRouter API (OpenAI-compatible)."""
+"""MistralProvider: Mistral Large/Small/Codestral vía La Plateforme API."""
 
 import os
 from typing import Optional
@@ -6,14 +6,14 @@ from typing import Optional
 from leo_code.rag.llm.provider import LLMProvider, Response, TokenUsage, ToolCall
 
 
-class OpenRouterProvider(LLMProvider):
-    name = "openrouter"
+class MistralProvider(LLMProvider):
+    name = "mistral"
     context_window = 128000
     supports_tools = True
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "anthropic/claude-sonnet-4"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "mistral-small"):
         super().__init__(model=model)
-        self.api_key = api_key or os.getenv("OPENROUTER_API_KEY", "")
+        self.api_key = api_key or os.getenv("MISTRAL_API_KEY", "")
         self.model = model
         self._client = None
 
@@ -23,7 +23,7 @@ class OpenRouterProvider(LLMProvider):
             from openai import OpenAI
             self._client = OpenAI(
                 api_key=self.api_key,
-                base_url="https://openrouter.ai/api/v1",
+                base_url="https://api.mistral.ai/v1",
             )
         return self._client
 
@@ -33,16 +33,12 @@ class OpenRouterProvider(LLMProvider):
         tools: Optional[list[dict]] = None,
         temperature: float = 0.2,
     ) -> Response:
-        kwargs = dict(model=self.model, messages=messages, temperature=temperature, max_tokens=4096)
+        kwargs = dict(model=self.model, messages=messages, temperature=temperature, max_tokens=8192)
         if tools:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
 
-        extra_headers = {
-            "HTTP-Referer": "https://github.com/manzzaano/leo-code",
-            "X-Title": "leo-code",
-        }
-        resp = self.client.chat.completions.create(**kwargs, extra_headers=extra_headers)
+        resp = self.client.chat.completions.create(**kwargs)
         choice = resp.choices[0]
         msg = choice.message
 
@@ -67,7 +63,7 @@ class OpenRouterProvider(LLMProvider):
         )
 
     async def stream(self, messages: list[dict], tools: Optional[list[dict]] = None):
-        kwargs = dict(model=self.model, messages=messages, temperature=0.2, max_tokens=4096, stream=True)
+        kwargs = dict(model=self.model, messages=messages, temperature=0.2, max_tokens=8192, stream=True)
         if tools:
             kwargs["tools"] = tools
         stream = self.client.chat.completions.create(**kwargs)
