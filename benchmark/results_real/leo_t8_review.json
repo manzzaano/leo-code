@@ -1,11 +1,9 @@
 {
   "system": "LEO",
-  "task_id": "t8_review",
   "response": "Voy a leer el archivo primero para hacer el code review completo.",
-  "tokens": 775,
-  "iterations": 8,
-  "duration_ms": 25064,
-  "finish": "stop",
+  "tokens": 3787,
+  "duration_ms": 24776,
+  "task_id": "t8_review",
   "scores": {
     "relevancia": 2,
     "correccion": 5,

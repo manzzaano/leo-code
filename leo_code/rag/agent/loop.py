@@ -159,6 +159,7 @@ class AgentLoop:
         tool_defs = self.tools.get_openai_definitions()
         total_tokens = 0
         self._tool_call_count = 0
+        all_text = ""
 
         for iteration in range(self.max_iterations):
             if self.interrupt:
@@ -177,6 +178,7 @@ class AgentLoop:
                     break
                 if isinstance(chunk, str):
                     text += chunk
+                    all_text += chunk
                     yield {"type": "token", "text": chunk}
                 elif isinstance(chunk, dict) and chunk.get("type") == "tool_call":
                     tool_calls.append(chunk)
@@ -226,9 +228,15 @@ class AgentLoop:
                 messages.append({"role": "tool", "tool_call_id": tc.get("id", ""), "content": result[:2000]})
                 total_tokens += len(result) // 4
 
+            # After tools, prompt to finish
+            if tool_calls and iteration >= self.max_iterations - 1:
+                messages.append({"role": "system", "content": "Ya tienes suficientes datos. Da tu respuesta final AHORA. No pidas mas herramientas."})
+
             text = ""
 
-        yield {"type": "done", "respuesta": "Máximo de iteraciones alcanzado.", "iterations": self.max_iterations,
+        # Fallback: si no terminó con respuesta, usa texto acumulado
+        fallback_resp = all_text if all_text else f"[No se pudo completar en {self.max_iterations} iteraciones. {self._tool_call_count} tool calls ejecutadas.]"
+        yield {"type": "done", "respuesta": fallback_resp, "iterations": self.max_iterations,
                "total_tokens": total_tokens, "duration_ms": int((time.time() - t0) * 1000)}
 
     def _init_llm(self, model: str):
@@ -239,9 +247,13 @@ class AgentLoop:
             provider_name, model_name = "openai", model
 
         if provider_name in ("deepseek", "openai"):
+            base_url = "https://api.deepseek.com" if provider_name == "deepseek" or "deepseek" in model else "https://api.openai.com/v1"
+            # Strip reasoning/thinking mode — not supported in streaming tool use
+            if "deepseek" in model:
+                model_name = "deepseek-chat"  # fallback to non-thinking
             return get_provider("openai",
                 api_key=os.getenv("DEEPSEEK_API_KEY", os.getenv("OPENAI_API_KEY", "")),
-                base_url="https://api.deepseek.com" if "deepseek" in model else "https://api.openai.com/v1",
+                base_url=base_url,
                 model=model_name)
         return get_provider(provider_name, model=model_name)
 

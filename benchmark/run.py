@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from benchmark.judge import judge, score_summary
 
-MODEL = "deepseek/deepseek-v4-flash"
+MODEL = "deepseek/deepseek-chat"  # non-thinking for reliable streaming + tools
 RESULTS_DIR = Path("benchmark/results")
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -30,7 +30,7 @@ async def run_task_leo(task: dict, repo_path: str) -> dict:
     """Ejecuta tarea con leo-code (KC-RAG activo)."""
     from leo_code.rag.agent.loop import AgentLoop
     from leo_code.rag.agent.tools import ToolRegistry
-    agent = AgentLoop(tools=ToolRegistry(), max_iterations=5)
+    agent = AgentLoop(tools=ToolRegistry(), max_iterations=8)
     agent.interrupt = False
     t0 = time.time()
     try:
@@ -53,7 +53,7 @@ async def run_task_oc(task: dict, repo_path: str) -> dict:
     """Ejecuta tarea sin KC-RAG (agente con tools pero sin contexto RAG)."""
     from leo_code.rag.agent.loop import AgentLoop
     from leo_code.rag.agent.tools import ToolRegistry
-    agent = AgentLoop(tools=ToolRegistry(), max_iterations=5)
+    agent = AgentLoop(tools=ToolRegistry(), max_iterations=8)
     agent.interrupt = False
     t0 = time.time()
     try:
