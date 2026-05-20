@@ -295,6 +295,35 @@ def extract_from_txt(content: str, file_path: str) -> list[Capsule]:
     )]
 
 
+EXT_LANG = {
+    ".py": "python", ".pyw": "python",
+    ".js": "javascript", ".mjs": "javascript", ".cjs": "javascript",
+    ".ts": "typescript", ".tsx": "typescript", ".jsx": "javascript",
+    ".go": "go",
+    ".rs": "rust",
+    ".java": "java",
+    ".rb": "ruby",
+    ".c": "c", ".h": "c",
+    ".cpp": "cpp", ".cc": "cpp", ".cxx": "cpp", ".hpp": "cpp", ".hxx": "cpp",
+    ".cs": "csharp",
+    ".txt": "text", ".md": "text", ".rst": "text", ".cfg": "text", ".ini": "text",
+    ".toml": "text", ".yaml": "text", ".yml": "text", ".json": "text",
+    ".xml": "text", ".html": "text", ".css": "text", ".sql": "text",
+    ".sh": "text", ".bash": "text", ".ps1": "text", ".bat": "text",
+    ".dockerfile": "text", ".makefile": "text", ".cmake": "text",
+}
+
+LANGUAGES = sorted(set(EXT_LANG.values()))
+
+
+def detect_language(file_path: str) -> str:
+    suffix = Path(file_path).suffix.lower()
+    name = Path(file_path).name.lower()
+    if name in ("dockerfile", "makefile", "gemfile", "rakefile", "cmakelists.txt"):
+        return "text"
+    return EXT_LANG.get(suffix, "text")
+
+
 def extract_from_file(path: str, language: str = "python") -> list[Capsule]:
     """Extrae cápsulas de un archivo. Selecciona parser según lenguaje."""
     content = Path(path).read_text(encoding="utf-8")
@@ -302,6 +331,11 @@ def extract_from_file(path: str, language: str = "python") -> list[Capsule]:
         return extract_from_python(content, path)
     if language == "text":
         return extract_from_txt(content, path)
+    try:
+        from leo_code.core.parser_generic import extract_generic
+        return extract_generic(content, path, language)
+    except ImportError:
+        pass
     try:
         return extract_from_tree_sitter(content, path, language)
     except (ImportError, SyntaxError, ValueError):
