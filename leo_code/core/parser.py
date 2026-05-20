@@ -306,11 +306,16 @@ EXT_LANG = {
     ".c": "c", ".h": "c",
     ".cpp": "cpp", ".cc": "cpp", ".cxx": "cpp", ".hpp": "cpp", ".hxx": "cpp",
     ".cs": "csharp",
+    ".html": "html", ".htm": "html",
+    ".css": "css",
     ".txt": "text", ".md": "text", ".rst": "text", ".cfg": "text", ".ini": "text",
     ".toml": "text", ".yaml": "text", ".yml": "text", ".json": "text",
-    ".xml": "text", ".html": "text", ".css": "text", ".sql": "text",
+    ".xml": "text", ".sql": "text",
     ".sh": "text", ".bash": "text", ".ps1": "text", ".bat": "text",
     ".dockerfile": "text", ".makefile": "text", ".cmake": "text",
+    ".png": "image", ".jpg": "image", ".jpeg": "image",
+    ".gif": "image", ".webp": "image", ".svg": "image",
+    ".bmp": "image", ".ico": "image",
 }
 
 LANGUAGES = sorted(set(EXT_LANG.values()))
@@ -326,59 +331,52 @@ def detect_language(file_path: str) -> str:
 
 def extract_from_file(path: str, language: str = "python") -> list[Capsule]:
     """Extrae cápsulas de un archivo. Selecciona parser según lenguaje."""
+    if language == "image":
+        return extract_image_capsule(path)
     content = Path(path).read_text(encoding="utf-8")
     if language == "python":
         return extract_from_python(content, path)
     if language == "text":
         return extract_from_txt(content, path)
+    if language in ("html", "css"):
+        try:
+            from leo_code.core.parser_generic import extract_html_css
+            return extract_html_css(content, path, language)
+        except ImportError:
+            return extract_from_txt(content, path)
     try:
         from leo_code.core.parser_generic import extract_generic
         return extract_generic(content, path, language)
     except ImportError:
-        pass  # parser_generic no disponible, intentar tree-sitter
+        pass
     try:
         return extract_from_tree_sitter(content, path, language)
     except (ImportError, SyntaxError, ValueError):
-        return []  # sin parser disponible para este lenguaje
-
-
-_TS_PARSERS: dict[str, tuple] = {}
-
-def _get_ts_parser(language: str):
-    """Obtiene un parser tree-sitter para el lenguaje dado (con caché)."""
-    if language not in _TS_PARSERS:
-        try:
-            from tree_sitter import Language, Parser
-            grammar_map = {
-                "python": "tree_sitter_python",
-                "javascript": "tree_sitter_javascript",
-                "typescript": "tree_sitter_typescript",
-                "go": False,
-                "rust": False,
-                "java": False,
-                "ruby": False,
-                "c": False,
-                "cpp": False,
-                "csharp": False,
-            }
-            mod_name = grammar_map.get(language)
-            if mod_name:
-                mod = __import__(mod_name)
-                lang = Language(mod.language())
-                parser = Parser(lang)
-                _TS_PARSERS[language] = (lang, parser)
-            else:
-                return None, None
-        except ImportError:
-            return None, None
-    return _TS_PARSERS.get(language, (None, None))
-
-
-def extract_from_tree_sitter(content: str, file_path: str, language: str = "python") -> list[Capsule]:
-    """Extrae cápsulas usando tree-sitter (multi-lenguaje)."""
-    lang, parser = _get_ts_parser(language)
-    if parser is None:
         return []
+
+
+def extract_image_capsule(path: str) -> list[Capsule]:
+    """Cápsula de tipo image con base64 para modelos de visión."""
+    import base64
+    name = Path(path).stem
+    content = Path(path).read_bytes()
+    mime_map = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml",
+                ".bmp": "image/bmp", ".ico": "image/x-icon"}
+    suffix = Path(path).suffix.lower()
+    mime = mime_map.get(suffix, "image/png")
+    b64 = base64.b64encode(content).decode("ascii")
+    return [Capsule(
+        id=_make_id(path, 1, f"image:{name}"),
+        type="image",
+        name=name,
+        file_path=path,
+        start_line=1, end_line=1,
+        language="image",
+        signature=f"[image] {name} ({len(content)} bytes)",
+        content=f"data:{mime};base64,{b64}",
+        properties={"mime": mime, "size_bytes": len(content), "width": 0, "height": 0},
+    )]
 
     tree = parser.parse(content.encode())
     root = tree.root_node

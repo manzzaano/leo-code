@@ -1,6 +1,6 @@
 """Parser genérico multi-lenguaje vía regex patterns.
 
-Soporta: JavaScript, TypeScript, Go, Rust, Java, Ruby, C, C++, C#, texto.
+Soporta: JavaScript, TypeScript, Go, Rust, Java, Ruby, C, C++, C#, HTML, CSS.
 Para lenguajes sin patterns específicos, usa heurística de indentación.
 """
 
@@ -264,3 +264,91 @@ def _extract_heuristic(content: str, file_path: str, language: str) -> list[Caps
         ))
 
     return capsules
+
+
+def extract_html_css(content: str, file_path: str, language: str) -> list[Capsule]:
+    """Extrae estructura de HTML/CSS: tags, clases, meta tags, selectores."""
+    module_name = Path(file_path).stem
+    capsules = []
+
+    if language == "html":
+        caps = _parse_html(content, file_path, module_name)
+    else:
+        caps = _parse_css(content, file_path, module_name)
+
+    capsules.extend(caps)
+    return capsules
+
+
+def _parse_html(content: str, file_path: str, module_name: str) -> list[Capsule]:
+    capsules = []
+    tags = re.findall(r"<\s*(\w+)", content)
+    tag_counts: dict[str, int] = {}
+    for t in tags:
+        tag_counts[t] = tag_counts.get(t, 0) + 1
+
+    classes = set()
+    for m in re.finditer(r'class=["\x27]([^"\x27]+)["\x27]', content):
+        classes.update(c.strip() for c in m.group(1).split())
+
+    meta_tags: dict[str, str] = {}
+    for m in re.finditer(r'<meta\s+([^>]+)>', content):
+        attrs = m.group(1)
+        name = re.search(r'name=["\x27]([^"\x27]+)["\x27]', attrs)
+        prop = re.search(r'property=["\x27]([^"\x27]+)["\x27]', attrs)
+        content_attr = re.search(r'content=["\x27]([^"\x27]+)["\x27]', attrs)
+        key = (name or prop)
+        if key and content_attr:
+            meta_tags[key.group(1)] = content_attr.group(1)
+
+    json_lds = re.findall(r'<script\s[^>]*type=["\x27]application/ld\+json["\x27][^>]*>(.*?)</script>', content, re.DOTALL)
+
+    headings = re.findall(r"<(h[1-6])\b[^>]*>(.*?)</h[1-6]>", content)
+    heading_texts = [f"{h.upper()}: {t.strip()[:100]}" for h, t in headings[:10]]
+
+    html_capsule = Capsule(
+        id=_make_id(file_path, 1, "html_structure"),
+        type="document",
+        name=f"{module_name}.html",
+        file_path=file_path,
+        start_line=1, end_line=content.count("\n") + 1,
+        language="html",
+        signature=f"[html] {module_name}",
+        content=content[:3000],
+        properties={
+            "tags": ", ".join(f"{t}({c})" for t, c in sorted(tag_counts.items())),
+            "css_classes": ", ".join(sorted(classes)[:30]),
+            "meta_tags": ", ".join(f"{k}={v}" for k, v in meta_tags.items()),
+            "headings": ", ".join(heading_texts),
+            "json_ld": json_lds[0][:500] if json_lds else "",
+            "chars": len(content),
+        },
+    )
+    capsules.append(html_capsule)
+    return capsules
+
+
+def _parse_css(content: str, file_path: str, module_name: str) -> list[Capsule]:
+    selectors = re.findall(r"([.#@]?[a-zA-Z][\w-]*)\s*\{", content)
+    colors = re.findall(r"(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|hsla?\([^)]+\))", content)
+    fonts = re.findall(r"font-family\s*:\s*([^;]+);", content)
+    media_queries = re.findall(r"@media\s+([^{]+)\{", content)
+
+    css_capsule = Capsule(
+        id=_make_id(file_path, 1, "css_structure"),
+        type="document",
+        name=f"{module_name}.css",
+        file_path=file_path,
+        start_line=1, end_line=content.count("\n") + 1,
+        language="css",
+        signature=f"[css] {module_name}",
+        content=content[:3000],
+        properties={
+            "selectors": ", ".join(set(selectors)[:30]),
+            "colors": ", ".join(set(colors)[:20]),
+            "fonts": ", ".join(f.strip() for f in fonts[:10]),
+            "media_queries": ", ".join(mq.strip() for mq in media_queries[:5]),
+            "chars": len(content),
+        },
+    )
+    return [css_capsule]

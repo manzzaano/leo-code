@@ -38,7 +38,21 @@ class BedrockProvider(LLMProvider):
             if m["role"] == "system":
                 system_parts.append(m["content"])
             else:
-                msg_list.append({"role": m["role"], "content": [{"text": m.get("content", "")}]})
+                raw = m.get("content", "")
+                if isinstance(raw, list):
+                    blocks = []
+                    for item in raw:
+                        if item.get("type") == "text":
+                            blocks.append({"text": item["text"]})
+                        elif item.get("type") == "image_url":
+                            url = item["image_url"]["url"]
+                            if url.startswith("data:"):
+                                header, b64 = url.split(",", 1)
+                                mime = header.split(":")[1].split(";")[0]
+                                blocks.append({"image": {"format": mime.split("/")[-1], "source": {"bytes": b64}}})
+                    msg_list.append({"role": m["role"], "content": blocks if blocks else [{"text": ""}]})
+                else:
+                    msg_list.append({"role": m["role"], "content": [{"text": raw}]})
 
         kwargs = dict(
             modelId=self.model,

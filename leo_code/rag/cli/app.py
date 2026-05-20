@@ -48,21 +48,29 @@ def cli():
               help="Modelo LLM (auto-detecta provider por env vars)")
 @click.option("--repo", "-r", default=".", help="Ruta del repositorio")
 @click.option("--no-rag", is_flag=True, help="Desactivar KC-RAG (solo LLM directo)")
-def ask(query: str, model: str, repo: str, no_rag: bool):
+@click.option("--image", "-i", multiple=True, type=click.Path(exists=True),
+              help="Imagen(es) para análisis de visión (puede repetirse)")
+def ask(query: str, model: str, repo: str, no_rag: bool, image: tuple[str]):
     """Consulta directa al agente con KC-RAG."""
     from rich.console import Console
     console = Console(highlight=False)
     _setup_signals()
 
     console.print(f"  [dim]repo: {Path(repo).resolve()}[/dim]")
-    console.print(f"  [dim]modelo: {model}  |  KC-RAG: {'off' if no_rag else 'on'}[/dim]\n")
+    console.print(f"  [dim]modelo: {model}  |  KC-RAG: {'off' if no_rag else 'on'}[/dim]")
+    if image:
+        console.print(f"  [dim]imágenes: {len(image)}[/dim]")
+    console.print()
 
     async def run():
         from leo_code.rag.agent.loop import AgentLoop
         agent = AgentLoop(max_iterations=12)
         agent.interrupt = False
 
-        async for event in agent.stream_run(query, repo_path=repo, model=model, use_kc_rag=not no_rag):
+        async for event in agent.stream_run(
+            query, repo_path=repo, model=model, use_kc_rag=not no_rag,
+            images=list(image) if image else None,
+        ):
             if _cancel.cancelled:
                 agent.interrupt = True
                 continue
@@ -91,7 +99,9 @@ def ask(query: str, model: str, repo: str, no_rag: bool):
 @click.option("--model", "-m", default="deepseek/deepseek-v4-flash",
               help="Modelo LLM")
 @click.option("--repo", "-r", default=".", help="Ruta del repositorio")
-def chat(model: str, repo: str):
+@click.option("--image", "-i", multiple=True, type=click.Path(exists=True),
+              help="Imagen(es) para análisis (carga al iniciar la sesión)")
+def chat(model: str, repo: str, image: tuple[str]):
     """Modo conversacional multi-turn con KC-RAG y persistencia."""
     from rich.console import Console
     from rich.panel import Panel
@@ -103,19 +113,22 @@ def chat(model: str, repo: str):
     sm = SessionManager()
     repo_abs = str(Path(repo).resolve())
     sid = sm.create_session(repo_abs, model).id
+    pending_images = list(image) if image else []
 
     console.print(Panel.fit(
         f"[bold]leo-code[/bold] v{VERSION}\n"
         f"repo: {repo_abs}\n"
         f"modelo: {model}\n"
-        f"sesión: {sid[:12]}...\n\n"
-        f"[dim]Comandos: /help  /model  /diff  /clear  /session  /exit[/dim]\n"
-        f"[dim]Multi-línea: termina con \\ para continuar[/dim]",
+        f"sesión: {sid[:12]}...\n"
+        + (f"imágenes: {len(pending_images)}\n" if pending_images else "") +
+        f"\n[dim]Comandos: /help  /model  /diff  /clear  /session  /exit[/dim]\n"
+        f"[dim]Multi-línea: termina con \\ para continuar[/dim]\n"
+        f"[dim]/image <path> para cargar imagen durante la sesión[/dim]",
         border_style="blue",
         padding=(1, 3),
     ))
 
-    state = {"model": model, "repo": repo_abs}
+    state = {"model": model, "repo": repo_abs, "images": pending_images}
     total_saved = 0
 
     while True:
@@ -137,6 +150,7 @@ def chat(model: str, repo: str):
             continue
 
         _cancel.cancelled = False
+        images = state.pop("images", [])  # consume once
 
         async def stream_chat():
             from leo_code.rag.agent.loop import AgentLoop
@@ -145,7 +159,7 @@ def chat(model: str, repo: str):
 
             async for event in agent.stream_run(
                 user_input, repo_path=repo, model=state["model"],
-                session_id=sid,
+                session_id=sid, images=images if images else None,
             ):
                 if _cancel.cancelled:
                     agent.interrupt = True
@@ -202,6 +216,7 @@ def _handle_command(cmd: str, state: dict, sm, sid: str, console) -> str | None:
 [bold]Comandos:[/bold]
   /model <id>     Cambiar modelo (p.ej. /model deepseek/deepseek-v4-pro)
   /model list     Listar modelos disponibles
+  /image <path>   Cargar imagen para análisis de visión (próxima query)
   /diff           Ver git diff de los cambios hechos
   /clear          Limpiar pantalla
   /session        Info de la sesión actual
@@ -209,6 +224,15 @@ def _handle_command(cmd: str, state: dict, sm, sid: str, console) -> str | None:
   /exit           Salir y guardar sesión
   \\               Terminar línea con \\ para continuar en la siguiente
 """)
+        return ""
+
+    if cmd.startswith("/image "):
+        img_path = cmd.split("/image ", 1)[1].strip()
+        if Path(img_path).exists():
+            state.setdefault("images", []).append(img_path)
+            console.print(f"[green]Imagen cargada: {img_path} ({len(state['images'])} en cola)[/green]")
+        else:
+            console.print(f"[red]No encontrada: {img_path}[/red]")
         return ""
 
     if cmd.startswith("/model "):
