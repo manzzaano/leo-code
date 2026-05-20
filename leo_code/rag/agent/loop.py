@@ -174,11 +174,13 @@ class AgentLoop:
                          use_kc_rag: bool = True,
                          history: list[dict] | None = None,
                          session_id: str | None = None,
-                         images: list[str] | None = None):
+                         images: list[str] | None = None,
+                         plugin_manager=None):
         """Streaming: KC-RAG context → LLM tokens → tool calls → repeat.
 
         Yields dicts: {"type": "context"|"token"|"tool_start"|"tool_result"|"tool_end"|"done"}
         images: lista de paths a imágenes para análisis de visión.
+        plugin_manager: PluginManager instancia para plugins.
         """
         t0 = time.time()
         self.interrupt = False
@@ -219,6 +221,15 @@ class AgentLoop:
 
         if context:
             messages.insert(1, {"role": "system", "content": f"Contexto del codigo:\n{context}"})
+
+        # Plugin context injection
+        if plugin_manager:
+            plugins_ctx = plugin_manager.pre_context(query, [])
+            if plugins_ctx:
+                messages.insert(1, {"role": "system", "content": f"Contexto de plugins:\n{plugins_ctx}"})
+            plugin_info = plugin_manager.info()
+            if plugin_info:
+                yield {"type": "plugins", "plugins": [{"name": p.name, "type": p.type, "running": p.running, "tool_count": getattr(p, 'tool_count', 0)} for p in plugin_info]}
 
         tool_defs = self.tools.get_openai_definitions()
         total_tokens = 0

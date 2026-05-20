@@ -19,6 +19,11 @@ class ToolRegistry:
             "git_diff": self.git_diff,
             "search_code": self.search_code,
         }
+        self._definitions: list[dict] = []  # extended by plugins
+
+    def register(self, name: str, fn, definition: dict):
+        self._tools[name] = fn
+        self._definitions.append({"type": "function", "function": definition})
 
     def get_definitions(self) -> list[dict]:
         return [
@@ -106,7 +111,7 @@ class ToolRegistry:
                     "required": ["pattern"],
                 },
             }},
-        ]
+        ] + self._definitions
 
     def get_openai_definitions(self) -> list[dict]:
         return self.get_definitions()

@@ -131,6 +131,19 @@ def chat(model: str, repo: str, image: tuple[str]):
     state = {"model": model, "repo": repo_abs, "images": pending_images}
     total_saved = 0
 
+    # Init plugins from leo-code.json
+    from leo_code.rag.agent.tools import ToolRegistry
+    plugins_registry = ToolRegistry()
+    from leo_code.plugins import PluginManager
+    pm = PluginManager(repo_path=repo_abs)
+    plugin_infos = pm.init(registry=plugins_registry)
+    if plugin_infos:
+        running = [p for p in plugin_infos if p.running]
+        if running:
+            total_plugin_tools = sum(getattr(p, 'tool_count', 0) for p in running)
+            console.print(f"[dim]Plugins: {len(running)} cargados, {total_plugin_tools} tools extra[/dim]")
+            console.print(f"[dim]  {', '.join(p.name for p in running)}[/dim]\n")
+
     while True:
         user_input = _read_multiline(console)
         if user_input is None:
@@ -144,6 +157,7 @@ def chat(model: str, repo: str, image: tuple[str]):
         handled = _handle_command(cmd, state, sm, sid, console)
         if handled is not None:
             if handled == "exit":
+                pm.shutdown()
                 console.print(f"\n[dim]Sesión guardada: {sid}[/dim]")
                 console.print(f"[dim]Total tokens ahorrados vs baseline: ~{total_saved}[/dim]")
                 break
@@ -154,19 +168,32 @@ def chat(model: str, repo: str, image: tuple[str]):
 
         async def stream_chat():
             from leo_code.rag.agent.loop import AgentLoop
-            agent = AgentLoop(max_iterations=12)
+            from leo_code.rag.agent.tools import ToolRegistry
+            # Merge agent tools with plugin tools
+            merged = ToolRegistry()
+            for name, fn in plugins_registry._tools.items():
+                merged._tools[name] = fn
+            merged._definitions = list(plugins_registry._definitions)
+            agent = AgentLoop(tools=merged, max_iterations=12)
             agent.interrupt = False
 
             async for event in agent.stream_run(
                 user_input, repo_path=repo, model=state["model"],
                 session_id=sid, images=images if images else None,
+                plugin_manager=pm,
             ):
                 if _cancel.cancelled:
                     agent.interrupt = True
                     continue
 
                 etype = event["type"]
-                if etype == "context":
+                if etype == "plugins":
+                    plugins = event.get("plugins", [])
+                    if plugins:
+                        running = [p for p in plugins if p.get("running")]
+                        total = sum(p.get("tool_count", 0) for p in running)
+                        console.print(f"[dim]  plugins: {', '.join(p['name'] for p in running)} ({total} tools)[/dim]\n")
+                elif etype == "context":
                     console.print(f"[dim italic]  contexto KC-RAG · {event['tokens']} tokens · {event['task_type']}[/dim italic]\n")
                 elif etype == "token":
                     console.print(event["text"], end="", markup=False)
