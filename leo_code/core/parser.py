@@ -335,11 +335,11 @@ def extract_from_file(path: str, language: str = "python") -> list[Capsule]:
         from leo_code.core.parser_generic import extract_generic
         return extract_generic(content, path, language)
     except ImportError:
-        pass
+        pass  # parser_generic no disponible, intentar tree-sitter
     try:
         return extract_from_tree_sitter(content, path, language)
     except (ImportError, SyntaxError, ValueError):
-        return []
+        return []  # sin parser disponible para este lenguaje
 
 
 _TS_PARSERS: dict[str, tuple] = {}
@@ -351,6 +351,15 @@ def _get_ts_parser(language: str):
             from tree_sitter import Language, Parser
             grammar_map = {
                 "python": "tree_sitter_python",
+                "javascript": "tree_sitter_javascript",
+                "typescript": "tree_sitter_typescript",
+                "go": False,
+                "rust": False,
+                "java": False,
+                "ruby": False,
+                "c": False,
+                "cpp": False,
+                "csharp": False,
             }
             mod_name = grammar_map.get(language)
             if mod_name:

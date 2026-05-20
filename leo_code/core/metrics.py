@@ -4,12 +4,13 @@ Trackea: queries totales, tokens ahorrados vs baseline, latencia, cache hits.
 Endpoint /metrics en el sidecar.
 """
 
+import os
 import time
 import threading
 from dataclasses import dataclass, field
 
 
-BASELINE_TOKENS_PER_QUERY = 20_000  # opencode promedio por query
+BASELINE_TOKENS_PER_QUERY = int(os.environ.get("LEO_BASELINE_TOKENS", "20000"))
 
 
 @dataclass

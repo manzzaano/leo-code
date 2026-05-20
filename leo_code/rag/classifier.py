@@ -83,6 +83,7 @@ TASK_SIGNALS = {
         "audit", "auditoría", "auditoria", "safety", "safe",
         "inyección", "injection", "sql", "xss", "csrf",
         "secret", "token", "contraseña", "password", "expuesto",
+        "busca vulnerabilidades", "vulnerable",
     ],
     "onboard": [
         "onboarding", "onboard", "introducción", "introduccion",

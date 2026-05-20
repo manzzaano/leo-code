@@ -33,7 +33,7 @@ import uvicorn
 
 from leo_code.core.metrics import get_metrics, MetricsSnapshot
 
-_CACHE_DIR = Path("./cache")
+_CACHE_DIR = Path(os.getenv("LEO_CACHE_DIR", "./cache"))
 _CACHE_DIR.mkdir(parents=True, exist_ok=True)
 _INDEX_PATH = _CACHE_DIR / "kc_index.json.gz"
 _REPOS_PATH = _CACHE_DIR / "kc_indexed_repos.json"
@@ -237,13 +237,13 @@ async def lifespan(app: FastAPI):
     print("[leo-mcp] Apagando.")
 
 
-app = FastAPI(title="Leo-Code MCP", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Leo-Code MCP", version="0.2.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "leo-code-mcp", "version": "0.1.0"}
+    return {"status": "ok", "service": "leo-code-mcp", "version": "0.2.0"}
 
 
 @app.post("/context", response_model=ContextResponse)

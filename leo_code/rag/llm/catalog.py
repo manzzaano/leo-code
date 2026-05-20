@@ -80,16 +80,14 @@ CATALOG: dict[str, ModelInfo] = {
         tier="budget",
     ),
     "deepseek/deepseek-chat": ModelInfo(
-        id="deepseek/deepseek-chat", provider="openai", name="DeepSeek V3 (DEPRECATED)",
-        cost_input=0.29, cost_output=0.43, cost_cache_read=0.07, cost_cache_write=0.27,
-        context_window=65536, max_output=8192,
+        id="deepseek/deepseek-chat", provider="openai", name="DeepSeek V3",
+        cost_input=0.29, cost_output=0.43, context_window=65536, max_output=8192,
         tier="budget",
     ),
     "deepseek/deepseek-reasoner": ModelInfo(
-        id="deepseek/deepseek-reasoner", provider="openai", name="DeepSeek R1 (DEPRECATED)",
-        cost_input=0.55, cost_output=2.19,
-        context_window=65536, max_output=8192, supports_reasoning=True,
-        tier="medium",
+        id="deepseek/deepseek-reasoner", provider="openai", name="DeepSeek R1",
+        cost_input=0.55, cost_output=2.19, context_window=65536, max_output=8192,
+        supports_reasoning=True, tier="medium",
     ),
 
     # OpenRouter (precios promedio)
