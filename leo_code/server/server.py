@@ -549,12 +549,36 @@ async def list_sessions(limit: int = Query(20, ge=1, le=100)):
         return {"error": str(e), "sessions": []}
 
 
+_global_plugin_manager = None
+
+
+@app.get("/plugins")
+async def list_plugins():
+    """Lista plugins cargados y su estado."""
+    if _global_plugin_manager is None:
+        return {"plugins": [], "total": 0}
+    info = _global_plugin_manager.info()
+    return {
+        "plugins": [{"name": p.name, "type": p.type, "running": p.running,
+                      "tool_count": getattr(p, 'tool_count', 0), "version": p.version}
+                     for p in info],
+        "total": len(info),
+    }
+
+
 def main():
+    global _global_plugin_manager
     parser = argparse.ArgumentParser(description="Leo-Code MCP Server")
     parser.add_argument("--workers", type=int, default=1, help="Número de workers uvicorn (default 1)")
     parser.add_argument("--port", type=int, default=9898, help="Puerto (default 9898)")
     parser.add_argument("--host", default="0.0.0.0", help="Host (default 0.0.0.0)")
+    parser.add_argument("--plugins", default="", help="Path a leo-code.json con configuración de plugins")
     args = parser.parse_args()
+
+    if args.plugins:
+        from leo_code.plugins import PluginManager
+        _global_plugin_manager = PluginManager(config_path=args.plugins, repo_path=".")
+        _global_plugin_manager.init()
 
     print(f"[leo-mcp] Leo-Code MCP Server v0.2.0 (workers={args.workers})")
     print("[leo-mcp] Endpoints:")
@@ -566,6 +590,11 @@ def main():
     print(f"  GET  http://{args.host}:{args.port}/stats")
     print(f"  GET  http://{args.host}:{args.port}/metrics")
     print(f"  GET  http://{args.host}:{args.port}/sessions")
+    print(f"  GET  http://{args.host}:{args.port}/plugins")
+    if _global_plugin_manager:
+        plugins = _global_plugin_manager.info()
+        if plugins:
+            print(f"[leo-mcp] Plugins: {len(plugins)} cargados ({', '.join(p.name for p in plugins)})")
     uvicorn.run(app, host=args.host, port=args.port, log_level="info", workers=args.workers)
 
 
