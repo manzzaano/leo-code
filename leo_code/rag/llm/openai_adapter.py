@@ -1,5 +1,6 @@
 """OpenAIProvider: GPT + DeepSeek (API compatible con OpenAI)."""
 
+import json
 import os
 from typing import Optional
 from leo_code.rag.llm.provider import LLMProvider, Response, TokenUsage, ToolCall
@@ -84,12 +85,33 @@ class OpenAIProvider(LLMProvider):
             temperature=0.2,
             max_tokens=4096,
             stream=True,
+            stream_options={"include_usage": True},
         )
         if tools:
             kwargs["tools"] = tools
 
         stream = self.client.chat.completions.create(**kwargs)
+        tool_calls_acc: dict[int, dict] = {}
         for chunk in stream:
             if chunk.choices and chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
+            if chunk.choices and chunk.choices[0].delta.tool_calls:
+                for tc in chunk.choices[0].delta.tool_calls:
+                    idx = tc.index
+                    if idx not in tool_calls_acc:
+                        tool_calls_acc[idx] = {"id": tc.id or "", "name": "", "args": ""}
+                    if tc.id:
+                        tool_calls_acc[idx]["id"] = tc.id
+                    if tc.function and tc.function.name:
+                        tool_calls_acc[idx]["name"] += tc.function.name
+                    if tc.function and tc.function.arguments:
+                        tool_calls_acc[idx]["args"] += tc.function.arguments
+
+        for tc in tool_calls_acc.values():
+            if tc["name"]:
+                try:
+                    args = json.loads(tc["args"]) if tc["args"] else {}
+                except Exception:
+                    args = {}
+                yield {"type": "tool_call", "name": tc["name"], "args": args, "id": tc["id"]}
 

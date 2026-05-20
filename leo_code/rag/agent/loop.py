@@ -169,6 +169,102 @@ class AgentLoop:
         sm = SessionManager()
         return sm.list_sessions(limit)
 
+    async def stream_run(self, query: str, repo_path: str = ".",
+                         model: str = "deepseek/deepseek-v4-flash",
+                         use_kc_rag: bool = True,
+                         history: list[dict] | None = None,
+                         session_id: str | None = None):
+        """Streaming: KC-RAG context → LLM tokens → tool calls → repeat.
+
+        Yields dicts: {"type": "context"|"token"|"tool_start"|"tool_result"|"tool_end"|"done"}
+        """
+        t0 = time.time()
+        self.interrupt = False
+
+        if self.llm is None:
+            self.llm = self._init_llm(model)
+        repo_path = os.path.abspath(repo_path)
+
+        # Session history
+        session = None
+        if session_id:
+            from leo_code.session import SessionManager
+            sm = SessionManager()
+            session = sm.get_session(session_id)
+            if session:
+                repo_path = session.repo_path
+
+        messages = [{"role": "system", "content": self._system_prompt()}]
+        if session:
+            messages.extend(sm.get_history(session_id, limit=40))
+        elif history:
+            messages.extend(history)
+        messages.append({"role": "user", "content": query})
+
+        # KC-RAG context
+        context = ""
+        task_type = "code_query"
+        if use_kc_rag:
+            from leo_code.rag.classifier import needs_code_context, classify_task
+            task_type = classify_task(query)
+            if needs_code_context(query) or task_type in ("code_edit", "code_query", "refactor", "debug"):
+                context = self._build_context(query, repo_path, task_type)
+                if context:
+                    yield {"type": "context", "task_type": task_type, "tokens": len(context) // 2}
+
+        if context:
+            messages.insert(1, {"role": "system", "content": f"Contexto del codigo:\n{context}"})
+
+        tool_defs = self.tools.get_openai_definitions()
+        total_tokens = 0
+
+        for iteration in range(self.max_iterations):
+            if self.interrupt:
+                yield {"type": "done", "respuesta": "[Interrumpido]", "iterations": iteration,
+                       "total_tokens": total_tokens, "duration_ms": int((time.time() - t0) * 1000)}
+                return
+
+            # Stream tokens
+            text = ""
+            tool_calls: list[dict] = []
+            async for chunk in self.llm.stream(messages, tool_defs):
+                if self.interrupt:
+                    break
+                if isinstance(chunk, str):
+                    text += chunk
+                    yield {"type": "token", "text": chunk}
+                elif isinstance(chunk, dict) and chunk.get("type") == "tool_call":
+                    tool_calls.append(chunk)
+
+            if self.interrupt:
+                yield {"type": "done", "respuesta": text or "[Interrumpido]", "iterations": iteration + 1,
+                       "total_tokens": total_tokens, "duration_ms": int((time.time() - t0) * 1000)}
+                return
+
+            if not tool_calls:
+                total_tokens += len(text) // 4
+                if session_id:
+                    self._persist_turn(session_id, query, text, model, total_tokens)
+                yield {"type": "done", "respuesta": text, "iterations": iteration + 1,
+                       "total_tokens": total_tokens, "duration_ms": int((time.time() - t0) * 1000)}
+                return
+
+            # Execute tools
+            for tc in tool_calls:
+                yield {"type": "tool_start", "name": tc["name"], "args": tc.get("args", {})}
+                result = self.tools.execute(tc["name"], tc.get("args", {}), repo_path)
+                yield {"type": "tool_result", "name": tc["name"], "output": result[:2000]}
+                messages.append({"role": "assistant", "content": text or "",
+                                 "tool_calls": [{"id": tc.get("id", ""), "type": "function",
+                                                  "function": {"name": tc["name"], "arguments": str(tc.get("args", {}))}}]})
+                messages.append({"role": "tool", "tool_call_id": tc.get("id", ""), "content": result[:4000]})
+                total_tokens += len(result) // 4
+
+            text = ""
+
+        yield {"type": "done", "respuesta": "Máximo de iteraciones alcanzado.", "iterations": self.max_iterations,
+               "total_tokens": total_tokens, "duration_ms": int((time.time() - t0) * 1000)}
+
     def _init_llm(self, model: str):
         from leo_code.rag.llm import get_provider
         if "/" in model:
