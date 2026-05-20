@@ -175,12 +175,14 @@ class AgentLoop:
                          history: list[dict] | None = None,
                          session_id: str | None = None,
                          images: list[str] | None = None,
-                         plugin_manager=None):
+                         plugin_manager=None,
+                         skill_manager=None):
         """Streaming: KC-RAG context → LLM tokens → tool calls → repeat.
 
         Yields dicts: {"type": "context"|"token"|"tool_start"|"tool_result"|"tool_end"|"done"}
         images: lista de paths a imágenes para análisis de visión.
         plugin_manager: PluginManager instancia para plugins.
+        skill_manager: SkillManager instancia para auto-skills.
         """
         t0 = time.time()
         self.interrupt = False
@@ -230,6 +232,15 @@ class AgentLoop:
             plugin_info = plugin_manager.info()
             if plugin_info:
                 yield {"type": "plugins", "plugins": [{"name": p.name, "type": p.type, "running": p.running, "tool_count": getattr(p, 'tool_count', 0)} for p in plugin_info]}
+
+        # Auto-skills activation
+        active_skills = []
+        if skill_manager:
+            skill_manager.load_skills(repo_path)
+            active_skills = skill_manager.match(query, task_type=task_type, file_context=[])
+            if active_skills:
+                skill_manager.inject(active_skills, messages)
+                yield {"type": "skills", "skills": [{"name": s.name, "source": s.source, "priority": s.priority} for s in active_skills]}
 
         tool_defs = self.tools.get_openai_definitions()
         total_tokens = 0
