@@ -2,11 +2,13 @@
 
 Endpoints:
   GET  /health              — health check
-  POST /context             — KC-RAG: indexer → Qdrant → compress → contexto
+  POST /context             — KC-RAG: indexer → Qdrant + BM25 → compress → contexto
   POST /search              — Búsqueda semántica en el KG
   POST /index               — Indexar un repositorio
   POST /preindex            — Pre-indexar sin consultar (background)
   GET  /stats               — Estadísticas del índice
+  GET  /metrics             — Métricas de uso (tokens ahorrados, latencia, etc.)
+  GET  /sessions            — Listar sesiones guardadas
 
 Ejecutar: python -m leo_code.server.server  (puerto 9898)
          leo-code-mcp --workers 4  (si instalado vía pip)
@@ -24,10 +26,12 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
+
+from leo_code.core.metrics import get_metrics, MetricsSnapshot
 
 _CACHE_DIR = Path("./cache")
 _CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -244,7 +248,8 @@ async def health():
 
 @app.post("/context", response_model=ContextResponse)
 async def get_context(req: ContextRequest, request: Request):
-    """KC-RAG: indexer → Qdrant → compress → contexto comprimido."""
+    """KC-RAG: indexer → Qdrant + BM25 → compress → contexto comprimido."""
+    t_start = time.time()
     client_ip = request.client.host if request.client else "unknown"
     if not _check_rate_limit(client_ip):
         raise HTTPException(status_code=429, detail="Too many requests")
@@ -257,9 +262,12 @@ async def get_context(req: ContextRequest, request: Request):
             from leo_code.core.cache import get_cached_result
             cached = get_cached_result(cache_key)
             if cached:
+                get_metrics().record_cache_hit()
+                get_metrics().record_query(0, int((time.time() - t_start) * 1000))
                 return ContextResponse(**cached)
         except Exception:
             pass
+        get_metrics().record_cache_miss()
 
         idx = _get_indexer()
         all_caps = idx.get_capsules()
@@ -358,14 +366,38 @@ async def get_context(req: ContextRequest, request: Request):
         top_ids = vs.search(req.query, top_k=15)
         semantic = [caps[rid] for rid in top_ids if rid in caps and rid not in exact_ids]
 
+        # BM25 sparse search — complementa Qdrant para términos exactos
+        bm25_results = []
+        try:
+            from leo_code.rag.bm25 import BM25Index
+            _bm25 = _get_bm25(repo, caps)
+            bm25_results = _bm25.search(req.query, top_k=15)
+        except Exception:
+            pass
+
+        # Reciprocal Rank Fusion (k=60)
+        fused_scores: dict[str, float] = {}
+        for rank, c in enumerate(exact):
+            fused_scores[c.id] = fused_scores.get(c.id, 0) + 1 / (60 + rank + 1)
+        for rank, c in enumerate(semantic):
+            fused_scores[c.id] = fused_scores.get(c.id, 0) + 1 / (60 + rank + 1)
+        for rank, bm in enumerate(bm25_results):
+            if bm.capsule_id in caps:
+                fused_scores[bm.capsule_id] = fused_scores.get(bm.capsule_id, 0) + 1 / (60 + rank + 1)
+
         cap = 30 if task_type == "search" else (25 if specific_file_paths else 15)
-        top_caps = (exact + semantic)[:cap]
+        fused_ids = sorted(fused_scores, key=fused_scores.get, reverse=True)
+        top_caps = [caps[rid] for rid in fused_ids if rid in caps and rid not in exact_ids]
+        top_caps = exact + top_caps
+        top_caps = top_caps[:cap]
 
         from leo_code.rag.compressor import compress
         context = compress(top_caps, list(caps.values()), budget_tokens=budget, task_type=task_type, dir_filter=dir_prefixes)
 
         result = {"context": context, "tokens": len(context) // 2, "task_type": task_type, "capsules_total": len(caps)}
         _cache_context_result(cache_key, result)
+        latency = int((time.time() - t_start) * 1000)
+        get_metrics().record_query(len(context) // 2, latency)
         return ContextResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -414,6 +446,7 @@ async def index_repo(req: IndexRequest):
         loop = asyncio.get_event_loop()
         count = await loop.run_in_executor(_index_executor, _do_index, repo, langs, True)
         _invalidate_cache()
+        get_metrics().record_index(count)
         return {"status": "ok", "capsules": count, "repo": repo}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -462,6 +495,60 @@ async def stats(repo_path: Optional[str] = None):
     )
 
 
+_bm25_stores: dict[str, object] = {}
+
+def _get_bm25(repo: str, caps: dict) -> object:
+    if repo not in _bm25_stores:
+        from leo_code.rag.bm25 import BM25Index
+        _bm25_stores[repo] = BM25Index()
+        _bm25_stores[repo].add(list(caps.values()))
+    return _bm25_stores[repo]
+
+
+@app.get("/metrics")
+async def metrics():
+    """Métricas de uso: tokens ahorrados, latencia, cache hits."""
+    snap = get_metrics().snapshot()
+    return {
+        "queries_total": snap.queries_total,
+        "tokens_saved_vs_baseline": snap.tokens_saved,
+        "tokens_used": snap.tokens_used,
+        "cache_hit_rate": round(snap.cache_hits / max(snap.cache_hits + snap.cache_misses, 1), 3),
+        "avg_latency_ms": round(snap.avg_latency_ms, 1),
+        "p50_latency_ms": snap.p50_latency_ms,
+        "p99_latency_ms": snap.p99_latency_ms,
+        "capsules_indexed": snap.capsules_indexed,
+        "repos_indexed": snap.repos_indexed,
+        "uptime_seconds": int(snap.uptime_seconds),
+    }
+
+
+@app.get("/sessions")
+async def list_sessions(limit: int = Query(20, ge=1, le=100)):
+    """Lista sesiones guardadas (multi-turn)."""
+    try:
+        from leo_code.session import SessionManager
+        sm = SessionManager()
+        sessions = sm.list_sessions(limit)
+        return {
+            "sessions": [
+                {
+                    "id": s.id,
+                    "repo_path": s.repo_path,
+                    "model": s.model,
+                    "message_count": s.message_count,
+                    "total_tokens": s.total_tokens,
+                    "created_at": s.created_at,
+                    "updated_at": s.updated_at,
+                }
+                for s in sessions
+            ],
+            "total": len(sessions),
+        }
+    except Exception as e:
+        return {"error": str(e), "sessions": []}
+
+
 def main():
     parser = argparse.ArgumentParser(description="Leo-Code MCP Server")
     parser.add_argument("--workers", type=int, default=1, help="Número de workers uvicorn (default 1)")
@@ -469,7 +556,7 @@ def main():
     parser.add_argument("--host", default="0.0.0.0", help="Host (default 0.0.0.0)")
     args = parser.parse_args()
 
-    print(f"[leo-mcp] Leo-Code MCP Server v0.1.0 (workers={args.workers})")
+    print(f"[leo-mcp] Leo-Code MCP Server v0.2.0 (workers={args.workers})")
     print("[leo-mcp] Endpoints:")
     print(f"  GET  http://{args.host}:{args.port}/health")
     print(f"  POST http://{args.host}:{args.port}/context")
@@ -477,6 +564,8 @@ def main():
     print(f"  POST http://{args.host}:{args.port}/index")
     print(f"  POST http://{args.host}:{args.port}/preindex")
     print(f"  GET  http://{args.host}:{args.port}/stats")
+    print(f"  GET  http://{args.host}:{args.port}/metrics")
+    print(f"  GET  http://{args.host}:{args.port}/sessions")
     uvicorn.run(app, host=args.host, port=args.port, log_level="info", workers=args.workers)
 
 

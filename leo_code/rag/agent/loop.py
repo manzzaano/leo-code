@@ -23,10 +23,13 @@ class AgentLoop:
         self._indexed_repos = set()
 
     async def run(self, query: str, repo_path: str = ".",
-                  model: str = "deepseek/deepseek-v4-flash",
-                  use_kc_rag: bool = True,
-                  history: list[dict] | None = None) -> dict:
+                   model: str = "deepseek/deepseek-v4-flash",
+                   use_kc_rag: bool = True,
+                   history: list[dict] | None = None,
+                   session_id: str | None = None) -> dict:
         """Ejecuta una consulta completa: retrieval → LLM → tools → respuesta.
+
+        Si session_id se provee, carga historial desde SQLite y persiste cada turno.
 
         Retorna dict con:
           respuesta: str
@@ -36,15 +39,26 @@ class AgentLoop:
           duration_ms: int
           finish: str
           model: str
+          session_id: str | None
         """
         t0 = time.time()
         if self.llm is None:
             self.llm = self._init_llm(model)
 
         repo_path = os.path.abspath(repo_path)
+        session = None
+        if session_id:
+            from leo_code.session import SessionManager
+            sm = SessionManager()
+            session = sm.get_session(session_id)
+            if session:
+                repo_path = session.repo_path
 
         messages = [{"role": "system", "content": self._system_prompt()}]
-        messages.extend(history or [])
+        if session:
+            messages.extend(sm.get_history(session_id, limit=40))
+        elif history:
+            messages.extend(history)
         messages.append({"role": "user", "content": query})
 
         context = ""
@@ -107,7 +121,7 @@ class AgentLoop:
                 steps.append(step)
             else:
                 steps.append(step)
-                return {
+                result = {
                     "respuesta": resp.text,
                     "steps": steps,
                     "iterations": iteration + 1,
@@ -115,9 +129,13 @@ class AgentLoop:
                     "duration_ms": int((time.time() - t0) * 1000),
                     "finish": "stop",
                     "model": model,
+                    "session_id": session_id,
                 }
+                if session_id:
+                    self._persist_turn(session_id, query, resp.text, model, total_tokens)
+                return result
 
-        return {
+        result = {
             "respuesta": messages[-1].get("content", "Maximo de iteraciones alcanzado."),
             "steps": steps,
             "iterations": self.max_iterations,
@@ -125,7 +143,31 @@ class AgentLoop:
             "duration_ms": int((time.time() - t0) * 1000),
             "finish": "max_iterations",
             "model": model,
+            "session_id": session_id,
         }
+        if session_id:
+            self._persist_turn(session_id, query, result["respuesta"], model, total_tokens)
+        return result
+
+    def _persist_turn(self, session_id: str, query: str, answer: str, model: str, tokens: int):
+        try:
+            from leo_code.session import SessionManager
+            sm = SessionManager()
+            sm.add_message(session_id, "user", query, tokens=0)
+            sm.add_message(session_id, "assistant", answer, tokens=tokens)
+        except Exception:
+            pass
+
+    def create_session(self, repo_path: str, model: str = "") -> str:
+        from leo_code.session import SessionManager
+        sm = SessionManager()
+        s = sm.create_session(repo_path, model)
+        return s.id
+
+    def list_sessions(self, limit: int = 20):
+        from leo_code.session import SessionManager
+        sm = SessionManager()
+        return sm.list_sessions(limit)
 
     def _init_llm(self, model: str):
         from leo_code.rag.llm import get_provider

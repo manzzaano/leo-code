@@ -20,7 +20,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional
 
-from leo_code.core.parser import extract_from_file, build_call_graph, Capsule
+from leo_code.core.parser import extract_from_file, build_call_graph, Capsule, detect_language
 
 
 class Indexer:
@@ -34,6 +34,8 @@ class Indexer:
 
     def _process_one(self, path: Path, lang: str, use_tree_sitter: bool, verbose: bool, repo: Path) -> tuple[list[Capsule], str, int, str | None]:
         try:
+            if lang in ("auto", "python"):
+                lang = detect_language(str(path))
             if use_tree_sitter:
                 from leo_code.core.parser import extract_from_tree_sitter
                 content = path.read_text(encoding="utf-8")
