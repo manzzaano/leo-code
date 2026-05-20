@@ -15,6 +15,11 @@ CODE_SIGNALS = [
     "dependencia", "dependency", "pipeline", "método", "metodo", "method",
     "parámetro", "parametro", "parameter", "docstring", "test",
     "parser", "indexer", "encoder", "compressor",
+    "fastapi", "flask", "django", "react", "express", "next",
+    "nestjs", "spring", "pydantic", "sqlalchemy", "graphql",
+    "endpoint", "endpoints", "endpoint", "ruta", "route", "router",
+    "middleware", "component", "controller", "model", "schema",
+    "migration", "migrate", "migración", "migracion",
 ]
 
 TOKEN_BUDGET = {

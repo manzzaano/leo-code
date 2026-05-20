@@ -25,6 +25,7 @@ def compress(
     budget_tokens: int = 1500,
     task_type: str = "code_query",
     dir_filter: set[str] | None = None,
+    query: str = "",
 ) -> str:
     """Compresión adaptativa según tipo de tarea."""
 
@@ -37,6 +38,12 @@ def compress(
     # Para code tasks: excluir docs de dominio del contexto
     top_capsules = [c for c in top_capsules if c.type != "document"]
     all_capsules  = [c for c in all_capsules  if c.type != "document"]
+
+    # Framework-aware: priorizar cápsulas del framework mencionado en la query
+    framework = _detect_framework_query(query)
+    if framework:
+        fw_caps = [c for c in all_capsules if c.properties.get("framework") == framework]
+        top_capsules = _interleave_framework(top_capsules, fw_caps)
 
     if task_type == "code_gen":
         # code_gen queries need actual code content (signatures, bodies) not just directory structure
@@ -596,3 +603,36 @@ def _compress_design_review(top_capsules: list[Capsule], all_capsules: list[Caps
     if html_caps:
         context += f" {len(html_caps)} archivo(s) HTML/CSS disponibles."
     return context
+
+
+_FRAMEWORK_QUERIES = {
+    "fastapi": ["fastapi", "fast api"],
+    "flask": ["flask"],
+    "django": ["django"],
+    "react": ["react", "reactjs"],
+    "express": ["express", "expressjs"],
+    "next": ["next.js", "nextjs", "next js"],
+    "nestjs": ["nestjs", "nest js", "nest.js"],
+    "spring": ["spring", "spring boot", "springboot"],
+    "pydantic": ["pydantic"],
+    "sqlalchemy": ["sqlalchemy", "sql alchemy"],
+    "graphql": ["graphql", "graph ql"],
+    "laravel": ["laravel"],
+    "dotnet": [".net", "dotnet", "asp.net", "asp net"],
+    "vue": ["vue", "vuejs", "vue.js"],
+}
+
+
+def _detect_framework_query(query: str) -> str:
+    q = query.lower()
+    for fw, signals in _FRAMEWORK_QUERIES.items():
+        if any(s in q for s in signals):
+            return fw
+    return ""
+
+
+def _interleave_framework(top: list, fw_caps: list) -> list:
+    fw_ids = {c.id for c in fw_caps}
+    fw_matches = [c for c in top if c.id in fw_ids]
+    others = [c for c in top if c.id not in fw_ids]
+    return (fw_matches[:8] + others[:15])[:30]
