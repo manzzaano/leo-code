@@ -220,7 +220,7 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
     return detect_frameworks(capsules)
 
 
-_FRAMEWORK_SIGNALS: dict[str, list[str]] = {
+    _FRAMEWORK_SIGNALS: dict[str, list[str]] = {
     "fastapi": ["@router.", "@app.", "fastapi", "APIRouter", "FastAPI("],
     "flask": ["@app.route", "@bp.route", "Flask(", "Blueprint("],
     "django": ["class ", "Model)", "admin.site.register", "path('", "urlpatterns", "manage.py"],
@@ -236,6 +236,27 @@ _FRAMEWORK_SIGNALS: dict[str, list[str]] = {
     "vue": ["<template>", "defineComponent", "ref(", "reactive(", "<script setup"],
     "laravel": ["public function", "Route::get", "php artisan", "Eloquent", "\\Illuminate\\"],
     "dotnet": ["[ApiController]", "[Route(", "ControllerBase", "appsettings.json"],
+    "celery": ["@shared_task", "@app.task", "celery"],
+    "aiohttp": ["web.Application(", "@routes.get", "aiohttp.web"],
+    "sqlmodel": ["SQLModel", "table=True"],
+    "strawberry": ["@strawberry.type", "strawberry.Schema"],
+    "angular": ["@Component(", "@Injectable(", "@Pipe(", "@NgModule("],
+    "svelte": ["$:", "onMount(", "createEventDispatcher"],
+    "nuxt": ["useFetch(", "useAsyncData(", "definePageMeta"],
+    "remix": ["export async function loader", "export async function action"],
+    "rails": ["ApplicationController", "ApplicationRecord", "ActiveRecord"],
+    "sinatra": ["get '/", "post '/", "Sinatra::Base"],
+    "gin": ["gin.Context", "gin.H{", "r.GET(", "r.Group("],
+    "echo": ["echo.Context", "e.GET(", "e.Group("],
+    "fiber": ["fiber.Ctx", "app.Get(", "fiber.New("],
+    "hibernate": ["@Entity", "@Table("],
+    "jakarta": ["@Path(\"/", "@GET", "@POST", "jakarta.ws.rs"],
+    "quarkus": ["@QuarkusMain", "@Path"],
+    "actix": ["#[get(\"/", "#[post(\"/", "HttpRequest", "HttpResponse"],
+    "axum": ["Router::new()", ".route(", "axum::"],
+    "symfony": ["#[Route('/", "AbstractController", "Symfony\\"],
+    "entity_framework": ["DbContext", "DbSet<", "OnModelCreating"],
+    "phoenix": ["use Phoenix.Controller", "conn |>", "Phoenix.LiveView"],
 }
 
 
@@ -251,7 +272,14 @@ def detect_frameworks(capsules: list[Capsule]) -> list[Capsule]:
         # === Python frameworks ===
         if lang == "python":
             decos = decorators.lower()
-            if any(d in decos for d in ("router.get(", "router.post(", "router.put(", "router.delete(", "router.patch(", ".get(", ".post(")):
+            # aiohttp before fastapi (routes.get matches both)
+            if "web.Application(" in content:
+                c.properties["framework"] = "aiohttp"
+            if "@routes.get" in content or "@routes.post" in content or "routes.get" in decos or "routes.post" in decos:
+                c.type = "endpoint"
+                c.properties["framework"] = "aiohttp"
+                continue  # skip fastapi check
+            elif any(d in decos for d in ("router.get(", "router.post(", "router.put(", "router.delete(", "router.patch(", ".get(", ".post(")):
                 if c.type in ("function", "async_function"):
                     c.type = "endpoint"
                     c.properties["framework"] = "fastapi"
@@ -327,6 +355,167 @@ def detect_frameworks(capsules: list[Capsule]) -> list[Capsule]:
             if "service " in content:
                 c.type = "schema"
             c.properties["framework"] = "grpc"
+
+        # === Celery ===
+        if lang == "python" and c.type in ("function", "async_function"):
+            if "@shared_task" in content or "@app.task" in content or "shared_task" in decos or "app.task" in decos:
+                c.type = "task"
+                c.properties["framework"] = "celery"
+
+        # === aiohttp ===
+        if lang == "python":
+            if "web.Application(" in content:
+                c.properties["framework"] = "aiohttp"
+            if "@routes.get" in decorators or "@routes.post" in decorators:
+                c.type = "endpoint"
+                c.properties["framework"] = "aiohttp"
+
+        # === SQLModel ===
+        if lang == "python" and c.type == "class":
+            if "SQLModel" in hereda or ("table=True" in content and "SQLModel" in content):
+                c.type = "model"
+                c.properties["framework"] = "sqlmodel"
+
+        # === Strawberry GraphQL ===
+        if lang == "python":
+            if "@strawberry.type" in content or "strawberry.type" in decos or "strawberry.Schema" in content:
+                if c.type == "class":
+                    c.type = "schema"
+                c.properties["framework"] = "strawberry"
+
+        # === Vue.js ===
+        if lang in ("javascript", "typescript"):
+            has_vue = any(s in content for s in ("defineComponent", "ref(", "reactive(", "computed(", "<template>", "createApp(", "useRouter("))
+            if has_vue and c.type in ("function", "class"):
+                c.type = "component"
+                c.properties["framework"] = "vue"
+            if "<script setup" in content or "<style scoped>" in content:
+                c.type = "component"
+                c.properties["framework"] = "vue"
+
+        # === Angular ===
+        if lang in ("typescript", "javascript"):
+            if any(s in content for s in ("@Component(", "@Injectable(", "@Pipe(", "@NgModule(", "@Directive(")):
+                if "@Injectable" in content:
+                    c.type = "controller"
+                elif "@Pipe" in content:
+                    c.properties["framework"] = "angular"
+                else:
+                    c.type = "component"
+                c.properties["framework"] = "angular"
+
+        # === Svelte ===
+        if lang in ("javascript", "typescript"):
+            if any(s in content for s in ("$:", "onMount(", "onDestroy(", "createEventDispatcher", "<script>")):
+                c.type = "component"
+                c.properties["framework"] = "svelte"
+
+        # === Nuxt ===
+        if lang in ("javascript", "typescript"):
+            if any(s in content for s in ("useFetch(", "useAsyncData(", "definePageMeta", "useRuntimeConfig(")):
+                c.type = "component"
+                c.properties["framework"] = "nuxt"
+
+        # === Remix ===
+        if lang in ("javascript", "typescript"):
+            if "export async function loader" in content or "export async function action" in content:
+                c.type = "endpoint"
+                c.properties["framework"] = "remix"
+
+        # === Rails (Ruby) ===
+        if lang == "ruby":
+            if "ApplicationController" in content or "ApplicationController" in hereda:
+                c.type = "controller"
+                c.properties["framework"] = "rails"
+            elif "ApplicationRecord" in content or "ApplicationRecord" in hereda:
+                c.type = "model"
+                c.properties["framework"] = "rails"
+            elif "ActiveRecord::Migration" in content:
+                c.type = "function"
+                c.properties["framework"] = "rails"
+
+        # === Sinatra (Ruby) ===
+        if lang == "ruby":
+            if any(re.search(p, content) for p in [r"(?:get|post|put|delete|patch)\s+['\"]/", r"Sinatra::Base"]):
+                c.type = "endpoint"
+                c.properties["framework"] = "sinatra"
+
+        # === Gin (Go) ===
+        if lang == "go":
+            if "gin.Context" in content or "gin.H{" in content:
+                c.properties["framework"] = "gin"
+                if c.type == "function" and "gin.Context" in content:
+                    c.type = "endpoint"
+
+        # === Echo (Go) ===
+        if lang == "go":
+            if "echo.Context" in content or "echo.New(" in content:
+                c.properties["framework"] = "echo"
+                if c.type == "function" and "echo.Context" in content:
+                    c.type = "endpoint"
+
+        # === Fiber (Go) ===
+        if lang == "go":
+            if "fiber.Ctx" in content or "fiber.New(" in content:
+                c.properties["framework"] = "fiber"
+                if c.type == "function" and "fiber.Ctx" in content:
+                    c.type = "endpoint"
+
+        # === Hibernate (Java) ===
+        if lang in ("java", "kotlin"):
+            if "@Entity" in content or "@Table(" in content:
+                c.type = "model"
+                c.properties["framework"] = "hibernate"
+
+        # === Jakarta EE (Java) ===
+        if lang in ("java", "kotlin"):
+            if any(s in content for s in ("@Path(\"/", "@Path(\"", "jakarta.ws.rs", "jakarta.ws.rs.GET")):
+                if "@GET" in content or "@POST" in content:
+                    c.type = "endpoint"
+                else:
+                    c.type = "controller"
+                c.properties["framework"] = "jakarta"
+
+        # === Quarkus (Java) ===
+        if lang in ("java", "kotlin"):
+            if "@QuarkusMain" in content or ("@Path" in content and "quarkus" in content_lower):
+                c.type = "controller" if "class" in c.type else "endpoint"
+                c.properties["framework"] = "quarkus"
+
+        # === Actix Web (Rust) ===
+        if lang == "rust":
+            if any(kw in content for kw in ("#[get", "#[post", "#[put", "#[delete")) or "HttpRequest" in content:
+                c.type = "endpoint"
+                c.properties["framework"] = "actix"
+            elif "HttpResponse" in content or "App::new()" in content:
+                c.properties["framework"] = "actix"
+
+        # === Axum (Rust) ===
+        if lang == "rust":
+            if "Router::new()" in content or "axum::" in content:
+                c.properties["framework"] = "axum"
+                if c.type == "function" and ".route(" in content.lower():
+                    c.type = "endpoint"
+
+        # === Symfony (PHP) ===
+        if lang == "php":
+            if any(s in content for s in ("#[Route('/", "AbstractController", "Symfony\\")):
+                c.properties["framework"] = "symfony"
+                if "#[Route" in content and c.type == "function":
+                    c.type = "endpoint"
+
+        # === Entity Framework (C#) ===
+        if lang == "csharp":
+            if "DbContext" in content or "DbSet<" in content or "OnModelCreating" in content:
+                c.type = "model"
+                c.properties["framework"] = "entity_framework"
+
+        # === Phoenix (Elixir) ===
+        if lang == "elixir":
+            if "Phoenix.Controller" in content or "Phoenix.LiveView" in content:
+                c.properties["framework"] = "phoenix"
+                if "conn |> " in content or "redirect(conn" in content.lower():
+                    c.type = "controller"
 
         # === Middleware ===
         is_mw_py = lang == "python" and "middleware" in (c.name or "").lower()
