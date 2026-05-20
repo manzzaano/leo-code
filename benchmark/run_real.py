@@ -28,13 +28,18 @@ def run_leo_subprocess(query: str, repo_path: str) -> dict:
         env = {**os.environ, "DEEPSEEK_API_KEY": os.getenv("DEEPSEEK_API_KEY", "")}
         r = subprocess.run(
             [sys.executable, RUNNER, query, repo_path, MODEL],
-            capture_output=True, text=True,             timeout=300, env=env,
+            capture_output=True, text=True, timeout=300, env=env,
         )
-        response = (r.stdout or "").strip() or (r.stderr or "").strip()
+        # La respuesta es la ULTIMA linea de stdout (despues del indexer log)
+        stdout = (r.stdout or "").strip()
+        lines = stdout.split("\n")
+        # Remove indexer log lines
+        response_lines = [l for l in lines if not l.startswith("[indexer]") and "Tipos:" not in l and "capsulas" not in l and "archivos" not in l]
+        response = "\n".join(response_lines).strip() or (r.stderr or "").strip()
         return {"system": "LEO", "response": response[:4000], "tokens": len(response) // 4,
                 "duration_ms": int((time.time() - t0) * 1000)}
     except subprocess.TimeoutExpired:
-        return {"system": "LEO", "response": "[Timeout]", "tokens": 0, "duration_ms": 180000}
+        return {"system": "LEO", "response": "[Timeout]", "tokens": 0, "duration_ms": 300000}
     except Exception as e:
         return {"system": "LEO", "response": f"[Error: {e}]", "tokens": 0, "duration_ms": 0}
 
