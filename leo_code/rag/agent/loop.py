@@ -22,132 +22,29 @@ class AgentLoop:
         self._indexer = None
         self._vector_store = None
         self._indexed_repos = set()
+        self._recent_calls: set[str] = set()  # anti-loop
+        self._tool_call_count = 0
 
     async def run(self, query: str, repo_path: str = ".",
                    model: str = "deepseek/deepseek-v4-flash",
                    use_kc_rag: bool = True,
                    history: list[dict] | None = None,
                    session_id: str | None = None) -> dict:
-        """Ejecuta una consulta completa: retrieval → LLM → tools → respuesta.
-
-        Si session_id se provee, carga historial desde SQLite y persiste cada turno.
-
-        Retorna dict con:
-          respuesta: str
-          steps: list[dict]  — cada paso con {reasoning, tool_calls, text, duration_ms}
-          total_tokens: int
-          iterations: int
-          duration_ms: int
-          finish: str
-          model: str
-          session_id: str | None
-        """
-        t0 = time.time()
-        if self.llm is None:
-            self.llm = self._init_llm(model)
-
-        repo_path = os.path.abspath(repo_path)
-        session = None
-        if session_id:
-            from leo_code.session import SessionManager
-            sm = SessionManager()
-            session = sm.get_session(session_id)
-            if session:
-                repo_path = session.repo_path
-
-        messages = [{"role": "system", "content": self._system_prompt()}]
-        if session:
-            messages.extend(sm.get_history(session_id, limit=40))
-        elif history:
-            messages.extend(history)
-        messages.append({"role": "user", "content": query})
-
-        context = ""
-        task_type = "code_query"
-        if use_kc_rag:
-            from leo_code.rag.classifier import needs_code_context, classify_task, get_budget
-            task_type = classify_task(query)
-            if needs_code_context(query) or task_type in ("code_edit", "code_query", "refactor"):
-                context = self._build_context(query, repo_path, task_type)
-
-        tool_defs = self.tools.get_openai_definitions()
-        total_tokens = 0
-        steps: list[dict] = []
-
-        if context:
-            messages.insert(1, {"role": "system", "content": f"Contexto del codigo:\n{context}"})
-
-        for iteration in range(self.max_iterations):
-            step_start = time.time()
-            resp = await self.llm.generate(messages, tool_defs, temperature=0.2)
-            step_ms = int((time.time() - step_start) * 1000)
-            total_tokens += resp.usage.input_tokens + resp.usage.output_tokens
-
-            step = {
-                "reasoning": resp.reasoning_content or "",
-                "text": resp.text or "",
-                "tool_calls": [],
-                "duration_ms": step_ms,
-            }
-
-            if resp.tool_calls:
-                for tc in resp.tool_calls:
-                    tool_start = time.time()
-                    result = self.tools.execute(tc.name, tc.arguments, repo_path)
-                    tool_ms = int((time.time() - tool_start) * 1000)
-                    step["tool_calls"].append({
-                        "name": tc.name,
-                        "arguments": tc.arguments,
-                        "result": result[:2000],
-                        "result_chars": len(result),
-                        "duration_ms": tool_ms,
-                    })
-                    assistant_msg = {
-                        "role": "assistant",
-                        "content": resp.text or "",
-                    }
-                    if resp.reasoning_content:
-                        assistant_msg["reasoning_content"] = resp.reasoning_content
-                    assistant_msg["tool_calls"] = [{
-                        "id": tc.id,
-                        "type": "function",
-                        "function": {"name": tc.name, "arguments": str(tc.arguments)},
-                    }]
-                    messages.append(assistant_msg)
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tc.id,
-                        "content": result[:4000],
-                    })
-                steps.append(step)
-            else:
-                steps.append(step)
-                result = {
-                    "respuesta": resp.text,
-                    "steps": steps,
-                    "iterations": iteration + 1,
-                    "total_tokens": total_tokens,
-                    "duration_ms": int((time.time() - t0) * 1000),
-                    "finish": "stop",
-                    "model": model,
-                    "session_id": session_id,
-                }
-                if session_id:
-                    self._persist_turn(session_id, query, resp.text, model, total_tokens)
-                return result
-
+        """Ejecuta una consulta completa vía stream_run (wrapper)."""
         result = {
-            "respuesta": messages[-1].get("content", "Maximo de iteraciones alcanzado."),
-            "steps": steps,
-            "iterations": self.max_iterations,
-            "total_tokens": total_tokens,
-            "duration_ms": int((time.time() - t0) * 1000),
-            "finish": "max_iterations",
-            "model": model,
-            "session_id": session_id,
+            "respuesta": "", "steps": [], "iterations": 0,
+            "total_tokens": 0, "duration_ms": 0, "finish": "stop",
+            "model": model, "session_id": session_id,
         }
-        if session_id:
-            self._persist_turn(session_id, query, result["respuesta"], model, total_tokens)
+        self._recent_calls.clear()
+        async for event in self.stream_run(
+            query, repo_path=repo_path, model=model,
+            use_kc_rag=use_kc_rag, history=history, session_id=session_id,
+        ):
+            if event["type"] == "done":
+                for key in ("respuesta", "total_tokens", "iterations", "duration_ms", "finish"):
+                    if key in event:
+                        result[key] = event[key]
         return result
 
     def _persist_turn(self, session_id: str, query: str, answer: str, model: str, tokens: int):
@@ -261,12 +158,16 @@ class AgentLoop:
 
         tool_defs = self.tools.get_openai_definitions()
         total_tokens = 0
+        self._tool_call_count = 0
 
         for iteration in range(self.max_iterations):
             if self.interrupt:
                 yield {"type": "done", "respuesta": "[Interrumpido]", "iterations": iteration,
                        "total_tokens": total_tokens, "duration_ms": int((time.time() - t0) * 1000)}
                 return
+
+            # Compactar historial si crece demasiado
+            messages = _compact_messages(messages, keep_last=6)
 
             # Stream tokens
             text = ""
@@ -303,13 +204,26 @@ class AgentLoop:
                         yield {"type": "tool_start", "name": tc["name"], "args": args}
                         yield {"type": "tool_result", "name": tc["name"], "output": f"[Bloqueado: {reason}]"}
                         continue
+
+                # Loop detection
+                call_key = f"{tc['name']}:{str(args)[:80]}"
+                if call_key in self._recent_calls:
+                    yield {"type": "tool_start", "name": tc["name"], "args": args}
+                    yield {"type": "tool_result", "name": tc["name"], "output": f"[Llamada repetida a {tc['name']} — busca otra estrategia]"}
+                    continue
+                self._recent_calls.add(call_key)
+                self._tool_call_count += 1
+
                 yield {"type": "tool_start", "name": tc["name"], "args": args}
                 result = self.tools.execute(tc["name"], args, repo_path)
-                yield {"type": "tool_result", "name": tc["name"], "output": result[:2000]}
+                # Trim resultes largos
+                if len(result) > 1500:
+                    result = result[:1500] + f"\n[{len(result)} chars total. Usa search_code para explorar.]"
+                yield {"type": "tool_result", "name": tc["name"], "output": result}
                 messages.append({"role": "assistant", "content": text or "",
                                  "tool_calls": [{"id": tc.get("id", ""), "type": "function",
                                                   "function": {"name": tc["name"], "arguments": str(args)}}]})
-                messages.append({"role": "tool", "tool_call_id": tc.get("id", ""), "content": result[:4000]})
+                messages.append({"role": "tool", "tool_call_id": tc.get("id", ""), "content": result[:2000]})
                 total_tokens += len(result) // 4
 
             text = ""
@@ -405,3 +319,16 @@ def _build_user_content(query: str, images: list[str], repo_path: str) -> list[d
         except Exception:
             content.append({"type": "text", "text": f"[No se pudo cargar imagen: {img_path}]"})
     return content
+
+
+def _compact_messages(messages: list[dict], keep_last: int = 6) -> list[dict]:
+    """Compacta historial preservando system + user original + ultimos mensajes."""
+    if len(messages) <= keep_last + 2:
+        return messages
+    head = messages[:2]
+    recent = messages[-keep_last:]
+    old_count = len(messages) - keep_last - 2
+    if old_count > 0:
+        summary = {"role": "system", "content": f"[Historial compactado: {old_count} mensajes omitidos para ahorrar tokens]"}
+        return head + [summary] + recent
+    return messages

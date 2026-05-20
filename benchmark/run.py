@@ -30,19 +30,46 @@ async def run_task_leo(task: dict, repo_path: str) -> dict:
     """Ejecuta tarea con leo-code (KC-RAG activo)."""
     from leo_code.rag.agent.loop import AgentLoop
     from leo_code.rag.agent.tools import ToolRegistry
-    agent = AgentLoop(tools=ToolRegistry(), max_iterations=10)
+    agent = AgentLoop(tools=ToolRegistry(), max_iterations=5)
+    agent.interrupt = False
     t0 = time.time()
-    result = await agent.run(task["query"], repo_path=repo_path, model=MODEL, use_kc_rag=True)
-    return {
-        "system": "LEO",
-        "task_id": task["id"],
-        "query": task["query"],
-        "response": result.get("respuesta", ""),
-        "tokens": result.get("total_tokens", 0),
-        "iterations": result.get("iterations", 0),
-        "duration_ms": int((time.time() - t0) * 1000),
-        "finish": result.get("finish", "stop"),
-    }
+    try:
+        result = await agent.run(task["query"], repo_path=repo_path, model=MODEL, use_kc_rag=True)
+        return {
+            "system": "LEO",
+            "task_id": task["id"],
+            "response": result.get("respuesta", ""),
+            "tokens": result.get("total_tokens", 0),
+            "iterations": result.get("iterations", 0),
+            "duration_ms": int((time.time() - t0) * 1000),
+            "finish": result.get("finish", "stop"),
+        }
+    except Exception as e:
+        return {"system": "LEO", "task_id": task["id"], "response": f"ERROR: {e}", "tokens": 0,
+                "iterations": 0, "duration_ms": int((time.time() - t0) * 1000), "finish": "error"}
+
+
+async def run_task_oc(task: dict, repo_path: str) -> dict:
+    """Ejecuta tarea sin KC-RAG (agente con tools pero sin contexto RAG)."""
+    from leo_code.rag.agent.loop import AgentLoop
+    from leo_code.rag.agent.tools import ToolRegistry
+    agent = AgentLoop(tools=ToolRegistry(), max_iterations=5)
+    agent.interrupt = False
+    t0 = time.time()
+    try:
+        result = await agent.run(task["query"], repo_path=repo_path, model=MODEL, use_kc_rag=False)
+        return {
+            "system": "OC",
+            "task_id": task["id"],
+            "response": result.get("respuesta", ""),
+            "tokens": result.get("total_tokens", 0),
+            "iterations": result.get("iterations", 0),
+            "duration_ms": int((time.time() - t0) * 1000),
+            "finish": result.get("finish", "stop"),
+        }
+    except Exception as e:
+        return {"system": "OC", "task_id": task["id"], "response": f"ERROR: {e}", "tokens": 0,
+                "iterations": 0, "duration_ms": int((time.time() - t0) * 1000), "finish": "error"}
 
 
 async def run_task_oc(task: dict, repo_path: str) -> dict:
@@ -107,7 +134,8 @@ async def run_benchmark(tasks: list[dict], systems: list[str], repo_path: str) -
                 results.append(r)
                 # Save individual result
                 (RESULTS_DIR / f"{sys_name.lower()}_{tid}.json").write_text(
-                    json.dumps(r, indent=2, ensure_ascii=False, default=str))
+                    json.dumps(r, indent=2, ensure_ascii=False, default=str),
+                    encoding="utf-8")
                 print(f"    tokens={r['tokens']} score={r['score_total']}")
             except Exception as e:
                 print(f"    ERROR: {e}")
@@ -191,7 +219,8 @@ def main():
 
     # Save full results
     (RESULTS_DIR / "full_results.json").write_text(
-        json.dumps(results, indent=2, ensure_ascii=False, default=str))
+        json.dumps(results, indent=2, ensure_ascii=False, default=str),
+        encoding="utf-8")
 
 
 if __name__ == "__main__":

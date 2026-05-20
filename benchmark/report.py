@@ -7,8 +7,8 @@ from pathlib import Path
 def generate_report(results_path: str = "benchmark/results/full_results.json",
                     tasks_path: str = "benchmark/tasks.json",
                     output: str = "benchmark/REPORT.md"):
-    results = json.loads(Path(results_path).read_text()) if Path(results_path).exists() else []
-    tasks = json.loads(Path(tasks_path).read_text()) if Path(tasks_path).exists() else []
+    results = json.loads(Path(results_path).read_text(encoding="utf-8")) if Path(results_path).exists() else []
+    tasks = json.loads(Path(tasks_path).read_text(encoding="utf-8")) if Path(tasks_path).exists() else []
 
     if not results:
         print("No results found. Run `python benchmark/run.py` first.")

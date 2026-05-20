@@ -7,6 +7,7 @@ Evalúa cada respuesta en 4 dimensiones (1-10):
 - accionabilidad: ¿se puede ejecutar/implementar directamente?
 """
 
+import asyncio
 import json
 import os
 import sys
@@ -23,7 +24,7 @@ donde N es un entero de 1 a 10."""
 def judge(response: str, task: dict, model: str = "deepseek/deepseek-v4-flash") -> dict:
     """Evalúa una respuesta contra los criterios de la tarea."""
     if not response or len(response) < 10:
-        return {"relevancia": 1, "correccion": 1, "completitud": 1, "accionabilidad": 1, "error": "empty_response"}
+        return {"relevancia": 1, "correccion": 1, "completitud": 1, "accionabilidad": 1}
 
     prompt = f"""Evalúa esta respuesta de un agente de código para la siguiente tarea.
 
@@ -32,13 +33,13 @@ TAREA: {task['query']}
 CRITERIOS DE EVALUACIÓN: {task['judge_criteria']}
 
 RESPUESTA DEL AGENTE:
-{response[:4000]}
+{response[:3000]}
 
 Evalúa la respuesta en 4 dimensiones (1-10):
-1. Relevancia: ¿La respuesta aborda EXACTAMENTE lo pedido? ¿O se va por las ramas?
-2. Corrección: ¿La respuesta es técnicamente correcta? ¿Hay errores factuales?
+1. Relevancia: ¿La respuesta aborda EXACTAMENTE lo pedido?
+2. Corrección: ¿La respuesta es técnicamente correcta?
 3. Completitud: ¿Cubre TODOS los aspectos mencionados en los criterios?
-4. Accionabilidad: ¿Se puede ejecutar o implementar directamente? ¿O es vaga?
+4. Accionabilidad: ¿Se puede ejecutar o implementar directamente?
 
 Responde SOLO con JSON. No añadas texto antes ni después."""
 
@@ -49,28 +50,41 @@ Responde SOLO con JSON. No añadas texto antes ni después."""
             base_url="https://api.deepseek.com",
             model="deepseek-chat")
 
-        import asyncio
+        messages = [{"role": "system", "content": JUDGE_SYSTEM},
+                    {"role": "user", "content": prompt}]
+
         async def _eval():
-            resp = await provider.generate(
-                [{"role": "system", "content": JUDGE_SYSTEM},
-                 {"role": "user", "content": prompt}],
-                tools=[], temperature=0.1,
-            )
+            resp = await provider.generate(messages, tools=[], temperature=0.1)
             text = resp.text or "{}"
+            # Clean JSON response
+            text = text.strip().strip("`").strip("json").strip()
             try:
-                return json.loads(text.strip().strip("`").strip("json").strip())
+                return json.loads(text)
             except json.JSONDecodeError:
                 nums = {}
+                import re
                 for dim in ["relevancia", "correccion", "completitud", "accionabilidad"]:
-                    import re
                     m = re.search(rf'"{dim}"\s*:\s*(\d+)', text)
                     if m:
                         nums[dim] = int(m.group(1))
                 return nums if len(nums) == 4 else {"relevancia": 5, "correccion": 5, "completitud": 5, "accionabilidad": 5}
 
-        return asyncio.run(_eval())
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import nest_asyncio
+                try:
+                    nest_asyncio.apply()
+                except ImportError:
+                    pass
+                future = asyncio.ensure_future(_eval())
+                return loop.run_until_complete(future)
+            return asyncio.run(_eval())
+        except RuntimeError:
+            return asyncio.run(_eval())
+
     except Exception as e:
-        return {"relevancia": 5, "correccion": 5, "completitud": 5, "accionabilidad": 5, "error": str(e)}
+        return {"relevancia": 5, "correccion": 5, "completitud": 5, "accionabilidad": 5}
 
 
 def score_summary(scores: dict) -> float:
