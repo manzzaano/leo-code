@@ -1,5 +1,5 @@
-- The default branch in this repo is `optimizacion`.
-- Use `origin/optimizacion` for diffs.
+- Branch `main` = producción (releases). Branch `dev` = desarrollo activo.
+- Usa `origin/dev` para diffs.
 - Prefer automation: execute requested actions without confirmation unless blocked by missing info or safety/irreversibility.
 
 ## Style Guide
