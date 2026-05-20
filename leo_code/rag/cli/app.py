@@ -227,6 +227,7 @@ def chat(model: str, repo: str, image: tuple[str]):
 
     state = {"model": model, "repo": repo_abs, "images": pending_images}
     total_saved_ref = [0]
+    goal_state: dict = {}  # {"active": True, "runner": GoalRunner, "goal": Goal}
 
     # Init plugins + skills
     from leo_code.rag.agent.tools import ToolRegistry
@@ -375,6 +376,9 @@ def _handle_command(cmd: str, state: dict, sm, sid: str, console) -> str | None:
 [bold]Comandos:[/bold]
   /model <id>     Cambiar modelo (p.ej. /model deepseek/deepseek-v4-pro)
   /model list     Listar modelos disponibles
+  /goal <tarea>   Modo goal: no para hasta completar la tarea
+  /goal status    Ver progreso del goal actual
+  /goal cancel    Cancelar goal activo
   /image <path>   Cargar imagen para análisis de visión
   /diff           Ver git diff de los cambios hechos
   /clear          Limpiar pantalla
@@ -446,6 +450,9 @@ def _handle_command(cmd: str, state: dict, sm, sid: str, console) -> str | None:
     if cmd in ("/exit", "/quit"):
         return "exit"
 
+    if cmd.startswith("/goal"):
+        return _handle_goal(cmd, state, console, sid, pm, skill_mgr, status)
+
     return None
 
 
@@ -466,6 +473,93 @@ def index(repo: str, languages: str, verbose: bool):
     indexer = Indexer()
     count = indexer.build(repo, languages=langs, verbose=verbose)
     console.print(f"[green]✓ Listo. {count} cápsulas indexadas.[/green]")
+
+
+def _handle_goal(cmd: str, state: dict, console, sid: str,
+                 pm, skill_mgr, status) -> str | None:
+    if cmd == "/goal status":
+        if goal_state.get("goal"):
+            g = goal_state["goal"]
+            done = sum(1 for s in g.steps if s.status == "done")
+            console.print(f"\n[bold]Goal activo:[/bold] {g.description[:80]}")
+            bar = "█" * done + "░" * (len(g.steps) - done) if g.steps else "sin pasos"
+            console.print(f"  {bar} {done}/{len(g.steps)} pasos")
+            console.print(f"  Estado: [cyan]{g.status}[/cyan] · {g.total_tokens} tok · {g.total_duration_ms}ms")
+            console.print()
+        else:
+            console.print("[dim]Sin goal activo[/dim]")
+        return ""
+
+    if cmd == "/goal cancel":
+        if goal_state.get("runner"):
+            goal_state["runner"].cancel()
+            console.print("[yellow]Goal cancelado[/yellow]")
+            goal_state.clear()
+        else:
+            console.print("[dim]Sin goal activo[/dim]")
+        return ""
+
+    if cmd.startswith("/goal "):
+        goal_text = cmd.split("/goal ", 1)[1].strip()
+        if not goal_text:
+            return ""
+
+        _cancel.cancelled = False
+        console.print(f"\n[bold bright_blue]🎯 Goal:[/bold bright_blue] {goal_text[:120]}\n")
+
+        async def run_goal():
+            from leo_code.rag.agent.loop import AgentLoop
+            from leo_code.rag.agent.tools import ToolRegistry
+            merged = ToolRegistry()
+            for name, fn in plugins_registry._tools.items():
+                merged._tools[name] = fn
+            merged._definitions = list(plugins_registry._definitions)
+            agent = AgentLoop(tools=merged, max_iterations=15)
+            agent.interrupt = False
+
+            async for event in agent.goal_stream_run(
+                goal_text, repo_path=state["repo"], model=state["model"],
+                plugin_manager=pm, skill_manager=skill_mgr,
+            ):
+                if _cancel.cancelled:
+                    agent.interrupt = True
+                etype = event["type"]
+
+                if etype == "goal_start":
+                    console.print(f"[dim]  id: {event['goal']}[/dim]")
+                elif etype == "goal_phase":
+                    prefix = {"planning": "🧠 Planeando...", "verifying": "🔍 Verificando..."}.get(event["phase"], "")
+                    console.print(f"\n[bold]{prefix}[/bold]")
+                elif etype == "plan":
+                    steps = event.get("steps", [])
+                    for i, s in enumerate(steps, 1):
+                        console.print(f"  [dim]{i}.[/dim] {s}")
+                    console.print()
+                elif etype == "step_start":
+                    console.print(f"  [cyan]┌─ Paso {event['step']}/{event['total']}[/cyan] — {event.get('description','')[:100]}")
+                elif etype == "step_done":
+                    icon = "✓" if event.get("status") == "done" else "✗"
+                    color = "green" if event.get("status") == "done" else "red"
+                    console.print(f"  [{color}]└─ {icon} {event['step']}/{event['progress']} · {event.get('tokens',0)} tok · {event.get('duration_ms',0)}ms[/{color}]")
+                elif etype == "replan":
+                    added = event.get("added_steps", [])
+                    console.print(f"  [yellow]↻ Re-plan: +{len(added)} pasos alternativos[/yellow]")
+                elif etype == "verify":
+                    result = event.get("result", {})
+                    console.print(f"  [dim]Verificacion: {result.get('result', '')[:200]}[/dim]")
+                elif etype == "goal_done":
+                    bar = "█" * event.get("steps_done", 0) + "░" * max(0, event.get("total_steps", 1) - event.get("steps_done", 0))
+                    console.print(f"\n  {bar}")
+                    color = "green" if event.get("status") == "done" else "yellow"
+                    console.print(f"  [{color}]🎉 Goal {event['status']}: {event['steps_done']}/{event['total_steps']} pasos · {event['tokens']} tok · {event['duration_ms']}ms[/{color}]\n")
+                    goal_state["goal"] = None  # clear on done
+                elif etype == "goal_error":
+                    console.print(f"[red]Error: {event['error']}[/red]")
+
+        asyncio.run(run_goal())
+        return ""
+
+    return None
 
 
 if __name__ == "__main__":

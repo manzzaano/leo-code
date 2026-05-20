@@ -169,6 +169,22 @@ class AgentLoop:
         sm = SessionManager()
         return sm.list_sessions(limit)
 
+    async def goal_stream_run(self, goal_text: str, repo_path: str = ".",
+                              model: str = "deepseek/deepseek-v4-flash",
+                              plugin_manager=None, skill_manager=None):
+        """Goal mode: plan → execute → verify → re-plan. No para hasta completar."""
+        from leo_code.rag.agent.goal import GoalRunner
+        self.interrupt = False
+        if self.llm is None:
+            self.llm = self._init_llm(model)
+        repo_path = os.path.abspath(repo_path)
+        runner = GoalRunner(self, self.tools, self.llm)
+        async for event in runner.run(goal_text, repo_path, model,
+                                       plugin_manager, skill_manager):
+            if self.interrupt:
+                runner.cancel()
+            yield event
+
     async def stream_run(self, query: str, repo_path: str = ".",
                          model: str = "deepseek/deepseek-v4-flash",
                          use_kc_rag: bool = True,

@@ -24,7 +24,7 @@ _TASK_THEMES = {
 
 
 class LeoStatus:
-    """Terminal HUD con pipeline KC-RAG en vivo y tema por tarea."""
+    """Terminal HUD con pipeline KC-RAG en vivo, tema por tarea, y goal progress."""
 
     def __init__(self, console: Console, repo_path: str = ".",
                  model: str = "", plugins: list[str] | None = None,
@@ -43,6 +43,19 @@ class LeoStatus:
         self._total_saved = 0
         self._iterations = 0
         self._duration_ms = 0
+        self._goal_steps_done = 0
+        self._goal_total = 0
+
+    def set_goal_progress(self, done: int, total: int):
+        self._goal_steps_done = done
+        self._goal_total = total
+
+    def goal_progress_bar(self) -> str:
+        if self._goal_total == 0:
+            return ""
+        bar = "█" * self._goal_steps_done + "░" * max(0, self._goal_total - self._goal_steps_done)
+        pct = int(self._goal_steps_done / self._goal_total * 100) if self._goal_total > 0 else 0
+        return f"  {bar} {pct}%"
 
     @property
     def task_color(self) -> str:
