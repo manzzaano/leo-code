@@ -1,0 +1,122 @@
+[
+  {
+    "id": "t1_code_query",
+    "type": "code_query",
+    "language": "python",
+    "query": "¿Qué hace la función detect_frameworks en leo_code/core/parser.py? ¿Qué frameworks detecta y cómo los clasifica? Dame la lista completa.",
+    "judge_criteria": "Debe listar los 37 frameworks, explicar el mecanismo de detección (herencia, decorators, patrones), y mencionar los tipos de cápsula que genera (endpoint, model, controller, component, middleware, schema, task).",
+    "weight": 1.0
+  },
+  {
+    "id": "t2_debug",
+    "type": "debug",
+    "language": "python",
+    "query": "Encuentra y explica si hay algún bug en la función _compress_debug en leo_code/rag/compressor.py. Si existe, describe qué falla, en qué línea, y cómo se solucionaría. Si no hay bugs, explica por qué es robusta.",
+    "judge_criteria": "Debe identificar que _compress_debug verifica top_capsules[0] sin comprobar que top_capsules no esté vacío, y mencionar el fallback a _compress_query. O explicar que es seguro por el guard clause.",
+    "weight": 1.2
+  },
+  {
+    "id": "t3_test_gen",
+    "type": "test_gen",
+    "language": "python",
+    "query": "Escribe tests unitarios para la función compact_history en leo_code/session/compactor.py. Incluye 3 casos: historial vacío (0 mensajes), historial con 10 mensajes (sin compactar), e historial con 50 mensajes (se compacta). Usa pytest.",
+    "judge_criteria": "Debe generar tests con pytest que prueben las 3 condiciones. Los tests deben ser ejecutables y seguir el patrón AAA. Debe verificar que los code_refs se extraigan correctamente.",
+    "weight": 1.1
+  },
+  {
+    "id": "t4_refactor",
+    "type": "refactor",
+    "language": "python",
+    "query": "Refactoriza la función detect_frameworks en leo_code/core/parser.py para que sea más modular. Extrae la lógica de detección de cada lenguaje (Python, JS/TS, Java/Kotlin, Go, Rust, Ruby, PHP, C#, Elixir) a funciones helper separadas. No cambies el comportamiento, solo la estructura.",
+    "judge_criteria": "Debe proponer una estructura con funciones helper por lenguaje, manteniendo exactamente la misma lógica de detección. Debe explicar cómo se integrarían los helpers en la función principal.",
+    "weight": 1.0
+  },
+  {
+    "id": "t5_search",
+    "type": "search",
+    "language": "python+typescript",
+    "query": "Encuentra todas las funciones y clases que NO tienen docstring en el proyecto leo-code. Ordénalas por número de líneas de código (de mayor a menor) y muéstrame las 10 primeras con su archivo y línea.",
+    "judge_criteria": "Debe listar funciones/clases sin docstring con archivo, línea y líneas de código. Debe estar ordenado correctamente. Debe usar search_code o explorar el repo.",
+    "weight": 0.9
+  },
+  {
+    "id": "t6_code_gen",
+    "type": "code_gen",
+    "language": "python",
+    "query": "Crea un nuevo endpoint GET /benchmark en leo_code/server/server.py que devuelva las métricas históricas del benchmark: número total de queries procesadas, tokens totales ahorrados vs baseline, distribución de task_types, y top 5 tareas más frecuentes. Usa el mismo estilo que los endpoints existentes (FastAPI + Pydantic).",
+    "judge_criteria": "Debe crear código FastAPI válido con response_model de Pydantic. Debe seguir el patrón de los endpoints existentes. Debe exponer métricas del MetricsTracker.",
+    "weight": 1.0
+  },
+  {
+    "id": "t7_code_edit",
+    "type": "code_edit",
+    "language": "python",
+    "query": "Modifica el método GoalRunner._plan() en leo_code/rag/agent/goal.py para que acepte un nuevo parámetro max_steps con valor por defecto 12, que limite el número de pasos devueltos. Actualiza también la llamada a _plan() desde run() para pasar max_steps=12.",
+    "judge_criteria": "Debe modificar la firma de _plan() añadiendo max_steps: int = 12, limitar el slicing en el return, y pasar el parámetro desde run().",
+    "weight": 0.8
+  },
+  {
+    "id": "t8_review",
+    "type": "review",
+    "language": "python",
+    "query": "Haz code review de leo_code/rag/compressor.py. Evalúa: SOLID, naming, complejidad ciclomática, duplicación de código, manejo de errores, y cobertura de edge cases. Da 3 recomendaciones concretas de mejora con ejemplos de código.",
+    "judge_criteria": "Debe evaluar específicamente el archivo compressor.py, mencionar la cadena if/elif del dispatch, las funciones helper, y dar recomendaciones accionables con código.",
+    "weight": 1.0
+  },
+  {
+    "id": "t9_optimize",
+    "type": "optimize",
+    "language": "python",
+    "query": "Optimiza la función _find_block_end en leo_code/core/parser_generic.py para reducir el número de iteraciones. Actualmente recorre línea por línea buscando {} o 'end'. Propón una mejora y estima cuántas líneas menos recorrería en un archivo típico de 500 líneas con 20 funciones.",
+    "judge_criteria": "Debe analizar la complejidad actual, proponer una optimización concreta (ej: búsqueda binaria, pre-cómputo de índices de línea, cache), y estimar la mejora en O(n) o líneas recorridas.",
+    "weight": 1.0
+  },
+  {
+    "id": "t10_audit",
+    "type": "audit",
+    "language": "python",
+    "query": "Audita la seguridad de leo_code/server/server.py. Busca: rate limiting bypass, input validation en los endpoints, exposición de secrets en logs o respuestas, path traversal en file_path, y falta de headers de seguridad. Reporta cada hallazgo con severidad (crítico/medio/bajo).",
+    "judge_criteria": "Debe identificar el rate limiting (30 req/10s), revisar si hay path traversal en repo_path, verificar que no se expongan API keys, y evaluar headers de seguridad. Debe dar hallazgos con severidad.",
+    "weight": 1.2
+  },
+  {
+    "id": "t11_onboard",
+    "type": "onboard",
+    "language": "multi",
+    "query": "Explica la arquitectura de leo-code para un nuevo desarrollador. Cubre: estructura de directorios, entrypoints (CLI y sidecar), flujo de una query desde que el usuario escribe hasta que recibe respuesta, y los 3 módulos principales (core, rag, server).",
+    "judge_criteria": "Debe mencionar la estructura de directorios real, los entrypoints (leo-code chat, leo-code-mcp), el pipeline KC-RAG (indexer → Qdrant → compress → LLM), y los submódulos. Debe ser accionable para un dev nuevo.",
+    "weight": 0.9
+  },
+  {
+    "id": "t12_design_review",
+    "type": "design_review",
+    "language": "markdown",
+    "query": "Analiza el diseño y copy del README.md y docs/index.md de leo-code. Sugiere mejoras concretas en: jerarquía visual, claridad del mensaje, persuasión del copy, y estructura de la información. Sé específico con ejemplos de headlines y CTAs.",
+    "judge_criteria": "Debe leer los archivos markdown reales, analizar estructura, proponer mejoras de copy con ejemplos concretos (headlines, CTAs), y evaluar la jerarquía de información.",
+    "weight": 0.9
+  },
+  {
+    "id": "t13_framework",
+    "type": "code_query",
+    "language": "python",
+    "query": "¿Cuántos endpoints tiene el servidor de leo-code? ¿Qué frameworks usa (FastAPI, Pydantic, SQLAlchemy)? ¿Están todos los endpoints usando response_model para validar la salida? Lista los que no lo usen.",
+    "judge_criteria": "Debe contar los endpoints correctamente (10: health, context, search, index, preindex, stats, metrics, sessions, plugins, skills), mencionar los frameworks, y verificar response_model.",
+    "weight": 1.0
+  },
+  {
+    "id": "t14_cross_file",
+    "type": "code_query",
+    "language": "python",
+    "query": "Traza la cadena completa de dependencias desde AgentLoop.stream_run() en leo_code/rag/agent/loop.py hasta que se obtiene una respuesta del LLM. Describe cada paso: ¿qué módulos se atraviesan? ¿Qué funciones se llaman? ¿En qué orden?",
+    "judge_criteria": "Debe trazar: stream_run → _build_context → Indexer → Qdrant → compress → LLM.generate. Debe mencionar los módulos involucrados y el orden de llamadas.",
+    "weight": 1.1
+  },
+  {
+    "id": "t15_plugin_arch",
+    "type": "code_query",
+    "language": "python",
+    "query": "Explica la arquitectura del plugin system de leo-code. ¿Qué tipos de plugins soporta? ¿Cómo se registran? ¿Qué hooks tienen? Dame un ejemplo de cómo crearías un plugin que valide que no se commiteen secrets (API keys, passwords) al código.",
+    "judge_criteria": "Debe explicar los 3 tipos (builtin, subprocess, MCP), los hooks (on_init, on_tool_register, on_pre_context, on_post_response, on_pre_tool, on_post_tool, on_pre_llm, on_post_llm, on_shutdown), y dar un ejemplo concreto de plugin de validación de secrets.",
+    "weight": 1.0
+  }
+]
