@@ -88,20 +88,35 @@ class AgentLoop:
                         "iterations": iteration + 1,
                         "duration_ms": int((time.time() - t0) * 1000)}
 
-            # Execute tools
+            # Build ONE assistant message with ALL tool_calls
+            all_tool_calls = []
             for tc in resp.tool_calls:
-                if iteration >= 20:
-                    break
                 args = tc.arguments if isinstance(tc.arguments, dict) else {}
                 if isinstance(args, str):
-                    try:
-                        import json as _json
-                        args = _json.loads(args)
-                    except Exception:
-                        args = {}
+                    try: args = json.loads(args)
+                    except: args = {}
                 tc_id = tc.id or f"call_{iteration}_{hash(tc.name) % 10000}"
+                all_tool_calls.append({
+                    "id": tc_id, "type": "function",
+                    "function": {"name": tc.name,
+                                 "arguments": json.dumps(args, ensure_ascii=False)}
+                })
+
+            messages.append({
+                "role": "assistant",
+                "content": text or "(using tools)",
+                "tool_calls": all_tool_calls,
+            })
+
+            # Execute each tool and append result
+            for tc, tc_data in zip(resp.tool_calls, all_tool_calls):
+                args = tc.arguments if isinstance(tc.arguments, dict) else {}
+                if isinstance(args, str):
+                    try: args = json.loads(args)
+                    except: args = {}
                 call_key = f"{tc.name}:{str(args)[:80]}"
                 if call_key in self._recent_calls:
+                    messages.append({"role": "tool", "tool_call_id": tc_data["id"], "content": "[Llamada repetida]"})
                     continue
                 self._recent_calls.add(call_key)
                 self._tool_call_count += 1
@@ -109,16 +124,18 @@ class AgentLoop:
                 result = self.tools.execute(tc.name, args, repo_path)
                 if len(result) > 1500:
                     result = result[:1500] + f"\n[{len(result)} chars total]"
-
-                messages.append({"role": "assistant", "content": text or "(using tool)",
-                                 "tool_calls": [{"id": tc_id, "type": "function",
-                                                  "function": {"name": tc.name,
-                                                               "arguments": json.dumps(args, ensure_ascii=False)}}]})
-                messages.append({"role": "tool", "tool_call_id": tc_id, "content": result[:2000]})
+                messages.append({"role": "tool", "tool_call_id": tc_data["id"], "content": result[:2000]})
                 total_tokens += len(result) // 4
 
-            if iteration >= 20:
-                messages.append({"role": "system", "content": "URGENTE: Da tu respuesta final AHORA."})
+            # ABORT: si llegamos a muchas iteraciones, usa el texto acumulado
+            if iteration >= 8 and all_text.strip():
+                if session_id:
+                    self._persist_turn(session_id, query, all_text, model, total_tokens)
+                return {"respuesta": all_text, "total_tokens": total_tokens,
+                        "iterations": iteration + 1,
+                        "duration_ms": int((time.time() - t0) * 1000)}
+            elif iteration >= 8:
+                messages.append({"role": "system", "content": "DA TU RESPUESTA FINAL AHORA. NO PIDAS MAS HERRAMIENTAS."})
 
         return {"respuesta": all_text or f"[No completado en {self.max_iterations} iteraciones. {self._tool_call_count} tools ejecutadas.]",
                 "total_tokens": total_tokens, "iterations": self.max_iterations,
