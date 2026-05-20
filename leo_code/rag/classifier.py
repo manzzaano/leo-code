@@ -2,13 +2,12 @@
 
 Determina:
 1. Si la query necesita contexto de código del repo (needs_code_context)
-2. El tipo de tarea (code_gen, code_edit, code_query, refactor, search, no_code)
+2. El tipo de tarea (code_gen, code_edit, code_query, refactor, search, debug, test_gen, no_code)
 3. El presupuesto de tokens recomendado para el contexto
 """
 
 import re
 
-# Señales de que la query está relacionada con el código del repo
 CODE_SIGNALS = [
     "función", "funcion", "function", "módulo", "modulo", "module",
     "clase", "class", "archivo", "file", "código", "codigo", "code",
@@ -18,17 +17,21 @@ CODE_SIGNALS = [
     "parser", "indexer", "encoder", "compressor",
 ]
 
-# Presupuesto de tokens por tipo de tarea
 TOKEN_BUDGET = {
     "code_gen": 800,
     "code_edit": 800,
     "code_query": 1500,
     "refactor": 2000,
     "search": 500,
+    "debug": 2500,
+    "test_gen": 1500,
+    "review": 1200,
+    "optimize": 1500,
+    "audit": 1000,
+    "onboard": 600,
     "no_code": 0,
 }
 
-# Señales por tipo de tarea
 TASK_SIGNALS = {
     "code_gen": [
         "crea", "nuevo", "añade", "añadir", "agrega", "genera", "escribe",
@@ -36,7 +39,7 @@ TASK_SIGNALS = {
     ],
     "code_edit": [
         "modifica", "cambia", "cambiar", "arregla", "fix", "corrige",
-        "actualiza", "update", "edita", "edit", "cambiar",
+        "actualiza", "update", "edita", "edit",
     ],
     "code_query": [
         "explica", "que hace", "qué hace", "como funciona", "cómo funciona",
@@ -52,6 +55,41 @@ TASK_SIGNALS = {
         "encuentra", "busca", "lista", "cuantas", "cuántas", "cuantos",
         "cuáles", "cuales", "find", "search", "list", "todas", "todos",
     ],
+    "debug": [
+        "bug", "error", "falla", "fallo", "excepción", "excepcion", "exception",
+        "traceback", "stack trace", "crash", "rompe", "roto", "no funciona",
+        "debug", "debuggear", "depurar", "por qué falla", "por que falla",
+        "por qué no", "por que no", "arregla", "fix", "corrige",
+    ],
+    "test_gen": [
+        "test", "tests", "testear", "probar", "unit test", "unit tests",
+        "prueba", "pruebas", "cobertura", "coverage", "pytest",
+        "test de", "tests de", "genera test", "escribe test",
+        "añade test", "agrega test", "create test", "write test",
+        "escribe tests", "genera tests", "añade tests", "agrega tests",
+        "crea test", "crea tests",
+    ],
+    "review": [
+        "review", "revisa", "revisar", "revisión", "revision",
+        "code review", "check", "inspecciona",
+    ],
+    "optimize": [
+        "optimiza", "optimizar", "optimization", "performance",
+        "lento", "lenta", "rápido", "rapido", "memoria", "memory",
+        "perf", "profiling", "profile", "cuello", "bottleneck",
+    ],
+    "audit": [
+        "seguridad", "security", "vulnerabilidad", "vulnerability",
+        "audit", "auditoría", "auditoria", "safety", "safe",
+        "inyección", "injection", "sql", "xss", "csrf",
+        "secret", "token", "contraseña", "password", "expuesto",
+    ],
+    "onboard": [
+        "onboarding", "onboard", "introducción", "introduccion",
+        "resumen", "summary", "overview", "arquitectura", "architecture",
+        "estructura", "structure", "cómo empezar", "como empezar",
+        "getting started", "guía", "guia", "guide",
+    ],
 }
 
 _SNAKE_RE = re.compile(r"\w+_\w+")
@@ -63,7 +101,6 @@ _TASK_SIGNAL_RES: dict[str, list[re.Pattern]] = {
 
 
 def needs_code_context(query: str) -> bool:
-    """Determina si la query necesita contexto del código del repositorio."""
     q = query.lower()
     if any(s in q for s in CODE_SIGNALS):
         return True
@@ -73,24 +110,19 @@ def needs_code_context(query: str) -> bool:
 
 
 def classify_task(query: str) -> str:
-    """Clasifica el tipo de tarea según palabras clave en la query."""
     q = query.lower()
-
     scores = {}
     for task_type, patterns in _TASK_SIGNAL_RES.items():
         count = sum(1 for p in patterns if p.search(q))
         scores[task_type] = count
-
     best = max(scores, key=scores.get)
     if scores[best] == 0:
         if needs_code_context(query):
             return "code_query"
         return "no_code"
-
     return best
 
 
 def get_budget(query: str) -> int:
-    """Retorna el presupuesto de tokens recomendado para esta query."""
     task_type = classify_task(query)
     return TOKEN_BUDGET.get(task_type, 1500)

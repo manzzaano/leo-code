@@ -69,7 +69,9 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
                     imports=[mod] if mod else [],
                 ))
 
-        elif isinstance(node, ast.FunctionDef):
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            is_async = isinstance(node, ast.AsyncFunctionDef)
+
             def _param_str(arg, default=None) -> str:
                 p = f"{arg.arg}: {ast.unparse(arg.annotation)}" if arg.annotation else arg.arg
                 return f"{p} = {ast.unparse(default)}" if default is not None else p
@@ -81,7 +83,8 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
             returns = ast.unparse(node.returns) if node.returns else "None"
             doc = ast.get_docstring(node)
             lines = (node.end_lineno or node.lineno) - node.lineno + 1
-            sig = f"def {node.name}({', '.join(params)}) -> {returns}"
+            prefix = "async def" if is_async else "def"
+            sig = f"{prefix} {node.name}({', '.join(params)}) -> {returns}"
 
             calls = []
             for child in ast.walk(node):
@@ -91,24 +94,44 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
             if not doc and lines <= 15:
                 doc = (ast.get_source_segment(content, node) or "")[:300]
 
+            # Decorators
+            decorators = [
+                ast.unparse(d) for d in node.decorator_list
+            ] if node.decorator_list else []
+
+            # Capsule type differentiation
+            if node.name.startswith("test_"):
+                ftype = "test"
+            elif is_async:
+                ftype = "async_function"
+            elif any("pytest.fixture" in d or "fixture" == d.split("(")[0].strip("@") for d in decorators):
+                ftype = "test"
+            else:
+                ftype = "function"
+
+            props = {
+                "parametros": ", ".join(params),
+                "tipo_retorno": returns,
+                "lineas": lines,
+                "module": module_name,
+            }
+            if decorators:
+                props["decorators"] = ", ".join(decorators)
+
             capsules.append(Capsule(
                 id=_make_id(file_path, node.lineno, sig),
-                type="function", name=node.name, file_path=file_path,
+                type=ftype, name=node.name, file_path=file_path,
                 start_line=node.lineno, end_line=node.end_lineno or node.lineno,
                 language="python", signature=sig,
                 content=ast.get_source_segment(content, node) or ast.unparse(node),
                 docstring=doc, calls=calls,
-                properties={
-                    "parametros": ", ".join(params),
-                    "tipo_retorno": returns,
-                    "lineas": lines,
-                    "module": module_name,
-                },
+                properties=props,
             ))
 
         elif isinstance(node, ast.ClassDef):
             bases = [ast.unparse(b) for b in node.bases]
-            methods = [n.name for n in ast.iter_child_nodes(node) if isinstance(n, ast.FunctionDef)]
+            methods = [n.name for n in ast.iter_child_nodes(node)
+                       if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
             doc = ast.get_docstring(node)
             lines = (node.end_lineno or node.lineno) - node.lineno + 1
             sig = f"class {node.name}({', '.join(bases)})" if bases else f"class {node.name}"
@@ -118,19 +141,43 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
                 if isinstance(child, ast.Call) and isinstance(child.func, ast.Name):
                     calls.append(child.func.id)
 
+            decorators = [
+                ast.unparse(d) for d in node.decorator_list
+            ] if node.decorator_list else []
+
+            is_dataclass = any(
+                d.split("(")[0].strip("@") == "dataclass"
+                for d in decorators
+            )
+            is_exception = any(
+                b.split("(")[0].split("[")[0].split(".")[-1] in ("Exception", "BaseException", "ValueError", "TypeError", "KeyError", "RuntimeError", "OSError", "IOError", "HTTPException")
+                for b in bases
+            )
+
+            if is_dataclass:
+                ctype = "dataclass"
+            elif is_exception:
+                ctype = "exception"
+            else:
+                ctype = "class"
+
+            props = {
+                "metodos": ", ".join(methods),
+                "hereda_de": ", ".join(bases),
+                "lineas": lines,
+                "module": module_name,
+            }
+            if decorators:
+                props["decorators"] = ", ".join(decorators)
+
             capsules.append(Capsule(
                 id=_make_id(file_path, node.lineno, sig),
-                type="class", name=node.name, file_path=file_path,
+                type=ctype, name=node.name, file_path=file_path,
                 start_line=node.lineno, end_line=node.end_lineno or node.lineno,
                 language="python", signature=sig,
                 content=ast.get_source_segment(content, node) or ast.unparse(node),
                 docstring=doc, calls=calls,
-                properties={
-                    "metodos": ", ".join(methods),
-                    "hereda_de": ", ".join(bases),
-                    "lineas": lines,
-                    "module": module_name,
-                },
+                properties=props,
             ))
 
         elif isinstance(node, (ast.Assign, ast.AnnAssign)):
@@ -148,6 +195,23 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
                         content=raw,
                         properties={"module": module_name},
                     ))
+
+        elif isinstance(node, ast.If):
+            # __name__ == "__main__" entrypoint
+            test_str = ast.unparse(node.test) if node.test else ""
+            if "__name__" in test_str and "__main__" in test_str:
+                entry_content = ast.get_source_segment(content, node) or ast.unparse(node)
+                capsules.append(Capsule(
+                    id=_make_id(file_path, node.lineno, "entrypoint"),
+                    type="entrypoint", name=f"{module_name}.__main__", file_path=file_path,
+                    start_line=node.lineno, end_line=node.end_lineno or node.lineno,
+                    language="python", signature="if __name__ == '__main__'",
+                    content=entry_content[:2000],
+                    properties={
+                        "lineas": (node.end_lineno or node.lineno) - node.lineno + 1,
+                        "module": module_name,
+                    },
+                ))
 
     header = _extract_file_header(content, file_path)
     if header is not None:
