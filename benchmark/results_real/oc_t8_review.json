@@ -1,0 +1,14 @@
+{
+  "system": "OC",
+  "response": "Voy a empezar leyendo el archivo en cuestión y explorando el repositorio para entender el contexto.",
+  "tokens": 450,
+  "duration_ms": 10173,
+  "task_id": "t8_review",
+  "scores": {
+    "relevancia": 2,
+    "correccion": 5,
+    "completitud": 1,
+    "accionabilidad": 1
+  },
+  "score_total": 2.5
+}

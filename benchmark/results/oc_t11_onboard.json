@@ -1,0 +1,17 @@
+{
+  "system": "OC",
+  "task_id": "t11_onboard",
+  "query": "Explica la arquitectura de leo-code para un nuevo desarrollador. Cubre: estructura de directorios, entrypoints (CLI y sidecar), flujo de una query desde que el usuario escribe hasta que recibe respuesta, y los 3 mÃ³dulos principales (core, rag, server).",
+  "response": "Voy a explorar la estructura del repositorio para darte una explicación precisa.",
+  "tokens": 955,
+  "iterations": 10,
+  "duration_ms": 12225,
+  "finish": "stop",
+  "scores": {
+    "relevancia": 1,
+    "correccion": 1,
+    "completitud": 1,
+    "accionabilidad": 1
+  },
+  "score_total": 1.0
+}

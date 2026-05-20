@@ -1,11 +1,9 @@
 {
-  "system": "LEO",
+  "system": "OC",
+  "response": "Voy a analizar ambos archivos en detalle.",
+  "tokens": 656,
+  "duration_ms": 8365,
   "task_id": "t12_design_review",
-  "response": "[comando ejecutado sin salida]",
-  "tokens": 23773,
-  "iterations": 8,
-  "duration_ms": 21570,
-  "finish": "max_iterations",
   "scores": {
     "relevancia": 1,
     "correccion": 1,

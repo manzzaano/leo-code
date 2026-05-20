@@ -2,11 +2,11 @@
   {
     "system": "LEO",
     "task_id": "t1_code_query",
-    "response": "[C:\\Users\\Ismael\\Desktop\\leo-code es un directorio. Usa list_files para explorar.]\nContenido:\n  📄 .dockerignore\n  📄 .env.example\n  📁 .git\n  📁 .github\n  📄 .gitignore\n  📁 .leo-code\n  📁 .pytest_cache\n  📄 AGENTS.md\n  📁 benchmark\n  📁 cache\n  📄 Dockerfile\n  📁 docs\n  📄 find_missing_docstrings.py\n  📁 leo_code\n  📁 leo_code.egg-info\n  📄 LICENSE\n  📄 nul\n  📄 pyproject.toml\n  📄 README.md\n  📁 tests",
-    "tokens": 37046,
+    "response": "Voy a leer el archivo para analizar la función `detect_frameworks`.",
+    "tokens": 408,
     "iterations": 8,
-    "duration_ms": 38389,
-    "finish": "max_iterations",
+    "duration_ms": 33728,
+    "finish": "stop",
     "scores": {
       "relevancia": 1,
       "correccion": 1,
@@ -19,44 +19,11 @@
     "system": "OC",
     "task_id": "t1_code_query",
     "query": "Â¿QuÃ© hace la funciÃ³n detect_frameworks en leo_code/core/parser.py? Â¿QuÃ© frameworks detecta y cÃ³mo los clasifica? Dame la lista completa.",
-    "response": "[comando ejecutado sin salida]",
-    "tokens": 33536,
+    "response": "Voy a leer el archivo para analizar la función `detect_frameworks`.El archivo es muy largo. Voy a buscar específicamente la función `detect_frameworks`.Parece que la función no está en ese archivo. Voy a buscar en todo el repositorio.No existe ninguna función llamada `detect_frameworks` en el repositorio. Revisemos la estructura del proyecto para ver qué hay realmente.",
+    "tokens": 441,
     "iterations": 10,
-    "duration_ms": 14418,
-    "finish": "max_iterations",
-    "scores": {
-      "relevancia": 1,
-      "correccion": 1,
-      "completitud": 1,
-      "accionabilidad": 1
-    },
-    "score_total": 1.0
-  },
-  {
-    "system": "NO",
-    "task_id": "t1_code_query",
-    "query": "Â¿QuÃ© hace la funciÃ³n detect_frameworks en leo_code/core/parser.py? Â¿QuÃ© frameworks detecta y cÃ³mo los clasifica? Dame la lista completa.",
-    "response": "La función `detect_frameworks` en `leo_code/core/parser.py` analiza el código fuente de un proyecto Python (generalmente archivos `.py`) para identificar qué frameworks o librerías principales se están utilizando. Lo hace mediante la búsqueda de patrones específicos como:\n\n- **Importaciones** (`import django`, `from flask import ...`)\n- **Decoradores comunes** (`@app.route`, `@pytest.fixture`)\n- **Archivos de configuración** (`requirements.txt`, `setup.py`, `Pipfile`)\n- **Estructuras de directorios** (presencia de `migrations/`, `templates/`, etc.)\n\nUna vez detectados, los **clasifica** por categorías según su propósito (web, async, ORM, testing, etc.), permitiendo entender el stack tecnológico del proyecto.\n\nA continuación, la **lista completa** de frameworks que detecta, basada en una implementación típica de herramientas similares (como `pipreqs`, `detectfwk` o la propia inspección de Leo Code). Sin embargo, **no tengo acceso directo al archivo real**; esta es una lista representativa que suele incluirse en dicho tipo de funciones:\n\n### Frameworks Web\n- Django\n- Flask\n- FastAPI\n- Pyramid\n- Tornado\n- Bottle\n- CherryPy\n- Web2py\n- Zope\n- Plone\n- Masonite\n- Sanic\n- Starlette\n- Falcon\n\n### Microframeworks\n- Flask\n- Bottle\n- Hug\n- Eve\n\n### Frameworks Async / Asyncio\n- aiohttp\n- FastAPI (basado en Starlette)\n- Sanic\n- Tornado\n- Quart (Flask async)\n- Vibora\n\n### ORMs / Bases de Datos\n- SQLAlchemy\n- Django ORM\n- Peewee\n- Pony ORM\n- Tortoise-ORM\n- GINO (async)\n- MongoEngine (MongoDB)\n- Beanie (async MongoDB)\n\n### Testing\n- pytest\n- unittest (biblioteca estándar)\n- nose / nose2\n- doctest\n- tox\n- hypothesis\n- behave (BDD)\n- robotframework\n\n### Asincronía / Colas\n- Celery\n- RQ (Redis Queue)\n- Huey\n- Dramatiq\n- TaskTiger\n\n### Autenticación / Autorización\n- Flask-Login\n- Django Allauth\n- Flask-Security\n- PyJWT\n- Authlib\n- OAuthLib\n\n### HTTP / Clientes API\n- requests\n- httpx\n- aiohttp (cliente)\n- urllib3\n- grequests\n\n### Procesamiento / Templates\n- Jinja2\n- Mako\n- Chameleon\n- Genshi\n\n### Admin / Panel\n- Django Admin\n- Flask-Admin\n- Starlette Admin\n- SQLAlchemy Admin\n\n### Documentación / APIs\n- Swagger / OpenAPI (integrados en FastAPI, Flask-RESTPlus)\n- Sphinx\n- MkDocs\n\n**Nota:** La lista exacta varía según la versión de `leo_code`. Si necesitas la lista literal del archivo, por favor comparte el contenido o el contexto del proyecto para una respuesta precisa.",
-    "tokens": 1461,
-    "iterations": 1,
-    "duration_ms": 14855,
+    "duration_ms": 12108,
     "finish": "stop",
-    "scores": {
-      "relevancia": 4,
-      "correccion": 3,
-      "completitud": 2,
-      "accionabilidad": 2
-    },
-    "score_total": 2.9
-  },
-  {
-    "system": "LEO",
-    "task_id": "t5_search",
-    "response": "[C:\\Users\\Ismael\\Desktop\\leo-code es un directorio. Usa list_files para explorar.]\nContenido:\n  📄 .dockerignore\n  📄 .env.example\n  📁 .git\n  📁 .github\n  📄 .gitignore\n  📁 .leo-code\n  📁 .pytest_cache\n  📄 AGENTS.md\n  📄 analyze_docstrings.py\n  📁 benchmark\n  📁 cache\n  📄 Dockerfile\n  📁 docs\n  📄 find_missing_docstrings.py\n  📁 leo_code\n  📁 leo_code.egg-info\n  📄 LICENSE\n  📄 nul\n  📄 pyproject.toml\n  📄 README.md\n  📁 tests",
-    "tokens": 35572,
-    "iterations": 8,
-    "duration_ms": 26886,
-    "finish": "max_iterations",
     "scores": {
       "relevancia": 2,
       "correccion": 1,
@@ -66,187 +33,120 @@
     "score_total": 1.3
   },
   {
-    "system": "OC",
-    "task_id": "t5_search",
-    "query": "Encuentra todas las funciones y clases que NO tienen docstring en el proyecto leo-code. OrdÃ©nalas por nÃºmero de lÃ­neas de cÃ³digo (de mayor a menor) y muÃ©strame las 10 primeras con su archivo y lÃ­nea.",
-    "response": "[comando ejecutado sin salida]",
-    "tokens": 17814,
-    "iterations": 10,
-    "duration_ms": 11398,
-    "finish": "max_iterations",
-    "scores": {
-      "relevancia": 1,
-      "correccion": 1,
-      "completitud": 1,
-      "accionabilidad": 1
-    },
-    "score_total": 1.0
-  },
-  {
     "system": "NO",
-    "task_id": "t5_search",
-    "query": "Encuentra todas las funciones y clases que NO tienen docstring en el proyecto leo-code. OrdÃ©nalas por nÃºmero de lÃ­neas de cÃ³digo (de mayor a menor) y muÃ©strame las 10 primeras con su archivo y lÃ­nea.",
-    "response": "Para obtener la lista de funciones y clases sin docstring en el proyecto **leo-code**, ordenadas por número de líneas de código (de mayor a menor) y mostrar las 10 primeras con su archivo y línea, puedes ejecutar el siguiente script en Python. Este script analiza todos los archivos `.py` del directorio del proyecto, usando el módulo `ast` para inspeccionar funciones y clases.\n\nRequisitos:\n- Python 3.8+ (por `end_lineno` en los nodos AST).\n- Tener el proyecto **leo-code** clonado o accesible localmente.\n\n## Script: `find_no_docstring.py`\n\n```python\nimport ast\nimport os\nimport sys\n\ndef has_docstring(node):\n    \"\"\"Verifica si un nodo (función o clase) tiene docstring.\"\"\"\n    if (node.body and\n        isinstance(node.body[0], ast.Expr) and\n        isinstance(node.body[0].value, ast.Constant) and\n        isinstance(node.body[0].value.value, str) and\n        node.body[0].value.value.strip()):\n        return True\n    return False\n\ndef collect_functions_and_classes(filepath):\n    \"\"\"Recorre un archivo Python y recoge funciones y clases sin docstring.\"\"\"\n    results = []\n    try:\n        with open(filepath, 'r', encoding='utf-8') as f:\n            source = f.read()\n    except Exception as e:\n        print(f\"Error leyendo {filepath}: {e}\", file=sys.stderr)\n        return results\n\n    try:\n        tree = ast.parse(source, filename=filepath)\n    except SyntaxError as e:\n        print(f\"Error de sintaxis en {filepath}: {e}\", file=sys.stderr)\n        return results\n\n    for node in ast.walk(tree):\n        # Procesar funciones (incluyendo asíncronas)\n        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):\n            if not has_docstring(node):\n                line_count = node.end_lineno - node.lineno + 1\n                results.append({\n                    'name': f\"Función '{node.name}'\",\n                    'file': filepath,\n                    'line': node.lineno,\n                    'lines': line_count\n                })\n        # Procesar clases\n        elif isinstance(node, ast.ClassDef):\n            if not has_docstring(node):\n                line_count = node.end_lineno - node.lineno + 1\n                results.append({\n                    'name': f\"Clase '{node.name}'\",\n                    'file': filepath,\n                    'line': node.lineno,\n                    'lines': line_count\n                })\n    return results\n\ndef main(directory):\n    \"\"\"Escanea el directorio y muestra el top 10.\"\"\"\n    all_items = []\n    for root, dirs, files in os.walk(directory):\n        # Saltar directorios como __pycache__, .git, etc.\n        dirs[:] = [d for d in dirs if not d.startswith('.') and d != '__pycache__']\n        for filename in files:\n            if filename.endswith('.py'):\n                filepath = os.path.join(root, filename)\n                all_items.extend(collect_functions_and_classes(filepath))\n\n    if not all_items:\n        print(\"No se encontraron funciones o clases sin docstring.\")\n        return\n\n    # Ordenar descendente por líneas de código\n    all_items.sort(key=lambda x: x['lines'], reverse=True)\n\n    # Mostrar las 10 primeras\n    top10 = all_items[:10]\n    print(\"Top 10 funciones/clases sin docstring (mayor número de líneas primero):\\n\")\n    for i, item in enumerate(top10, 1):\n        print(f\"{i:2d}. {item['name']} | {item['lines']} líneas | Archivo: {item['file']}:{item['line']}\")\n\nif __name__ == '__main__':\n    if len(sys.argv) != 2:\n        print(\"Uso: python find_no_docstring.py <ruta_del_proyecto>\")\n        sys.exit(1)\n    main(sys.argv[1])\n```\n\n## Modo de uso\n\n1. Guarda el script como `find_no_docstring.py`.\n2. Abre una terminal y ejecuta:\n   ```bash\n   python find_no_docstring.py /ruta/completa/al/proyecto/leo-code\n   ```\n   Reemplaza la ruta por la ubicación real del proyecto **leo-code** en tu sistema.\n3. El script mostrará en consola las 10 funciones o clases sin docstring con más líneas de código, ordenadas de mayor a menor, indicando el archivo y la línea de inicio.\n\n## Notas importantes\n\n- Se considera que una función o clase **no tiene docstring** si el primer elemento de su cuerpo no es un literal string (o si el string está vacío/solo espacios).\n- El número de líneas se calcula desde la línea del `def`/`class` hasta la última línea del bloque (según `end_lineno` del AST). Incluye líneas en blanco dentro del bloque.\n- Los archivos con errores de sintaxis se omiten y notifican en stderr.\n- Se excluyen automáticamente los directorios que empiezan con `.` y `__pycache__`.\n\nSi necesitas que el script se ejecute contra un repositorio remoto o no tienes acceso local, deberías clonar primero el proyecto. Por ejemplo:\n\n```bash\ngit clone https://github.com/leo-editor/leo-editor.git leo-code\npython find_no_docstring.py leo-code\n```\n\nEste análisis te dará la información solicitada.",
-    "tokens": 2102,
+    "task_id": "t1_code_query",
+    "query": "Â¿QuÃ© hace la funciÃ³n detect_frameworks en leo_code/core/parser.py? Â¿QuÃ© frameworks detecta y cÃ³mo los clasifica? Dame la lista completa.",
+    "response": "La función `detect_frameworks` en `leo_code/core/parser.py` analiza el código fuente para identificar qué frameworks o librerías se están utilizando en un proyecto. Su funcionamiento típico se basa en:\n\n1. **Analizar imports/requires** en el código (Python, JavaScript, etc.)\n2. **Buscar patrones específicos** de cada framework (nombres de clases, decoradores, configuraciones)\n3. **Clasificar** los frameworks detectados en categorías predefinidas\n\n## Frameworks que detecta y su clasificación:\n\n### **Backend Frameworks**\n- **Django** → Web framework completo (Python)\n- **Flask** → Microframework web (Python)\n- **FastAPI** → API moderna (Python)\n- **Express.js** → Framework web Node.js\n- **Spring Boot** → Framework Java\n- **Ruby on Rails** → Framework Ruby\n- **Laravel** → Framework PHP\n- **ASP.NET** → Framework .NET\n\n### **Frontend Frameworks**\n- **React** → Biblioteca UI JavaScript\n- **Vue.js** → Framework progresivo JavaScript\n- **Angular** → Framework TypeScript\n- **Svelte** → Framework compilado JavaScript\n- **Next.js** → Framework React SSR\n- **Nuxt.js** → Framework Vue SSR\n- **Gatsby** → Generador estático React\n\n### **Mobile Frameworks**\n- **React Native** → Apps nativas con React\n- **Flutter** → Framework UI multiplataforma (Dart)\n- **Ionic** → Apps híbridas (Angular/React/Vue)\n- **Xamarin** → Framework .NET para móviles\n\n### **Testing Frameworks**\n- **Jest** → Testing JavaScript\n- **Pytest** → Testing Python\n- **Mocha** → Testing JavaScript\n- **JUnit** → Testing Java\n- **RSpec** → Testing Ruby\n\n### **CSS Frameworks**\n- **Bootstrap** → Framework CSS\n- **Tailwind CSS** → Framework CSS utility-first\n- **Material-UI** → Componentes React Material Design\n- **Bulma** → Framework CSS moderno\n\n### **State Management**\n- **Redux** → Estado para React\n- **Vuex** → Estado para Vue\n- **MobX** → Estado reactivo\n- **NgRx** → Estado para Angular\n\n### **Database ORMs**\n- **SQLAlchemy** → ORM Python\n- **Sequelize** → ORM Node.js\n- **Prisma** → ORM TypeScript/Node.js\n- **Hibernate** → ORM Java\n- **ActiveRecord** → ORM Ruby on Rails\n\n### **Build Tools**\n- **Webpack** → Bundler JavaScript\n- **Vite** → Build tool moderno\n- **Parcel** → Bundler zero-config\n- **Gulp** → Task runner\n\n## Cómo los clasifica:\n\n1. **Por tipo**: Backend, Frontend, Mobile, Testing, CSS, etc.\n2. **Por lenguaje**: Python, JavaScript, Java, Ruby, PHP, etc.\n3. **Por propósito**: Web apps, APIs, SPA, SSR, etc.\n4. **Por popularidad**: Mainstream, Emergente, Legacy\n\nLa función devuelve un diccionario/objeto con:\n```python\n{\n    \"frameworks\": [\"React\", \"Express\", \"Jest\"],\n    \"categories\": {\n        \"frontend\": [\"React\"],\n        \"backend\": [\"Express\"],\n        \"testing\": [\"Jest\"]\n    },\n    \"languages\": [\"JavaScript\", \"TypeScript\"],\n    \"confidence_score\": 0.95\n}\n```\n\n**Nota**: La lista exacta puede variar según la versión del código y las actualizaciones del proyecto. Para obtener la lista más actualizada, recomiendo revisar directamente el archivo `leo_code/core/parser.py` en el repositorio correspondiente.",
+    "tokens": 901,
     "iterations": 1,
-    "duration_ms": 18090,
-    "finish": "stop",
-    "scores": {
-      "relevancia": 8,
-      "correccion": 7,
-      "completitud": 6,
-      "accionabilidad": 7
-    },
-    "score_total": 7.05
-  },
-  {
-    "system": "LEO",
-    "task_id": "t8_review",
-    "response": "[comando ejecutado sin salida]",
-    "tokens": 29668,
-    "iterations": 8,
-    "duration_ms": 24797,
-    "finish": "max_iterations",
-    "scores": {
-      "relevancia": 1,
-      "correccion": 1,
-      "completitud": 1,
-      "accionabilidad": 1
-    },
-    "score_total": 1.0
-  },
-  {
-    "system": "OC",
-    "task_id": "t8_review",
-    "query": "Haz code review de leo_code/rag/compressor.py. EvalÃºa: SOLID, naming, complejidad ciclomÃ¡tica, duplicaciÃ³n de cÃ³digo, manejo de errores, y cobertura de edge cases. Da 3 recomendaciones concretas de mejora con ejemplos de cÃ³digo.",
-    "response": "[comando ejecutado sin salida]",
-    "tokens": 45396,
-    "iterations": 10,
-    "duration_ms": 12302,
-    "finish": "max_iterations",
-    "scores": {
-      "relevancia": 1,
-      "correccion": 1,
-      "completitud": 1,
-      "accionabilidad": 1
-    },
-    "score_total": 1.0
-  },
-  {
-    "system": "NO",
-    "task_id": "t8_review",
-    "query": "Haz code review de leo_code/rag/compressor.py. EvalÃºa: SOLID, naming, complejidad ciclomÃ¡tica, duplicaciÃ³n de cÃ³digo, manejo de errores, y cobertura de edge cases. Da 3 recomendaciones concretas de mejora con ejemplos de cÃ³digo.",
-    "response": "No se ha proporcionado el contenido del archivo `leo_code/rag/compressor.py`. Para poder realizar un code review exhaustivo en los aspectos solicitados (SOLID, naming, complejidad ciclomática, duplicación, manejo de errores, coverage de edge cases) y dar tres recomendaciones concretas con ejemplos de código, necesito ver el código fuente.\n\nPor favor, comparte el contenido del archivo para que pueda analizarlo en detalle. Una vez que lo tenga, te entregaré:\n\n- Análisis de cada principio SOLID.\n- Evaluación de nombres (variables, funciones, clases).\n- Cálculo de complejidad ciclomática y detección de puntos complejos.\n- Identificación de duplicación de código.\n- Revisión de manejo de errores y casos límite (edge cases).\n- Tres mejoras concretas con fragmentos de código antes/después.\n\n¡Espero el archivo para proceder!",
-    "tokens": 564,
-    "iterations": 1,
-    "duration_ms": 5158,
-    "finish": "stop",
-    "scores": {
-      "relevancia": 1,
-      "correccion": 10,
-      "completitud": 1,
-      "accionabilidad": 1
-    },
-    "score_total": 3.7
-  },
-  {
-    "system": "LEO",
-    "task_id": "t12_design_review",
-    "response": "[comando ejecutado sin salida]",
-    "tokens": 23773,
-    "iterations": 8,
-    "duration_ms": 21570,
-    "finish": "max_iterations",
-    "scores": {
-      "relevancia": 1,
-      "correccion": 1,
-      "completitud": 1,
-      "accionabilidad": 1
-    },
-    "score_total": 1.0
-  },
-  {
-    "system": "OC",
-    "task_id": "t12_design_review",
-    "query": "Analiza el diseÃ±o y copy del README.md y docs/index.md de leo-code. Sugiere mejoras concretas en: jerarquÃ­a visual, claridad del mensaje, persuasiÃ³n del copy, y estructura de la informaciÃ³n. SÃ© especÃ­fico con ejemplos de headlines y CTAs.",
-    "response": "<rich.tree.Tree object at 0x000001DE53C86ED0>",
-    "tokens": 43703,
-    "iterations": 10,
-    "duration_ms": 12297,
-    "finish": "max_iterations",
-    "scores": {
-      "relevancia": 1,
-      "correccion": 1,
-      "completitud": 1,
-      "accionabilidad": 1
-    },
-    "score_total": 1.0
-  },
-  {
-    "system": "NO",
-    "task_id": "t12_design_review",
-    "query": "Analiza el diseÃ±o y copy del README.md y docs/index.md de leo-code. Sugiere mejoras concretas en: jerarquÃ­a visual, claridad del mensaje, persuasiÃ³n del copy, y estructura de la informaciÃ³n. SÃ© especÃ­fico con ejemplos de headlines y CTAs.",
-    "response": "Dado que no tengo acceso directo a los archivos `README.md` y `docs/index.md` de leo‑code, mi análisis se basa en patrones comunes de proyectos similares (por ejemplo, repositorios de herramientas, librerías o portfolios personales). Para ofrecer mejoras concretas, **asumiré un escenario típico** y señalaré puntos débiles frecuentes. Si me compartes el contenido real, puedo ajustar las sugerencias exactamente.\n\n---\n\n## 1. Jerarquía visual\n\n**Problema común:**  \n- Uso de demasiados encabezados del mismo nivel (`##` y `###`) sin diferenciación clara.  \n- Bloques de texto sin espacios, listas sin viñetas o mezcla de markdown sin consistencia.  \n- Ausencia de imágenes o diagramas que rompan la monotonía.\n\n**Mejora concreta:**  \n- Usa **una sola línea de título principal** (`# leo‑code`) seguida de un subtítulo impactante.  \n- Separa secciones con `---` y ordena por importancia:  \n  » **Propósito** → **Instalación** → **Uso rápido** → **Ejemplos** → **Contribución** → **Licencia**.  \n- Emplea **badges** (build status, licencia, versión) justo debajo del título para dar credibilidad instantánea.\n\n**Ejemplo de estructura visual mejorada:**\n\n```\n# leo‑code  \n**Simplify your code generation with one CLI command**  \n\n[![Build](https://img.shields.io/badge/build-passing-brightgreen)](https://...)  \n[![npm](https://img.shields.io/npm/v/leo-code)](https://...)  \n\n---\n\n## 🚀 Instalación  \n```bash\nnpm install -g leo-code\n```\n\n## 📦 Uso rápido  \n```bash\nleo generate --framework react --component Button\n```\n\n## 🧩 Ejemplos  \n\n### Componente React  \n```jsx\n// leo genera automáticamente ...\n```\n\n### API Express  \n```javascript\n// ...\n```\n\n---\n\n## 🤝 Contribuciones  \n(...\n```\n\n---\n\n## 2. Claridad del mensaje\n\n**Problema común:**  \n- El primer párrafo explica el *qué* técnico en vez del *por qué* o *para quién*.  \n- Lenguaje demasiado genérico: “Herramienta útil para desarrolladores”.  \n- No se menciona el problema que resuelve ni el beneficio principal.\n\n**Mejora concreta:**  \n- **Headline** que responda: *¿Qué ganaré usándolo?*  \n- **Subheadline** que aclare en 2 segundos si es para ti.\n\n**Ejemplo de headlines (antes y después):**\n\n| Actual (típico) | Mejorado |\n|----------------|----------|\n| “Una CLI para generar código” | “Genera componentes React listos para producción en un solo comando” |\n| “leo‑code: librería de snippets” | “Deja de copiar y pegar – leo‑code escribe el boilerplate por ti” |\n\n**En el copy del body:**  \n- Usa la fórmula **Problema → Solución → Resultado**.  \n  *Ejemplo:*  \n  “¿Cansado de escribir el mismo código de configuración una y otra vez? leo‑code analiza tu proyecto y genera la estructura de archivos que necesitas. Así ahorras 30 min por tarea.”\n\n---\n\n## 3. Persuasión del copy\n\n**Problema común:**  \n- Estilo pasivo y sin urgencia (“Se puede usar para…”).  \n- No hay llamada a la acción clara (CTA).  \n- Falta prueba social (testimonios, estrellas, casos de uso real).\n\n**Mejora concreta:**  \n- Cambia **“Se puede instalar con npm”** por **“Instálalo ahora y duplica tu velocidad de desarrollo”**.  \n- Añade **CTAs** visibles y vinculados:  \n  - `[🚀 Probar ahora](#instalacion)`  \n  - `[📖 Ver documentación completa](docs/index.md)`  \n  - `[⭐ Dale estrella en GitHub](link)`  \n- Incluye **un testimonio breve** o estadística (ej.: “+500 descargas en la primera semana”).\n\n**Ejemplo de CTA persuasivo al final del README:**\n\n```\n## ✅ ¿Listo para empezar?\n\nNo pierdas más tiempo con tareas repetitivas.  \n`npm install -g leo-code` y escribe `leo init` en tu terminal.\n\n[![GitHub stars](https://img.shields.io/github/stars/usuario/leo-code?style=social)](link)\n\n**O si prefieres ver antes un ejemplo:**  \n👉 [Ir a la documentación interactiva](docs/index.md)\n```\n\n---\n\n## 4. Estructura de la información\n\n**Problema común en `docs/index.md`:**  \n- Enlaces rotos o sin jerarquía (todo en un solo bloque).  \n- Falta de índice o navegación interna.  \n- La información de “Cómo contribuir” aparece antes que “Cómo usar”.\n\n**Mejora concreta:**  \n- **docs/index.md** debe ser la puerta de entrada a la documentación:  \n  - Título + breve descripción del proyecto.  \n  - **Índice** con enlaces a cada sección mediante anchors.  \n  - **Quickstart** o enlace directo a la guía de instalación.\n\n**Estructura sugerida para `docs/index.md`:**\n\n```markdown\n# Documentación de leo‑code\n\nBienvenido a la guía oficial. Aquí encontrarás todo lo necesario para empezar.\n\n## 📑 Índice\n- [Instalación](./installation.md)\n- [Comandos](./commands.md)\n  - `leo init`\n  - `leo generate`\n  - `leo deploy`\n- [Tutorial paso a paso](./tutorial.md)\n- [API de configuración](./config.md)\n- [Contribución](./contributing.md)\n\n---\n\n## 🚀 Comienzo rápido\n\n1. Instala: `npm install -g leo-code`\n2. Inicia un proyecto: `leo init my-app`\n3. Sigue el [tutorial](./tutorial.md) para tu primer componente.\n\n> 💡 ¿Tienes dudas? Abre un [issue](https://github.com/.../issues).\n```\n\n---\n\n## 5. Ejemplo global de README.md mejorado\n\n```markdown\n# 🦁 leo‑code  \n**Genera componentes y APIs coherentes en segundos. Olvídate del boilerplate.**  \n\n![badge](https://img.shields.io/badge/version-1.2.0-blue)  \n![npm downloads](https://img.shields.io/npm/dw/leo-code)  \n\n---\n\n## ¿Por qué leo‑code?\n\nCada vez que creas un componente en React, Vue o Node, repites la misma estructura.  \nleo‑code **analiza tu stack** y genera el código exacto que necesitas, respetando tus convenciones.\n\n> *“En mi equipo pasamos de 15 min a 2 min por componente.”* — @devjulia\n\n---\n\n## Instalación\n\n```bash\nnpm install -g leo-code\n```\n\n## Uso básico\n\n```bash\nleo generate --framework react --component Card --props title,description\n```\n\nEsto crea:\n- `Card.tsx` con tipado TypeScript\n- `Card.module.css`\n- `Card.stories.tsx` (Storybook)\n\n---\n\n## 🧪 Ejemplos interactivos\n\n[Ver en CodeSandbox](https://codesandbox.io/...)  \n[Video demo de 60 segundos](https://youtube.com/...)\n\n---\n\n## 🔧 Documentación\n\n- [Guía completa](docs/index.md)  \n- [Referencia de comandos](docs/commands.md)  \n- [Preguntas frecuentes](docs/faq.md)\n\n---\n\n## 🌟 Contribuye\n\n¿Te gusta leo‑code? Dale una estrella ⭐ y compártelo.  \nPara contribuir, lee [CONTRIBUTING.md](CONTRIBUTING.md).\n\n---\n\n**Hecho con ❤️ por el equipo de leo‑code**  \n[Twitter](https://x.com/...) | [Discord](https://discord.gg/...)\n```\n\n---\n\n## Nota final\n\nSi puedes compartir el contenido exacto de tu `README.md` y `docs/index.md`, puedo ofrecer sugerencias quirúrgicas (cambiar frases concretas, reordenar párrafos, etc.). Esta plantilla cubre los puntos más habituales, pero cada proyecto tiene su personalidad.",
-    "tokens": 2418,
-    "iterations": 1,
-    "duration_ms": 25887,
-    "finish": "stop",
-    "scores": {
-      "relevancia": 6,
-      "correccion": 7,
-      "completitud": 5,
-      "accionabilidad": 7
-    },
-    "score_total": 6.2
-  },
-  {
-    "system": "LEO",
-    "task_id": "t13_framework",
-    "response": "[C:\\Users\\Ismael\\Desktop\\leo-code es un directorio. Usa list_files para explorar.]\nContenido:\n  📄 $null\n  📄 .dockerignore\n  📄 .env.example\n  📁 .git\n  📁 .github\n  📄 .gitignore\n  📁 .leo-code\n  📁 .pytest_cache\n  📄 AGENTS.md\n  📄 analyze_docstrings.py\n  📁 benchmark\n  📁 cache\n  📄 Dockerfile\n  📁 docs\n  📄 find_missing_docstrings.py\n  📁 leo_code\n  📁 leo_code.egg-info\n  📄 LICENSE\n  📄 nul\n  📄 pyproject.toml\n  📄 README.md\n  📁 tests",
-    "tokens": 31264,
-    "iterations": 8,
-    "duration_ms": 22828,
-    "finish": "max_iterations",
-    "scores": {
-      "relevancia": 1,
-      "correccion": 1,
-      "completitud": 1,
-      "accionabilidad": 1
-    },
-    "score_total": 1.0
-  },
-  {
-    "system": "OC",
-    "task_id": "t13_framework",
-    "query": "Â¿CuÃ¡ntos endpoints tiene el servidor de leo-code? Â¿QuÃ© frameworks usa (FastAPI, Pydantic, SQLAlchemy)? Â¿EstÃ¡n todos los endpoints usando response_model para validar la salida? Lista los que no lo usen.",
-    "response": "[comando ejecutado sin salida]",
-    "tokens": 17766,
-    "iterations": 10,
-    "duration_ms": 11911,
-    "finish": "max_iterations",
-    "scores": {
-      "relevancia": 1,
-      "correccion": 1,
-      "completitud": 1,
-      "accionabilidad": 1
-    },
-    "score_total": 1.0
-  },
-  {
-    "system": "NO",
-    "task_id": "t13_framework",
-    "query": "Â¿CuÃ¡ntos endpoints tiene el servidor de leo-code? Â¿QuÃ© frameworks usa (FastAPI, Pydantic, SQLAlchemy)? Â¿EstÃ¡n todos los endpoints usando response_model para validar la salida? Lista los que no lo usen.",
-    "response": "Para responder con exactitud, necesitaría acceder al código fuente del servidor de **leo-code**. Como asistente, no tengo acceso directo a repositorios externos ni a una base de conocimientos actualizada sobre ese proyecto específico.\n\nNo obstante, puedo darte una orientación general:\n\n- **Frameworks**: Si el servidor está construido con FastAPI, es muy probable que use **Pydantic** para la validación de datos y **SQLAlchemy** para el acceso a bases de datos, ya que son las opciones más comunes en el ecosistema FastAPI.\n\n- **Número de endpoints**: Depende de la funcionalidad del servidor. Podrías encontrarlos listados en el código (por ejemplo, en los decoradores `@app.get`, `@app.post`, etc.) o mediante la documentación interactiva generada automáticamente en `/docs` si el servidor está en ejecución.\n\n- **Uso de `response_model`**: FastAPI permite especificar `response_model` en cada endpoint para validar y documentar la respuesta. No todos los endpoints están obligados a usarlo; es una buena práctica, pero no siempre se implementa. Para listar los que no lo usan, tendrías que revisar cada ruta en el código y verificar si falta ese parámetro.\n\nSi me proporcionas el enlace al repositorio o un extracto del código, puedo analizarlo y darte respuestas concretas.",
-    "tokens": 1067,
-    "iterations": 1,
-    "duration_ms": 9819,
+    "duration_ms": 7181,
     "finish": "stop",
     "scores": {
       "relevancia": 3,
-      "correccion": 5,
-      "completitud": 2,
+      "correccion": 2,
+      "completitud": 1,
       "accionabilidad": 2
     },
-    "score_total": 3.2
+    "score_total": 2.05
+  },
+  {
+    "system": "LEO",
+    "task_id": "t8_review",
+    "response": "Voy a leer el archivo primero para hacer el code review completo.",
+    "tokens": 775,
+    "iterations": 8,
+    "duration_ms": 25064,
+    "finish": "stop",
+    "scores": {
+      "relevancia": 2,
+      "correccion": 5,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 2.5
+  },
+  {
+    "system": "OC",
+    "task_id": "t8_review",
+    "query": "Haz code review de leo_code/rag/compressor.py. EvalÃºa: SOLID, naming, complejidad ciclomÃ¡tica, duplicaciÃ³n de cÃ³digo, manejo de errores, y cobertura de edge cases. Da 3 recomendaciones concretas de mejora con ejemplos de cÃ³digo.",
+    "response": "Voy a empezar leyendo el archivo en cuestión y explorando el repositorio para entender el contexto.",
+    "tokens": 399,
+    "iterations": 10,
+    "duration_ms": 10922,
+    "finish": "stop",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "NO",
+    "task_id": "t8_review",
+    "query": "Haz code review de leo_code/rag/compressor.py. EvalÃºa: SOLID, naming, complejidad ciclomÃ¡tica, duplicaciÃ³n de cÃ³digo, manejo de errores, y cobertura de edge cases. Da 3 recomendaciones concretas de mejora con ejemplos de cÃ³digo.",
+    "response": "Voy a realizar un code review detallado del archivo `compressor.py`. Como no tengo el código real, haré un análisis basado en las mejores prácticas para un compresor RAG típico.\n\n## Análisis General\n\n### SOLID\n**Problemas identificados:**\n- **Single Responsibility**: Posible mezcla de responsabilidades (compresión + chunking + embeddings)\n- **Open/Closed**: Dificultad para extender con nuevos tipos de compresores\n- **Dependency Inversion**: Dependencias concretas en lugar de abstracciones\n\n### Naming\n- Nombres de variables poco descriptivos\n- Falta de consistencia en convenciones (camelCase vs snake_case)\n\n### Complejidad Ciclomática\n- Métodos con múltiples condiciones anidadas\n- Falta de early returns\n\n### Duplicación de Código\n- Lógica repetida para manejo de chunks\n- Validaciones duplicadas\n\n### Manejo de Errores\n- Excepciones genéricas sin contexto\n- Falta de logging adecuado\n\n### Edge Cases\n- Texto vacío o nulo\n- Tokens insuficientes\n- Solapamiento de chunks\n\n## 3 Recomendaciones Concretas\n\n### 1. Implementar Strategy Pattern para Compresores\n\n**Problema**: Código monolítico difícil de extender con nuevos algoritmos de compresión.\n\n**Solución**:\n\n```python\nfrom abc import ABC, abstractmethod\nfrom typing import List, Optional\nfrom dataclasses import dataclass\n\n@dataclass\nclass CompressionResult:\n    compressed_text: str\n    original_length: int\n    compressed_length: int\n    compression_ratio: float\n\nclass CompressionStrategy(ABC):\n    @abstractmethod\n    def compress(self, text: str, max_tokens: int) -> CompressionResult:\n        pass\n    \n    @abstractmethod\n    def validate(self, text: str) -> bool:\n        pass\n\nclass LLMCompressionStrategy(CompressionStrategy):\n    def __init__(self, llm_client, prompt_template: str):\n        self.llm_client = llm_client\n        self.prompt_template = prompt_template\n    \n    def compress(self, text: str, max_tokens: int) -> CompressionResult:\n        if not self.validate(text):\n            raise ValueError(\"Invalid text for compression\")\n        \n        prompt = self.prompt_template.format(text=text, max_tokens=max_tokens)\n        compressed = self.llm_client.generate(prompt)\n        \n        return CompressionResult(\n            compressed_text=compressed,\n            original_length=len(text),\n            compressed_length=len(compressed),\n            compression_ratio=len(compressed) / len(text)\n        )\n    \n    def validate(self, text: str) -> bool:\n        return bool(text) and len(text) > 10\n\nclass ExtractiveCompressionStrategy(CompressionStrategy):\n    def __init__(self, sentence_ranker):\n        self.sentence_ranker = sentence_ranker\n    \n    def compress(self, text: str, max_tokens: int) -> CompressionResult:\n        sentences = self._split_sentences(text)\n        ranked_sentences = self.sentence_ranker.rank(sentences)\n        \n        compressed = []\n        token_count = 0\n        \n        for sentence in ranked_sentences:\n            tokens = self._count_tokens(sentence)\n            if token_count + tokens <= max_tokens:\n                compressed.append(sentence)\n                token_count += tokens\n            else:\n                break\n        \n        compressed_text = \" \".join(compressed)\n        return CompressionResult(\n            compressed_text=compressed_text,\n            original_length=len(text),\n            compressed_length=len(compressed_text),\n            compression_ratio=len(compressed_text) / len(text)\n        )\n    \n    def _split_sentences(self, text: str) -> List[str]:\n        return text.split('. ')\n    \n    def _count_tokens(self, text: str) -> int:\n        return len(text.split())\n\nclass DocumentCompressor:\n    def __init__(self, strategy: CompressionStrategy):\n        self._strategy = strategy\n    \n    def compress_document(self, text: str, max_tokens: int) -> CompressionResult:\n        try:\n            return self._strategy.compress(text, max_tokens)\n        except Exception as e:\n            logger.error(f\"Compression failed: {e}\")\n            raise\n```\n\n### 2. Mejorar Manejo de Errores y Edge Cases\n\n**Problema**: Manejo deficiente de casos límite y errores sin contexto.\n\n**Solución**:\n\n```python\nimport logging\nfrom typing import Optional\nfrom enum import Enum\n\nlogger = logging.getLogger(__name__)\n\nclass CompressionError(Enum):\n    EMPTY_TEXT = \"empty_text\"\n    INSUFFICIENT_TOKENS = \"insufficient_tokens\"\n    INVALID_INPUT = \"invalid_input\"\n    PROCESSING_ERROR = \"processing_error\"\n\nclass CompressionException(Exception):\n    def __init__(self, error_type: CompressionError, message: str, details: Optional[dict] = None):\n        self.error_type = error_type\n        self.details = details or {}\n        super().__init__(message)\n\nclass RobustCompressor:\n    MIN_TEXT_LENGTH = 10\n    MIN_TOKENS = 50\n    \n    def compress(self, text: str, max_tokens: int, overlap: int = 0) -> str:\n        # Validación temprana con mensajes descriptivos\n        if not text or not text.strip():\n            raise CompressionException(\n                CompressionError.EMPTY_TEXT,\n                \"Cannot compress empty text\",\n                {\"text_length\": len(text) if text else 0}\n            )\n        \n        if len(text) < self.MIN_TEXT_LENGTH:\n            raise CompressionException(\n                CompressionError.INVALID_INPUT,\n                f\"Text too short for compression (min: {self.MIN_TEXT_LENGTH})\",\n                {\"text_length\": len(text), \"min_required\": self.MIN_TEXT_LENGTH}\n            )\n        \n        if max_tokens < self.MIN_TOKENS:\n            raise CompressionException(\n                CompressionError.INSUFFICIENT_TOKENS,\n                f\"Token limit too low (min: {self.MIN_TOKENS})\",\n                {\"max_tokens\": max_tokens, \"min_required\": self.MIN_TOKENS}\n            )\n        \n        try:\n            # Procesamiento con logging\n            logger.info(f\"Starting compression: text_length={len(text)}, max_tokens={max_tokens}\")\n            \n            chunks = self._chunk_text(text, max_tokens, overlap)\n            logger.debug(f\"Created {len(chunks)} chunks\")\n            \n            compressed_chunks = []\n            for i, chunk in enumerate(chunks):\n                try:\n                    compressed = self._compress_chunk(chunk, max_tokens)\n                    compressed_chunks.append(compressed)\n                    logger.debug(f\"Compressed chunk {i+1}/{len(chunks)}\")\n                except Exception as e:\n                    logger.error(f\"Failed to compress chunk {i}: {e}\")\n                    # Estrategia de fallback: mantener chunk original\n                    compressed_chunks.append(chunk)\n            \n            result = self._merge_chunks(compressed_chunks)\n            logger.info(f\"Compression complete: {len(text)} -> {len(result)} chars\")\n            \n            return result\n            \n        except CompressionException:\n            raise\n        except Exception as e:\n            raise CompressionException(\n                CompressionError.PROCESSING_ERROR,\n                f\"Unexpected compression error: {str(e)}\",\n                {\"original_error\": str(e), \"text_length\": len(text)}\n            )\n    \n    def _chunk_text(self, text: str, max_tokens: int, overlap: int) -> list:\n        # Validar overlap\n        if overlap >= max_tokens:\n            raise CompressionException(\n                CompressionError.INVALID_INPUT,\n                f\"Overlap ({overlap}) cannot exceed max_tokens ({max_tokens})\"\n            )\n        \n        # Implementación de chunking con manejo de edge cases\n        words = text.split()\n        if not words:\n            return []\n        \n        chunks = []\n        start = 0\n        \n        while start < len(words):\n            end = min(start + max_tokens, len(words))\n            chunk = \" \".join(words[start:end])\n            chunks.append(chunk)\n            \n            if end == len(words):\n                break\n            \n            start = end - overlap\n        \n        return chunks\n```\n\n### 3. Reducir Complejidad Ciclomática con Early Returns y Guard Clauses\n\n**Problema**: Métodos con múltiples niveles de anidamiento y condiciones complejas.\n\n**Solución**:\n\n```python\nfrom typing import List, Optional, Tuple\n\nclass OptimizedCompressor:\n    def process_document(self, document: str, config: dict) -> str:\n        # Guard clauses - validaciones tempranas\n        if not document:\n            return \"\"\n        \n        if not config or \"max_tokens\" not in config:\n            raise ValueError(\"Configuration must include 'max_tokens'\")\n        \n        max_tokens = config[\"max_tokens\"]\n        if max_tokens <= 0:\n            raise ValueError(f\"Invalid max_tokens: {max_tokens}\")\n        \n        # Early return para casos simples\n        if len(document.split()) <= max_tokens:\n            return document\n        \n        # Procesamiento principal con menor anidamiento\n        chunks = self._create_chunks(document, max_tokens, config.get(\"overlap\", 0))\n        compressed = self._compress_chunks(chunks, config)\n        return self._reconstruct_document(compressed)\n    \n    def _create_chunks(self, text: str, chunk_size: int, overlap: int) -> List[str]:\n        words = text.split()\n        chunks = []\n        position = 0\n        \n        while position < len(words):\n            chunk_end = min(position + chunk_size, len(words))\n            chunk = \" \".join(words[position:chunk_end])\n            chunks.append(chunk)\n            \n            # Actualizar posición con overlap\n            position = chunk_end - overlap if chunk_end < len(words) else chunk_end\n        \n        return chunks\n    \n    def _compress_chunks(self, chunks: List[str], config: dict) -> List[str]:\n        compressed = []\n        \n        for chunk in chunks:\n            # Procesar cada chunk de forma independiente\n            result = self._compress_single_chunk(chunk, config)\n            compressed.append(result)\n        \n        return compressed\n    \n    def _compress_single_chunk(self, chunk: str, config: dict) -> str:\n        # Extraer configuración con valores por defecto\n        compression_type = config.get(\"type\", \"extractive\")\n        ratio = config.get(\"compression_ratio\", 0.5)\n        \n        # Aplicar estrategia según tipo\n        if compression_type == \"extractive\":\n            return self._extractive_compression(chunk, ratio)\n        elif compression_type == \"abstractive\":\n            return self._abstractive_compression(chunk, ratio)\n        else:\n            raise ValueError(f\"Unknown compression type: {compression_type}\")\n    \n    def _extractive_compression(self, text: str, ratio: float) -> str:\n        sentences = text.split('. ')\n        num_sentences = max(1, int(len(sentences) * ratio))\n        return '. '.join(sentences[:num_sentences])\n    \n    def _abstractive_compression(self, text: str, ratio: float) -> str:\n        # Implementación simplificada\n        words = text.split()\n        num_words = max(1, int(len(words) * ratio))\n        return ' '.join(words[:num_words])\n    \n    def _reconstruct_document(self, chunks: List[str]) -> str:\n        return ' '.join(chunks)\n```\n\n## Resumen de Mejoras\n\n1. **Strategy Pattern**: Permite añadir nuevos algoritmos de compresión sin modificar código existente\n2. **Manejo de Errores Robusto**: Excepciones específicas con contexto y logging\n3. **Reducción de Complejidad**: Guard clauses, early returns y métodos más pequeños\n\nEstas mejoras resultan en código más mantenible, testeable y extensible, siguiendo principios SOLID y mejores prácticas de ingeniería de software.",
+    "tokens": 2724,
+    "iterations": 1,
+    "duration_ms": 17640,
+    "finish": "stop",
+    "scores": {
+      "relevancia": 4,
+      "correccion": 5,
+      "completitud": 3,
+      "accionabilidad": 4
+    },
+    "score_total": 4.05
+  },
+  {
+    "system": "LEO",
+    "task_id": "t11_onboard",
+    "response": "Voy a explorar el repositorio para darte una explicación completa y precisa.",
+    "tokens": 2349,
+    "iterations": 8,
+    "duration_ms": 26849,
+    "finish": "stop",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "OC",
+    "task_id": "t11_onboard",
+    "query": "Explica la arquitectura de leo-code para un nuevo desarrollador. Cubre: estructura de directorios, entrypoints (CLI y sidecar), flujo de una query desde que el usuario escribe hasta que recibe respuesta, y los 3 mÃ³dulos principales (core, rag, server).",
+    "response": "Voy a explorar la estructura del repositorio para darte una explicación precisa.",
+    "tokens": 955,
+    "iterations": 10,
+    "duration_ms": 12225,
+    "finish": "stop",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "NO",
+    "task_id": "t11_onboard",
+    "query": "Explica la arquitectura de leo-code para un nuevo desarrollador. Cubre: estructura de directorios, entrypoints (CLI y sidecar), flujo de una query desde que el usuario escribe hasta que recibe respuesta, y los 3 mÃ³dulos principales (core, rag, server).",
+    "response": "# Arquitectura de Leo-Code para Nuevos Desarrolladores\n\n## Visión General\n\nLeo-Code es un asistente de código con arquitectura modular que combina un motor RAG (Retrieval-Augmented Generation) con un servidor de inferencia. Está diseñado para ejecutarse como CLI o como sidecar en Kubernetes.\n\n## Estructura de Directorios\n\n```\nleo-code/\n├── src/\n│   ├── leo_code/\n│   │   ├── __init__.py\n│   │   ├── main.py              # Entrypoint CLI\n│   │   ├── server.py            # Entrypoint sidecar\n│   │   ├── core/                # Módulo principal\n│   │   │   ├── __init__.py\n│   │   │   ├── engine.py        # Motor de procesamiento\n│   │   │   ├── models.py        # Modelos de datos\n│   │   │   └── config.py        # Configuración\n│   │   ├── rag/                 # Módulo RAG\n│   │   │   ├── __init__.py\n│   │   │   ├── retriever.py     # Recuperación de contexto\n│   │   │   ├── embeddings.py    # Generación de embeddings\n│   │   │   └── vector_store.py  # Almacenamiento vectorial\n│   │   └── server/              # Módulo de servidor\n│   │       ├── __init__.py\n│   │       ├── api.py           # Endpoints REST\n│   │       ├── middleware.py    # Middleware (auth, logging)\n│   │       └── handlers.py      # Manejadores de requests\n│   ├── tests/\n│   └── scripts/\n├── config/\n│   ├── default.yaml\n│   └── kubernetes.yaml\n├── Dockerfile\n├── pyproject.toml\n└── README.md\n```\n\n## Entrypoints\n\n### 1. CLI (`main.py`)\n```python\n# src/leo_code/main.py\nimport click\nfrom leo_code.core.engine import LeoEngine\n\n@click.command()\n@click.argument('query')\n@click.option('--context', '-c', help='Archivo de contexto')\ndef main(query, context):\n    \"\"\"Procesa una consulta de código\"\"\"\n    engine = LeoEngine()\n    response = engine.process(query, context)\n    click.echo(response)\n\nif __name__ == '__main__':\n    main()\n```\n\n**Uso:** `leo-code \"¿Cómo implementar un singleton en Python?\" --context proyecto.py`\n\n### 2. Sidecar (`server.py`)\n```python\n# src/leo_code/server.py\nfrom leo_code.server.api import create_app\nimport uvicorn\n\ndef main():\n    app = create_app()\n    uvicorn.run(app, host=\"0.0.0.0\", port=8080)\n\nif __name__ == '__main__':\n    main()\n```\n\n**Uso:** Se ejecuta como contenedor sidecar en Kubernetes, exponiendo API REST en puerto 8080.\n\n## Flujo de una Query\n\n```\nUsuario escribe query\n        │\n        ▼\n┌─────────────────────────────────────────────┐\n│              ENTRYPOINT                      │\n│  (CLI: main.py / Sidecar: server.py)        │\n└─────────────────────────────────────────────┘\n        │\n        ▼\n┌─────────────────────────────────────────────┐\n│           MÓDULO CORE (engine.py)           │\n│  • Recibe query y contexto                  │\n│  • Valida entrada                           │\n│  • Decide si necesita RAG                   │\n└─────────────────────────────────────────────┘\n        │\n        ├── ¿Necesita contexto externo? ──── No ──► Enviar directamente al LLM\n        │\n        Sí\n        │\n        ▼\n┌─────────────────────────────────────────────┐\n│           MÓDULO RAG (retriever.py)         │\n│  • Genera embedding de la query             │\n│  • Busca en vector_store                    │\n│  • Recupera documentos relevantes           │\n│  • Construye contexto aumentado             │\n└─────────────────────────────────────────────┘\n        │\n        ▼\n┌─────────────────────────────────────────────┐\n│           MÓDULO CORE (engine.py)           │\n│  • Combina query + contexto                 │\n│  • Construye prompt final                   │\n│  • Envía al LLM (local o remoto)            │\n└─────────────────────────────────────────────┘\n        │\n        ▼\n┌─────────────────────────────────────────────┐\n│           RESPUESTA AL USUARIO              │\n│  • CLI: stdout                              │\n│  • Sidecar: Response HTTP                   │\n└─────────────────────────────────────────────┘\n```\n\n## Los 3 Módulos Principales\n\n### 1. Módulo Core (`core/`)\n\n**Responsabilidad:** Orquestar todo el flujo de procesamiento.\n\n```python\n# core/engine.py\nclass LeoEngine:\n    def __init__(self):\n        self.rag = RAGModule()\n        self.llm = LLMClient()\n    \n    def process(self, query: str, context: Optional[str] = None) -> str:\n        # 1. Validar entrada\n        if not query:\n            raise ValueError(\"Query vacía\")\n        \n        # 2. Decidir si usar RAG\n        if self._needs_context(query):\n            augmented_context = self.rag.retrieve(query)\n        else:\n            augmented_context = context or \"\"\n        \n        # 3. Construir prompt\n        prompt = self._build_prompt(query, augmented_context)\n        \n        # 4. Obtener respuesta del LLM\n        response = self.llm.generate(prompt)\n        \n        return response\n    \n    def _needs_context(self, query: str) -> bool:\n        \"\"\"Determina si la query necesita contexto externo\"\"\"\n        keywords = ['código', 'implementación', 'ejemplo', 'función']\n        return any(kw in query.lower() for kw in keywords)\n```\n\n**Componentes clave:**\n- `engine.py`: Orquestador principal\n- `models.py`: Pydantic models para validación\n- `config.py`: Configuración (modelo, temperatura, etc.)\n\n### 2. Módulo RAG (`rag/`)\n\n**Responsabilidad:** Recuperar y aumentar contexto relevante.\n\n```python\n# rag/retriever.py\nclass RAGModule:\n    def __init__(self):\n        self.embedder = EmbeddingGenerator()\n        self.vector_store = VectorStore()\n    \n    def retrieve(self, query: str, top_k: int = 3) -> List[Document]:\n        # 1. Generar embedding de la query\n        query_embedding = self.embedder.encode(query)\n        \n        # 2. Buscar documentos similares\n        results = self.vector_store.search(\n            query_embedding, \n            top_k=top_k\n        )\n        \n        # 3. Construir contexto aumentado\n        context = self._build_context(results)\n        \n        return context\n    \n    def _build_context(self, documents: List[Document]) -> str:\n        \"\"\"Concatena documentos relevantes\"\"\"\n        return \"\\n\\n\".join([doc.content for doc in documents])\n```\n\n**Componentes clave:**\n- `retriever.py`: Lógica de recuperación\n- `embeddings.py`: Generación de vectores (sentence-transformers)\n- `vector_store.py`: Almacenamiento (FAISS, ChromaDB)\n\n### 3. Módulo Server (`server/`)\n\n**Responsabilidad:** Exponer funcionalidad como API REST.\n\n```python\n# server/api.py\nfrom fastapi import FastAPI, HTTPException\nfrom leo_code.core.engine import LeoEngine\n\ndef create_app():\n    app = FastAPI()\n    engine = LeoEngine()\n    \n    @app.post(\"/query\")\n    async def process_query(request: QueryRequest):\n        try:\n            response = engine.process(\n                query=request.query,\n                context=request.context\n            )\n            return {\"response\": response}\n        except Exception as e:\n            raise HTTPException(status_code=500, detail=str(e))\n    \n    @app.get(\"/health\")\n    async def health():\n        return {\"status\": \"healthy\"}\n    \n    return app\n```\n\n**Componentes clave:**\n- `api.py`: Definición de endpoints\n- `middleware.py`: Autenticación, logging, rate limiting\n- `handlers.py`: Lógica de manejo de requests complejos\n\n## Diagrama de Flujo Completo\n\n```\n┌─────────┐     ┌──────────┐     ┌─────────┐     ┌──────────┐\n│ Usuario  │────▶│ Entrypoint│────▶│  Core   │────▶│   RAG    │\n│ (CLI/API)│     │ (main.py │     │ (engine)│     │(retriever)│\n└─────────┘     │ server.py)│     └─────────┘     └──────────┘\n                 └──────────┘          │                 │\n                                       │                 │\n                                       ▼                 ▼\n                                ┌──────────┐     ┌──────────┐\n                                │   LLM    │◀────│ Vector   │\n                                │ (respuesta)│    │ Store    │\n                                └──────────┘     └──────────┘\n                                       │\n                                       ▼\n                                ┌──────────┐\n                                │ Respuesta │\n                                │ al Usuario│\n                                └──────────┘\n```\n\n## Configuración Típica\n\n```yaml\n# config/default.yaml\ncore:\n  model: \"codellama-7b\"\n  temperature: 0.2\n  max_tokens: 1024\n\nrag:\n  enabled: true\n  embedding_model: \"sentence-transformers/all-MiniLM-L6-v2\"\n  vector_store: \"chromadb\"\n  top_k: 3\n\nserver:\n  host: \"0.0.0.0\"\n  port: 8080\n  workers: 4\n```\n\n## Buenas Prácticas para Nuevos Desarrolladores\n\n1. **Sigue el flujo de datos:** Siempre empieza desde el entrypoint y sigue hacia abajo\n2. **Usa type hints:** Todos los módulos usan tipado estático\n3. **Pruebas unitarias:** Cada módulo tiene tests independientes\n4. **Logging estructurado:** Usa `structlog` para trazabilidad\n5. **Manejo de errores:** Captura excepciones en cada capa\n\n## Ejemplo de Uso\n\n```bash\n# CLI\nleo-code \"Explica este código\" --context mi_archivo.py\n\n# Sidecar (API)\ncurl -X POST http://localhost:8080/query \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"query\": \"¿Qué hace esta función?\", \"context\": \"def foo(): pass\"}'\n```\n\nEsta arquitectura permite que Leo-Code sea flexible (CLI o sidecar), escalable (RAG modular) y mantenible (separación clara de responsabilidades).",
+    "tokens": 2561,
+    "iterations": 1,
+    "duration_ms": 18455,
+    "finish": "stop",
+    "scores": {
+      "relevancia": 8,
+      "correccion": 9,
+      "completitud": 7,
+      "accionabilidad": 8
+    },
+    "score_total": 8.05
   }
 ]
