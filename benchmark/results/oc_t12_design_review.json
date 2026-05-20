@@ -1,0 +1,17 @@
+{
+  "system": "OC",
+  "task_id": "t12_design_review",
+  "query": "Analiza el diseÃ±o y copy del README.md y docs/index.md de leo-code. Sugiere mejoras concretas en: jerarquÃ­a visual, claridad del mensaje, persuasiÃ³n del copy, y estructura de la informaciÃ³n. SÃ© especÃ­fico con ejemplos de headlines y CTAs.",
+  "response": "<rich.tree.Tree object at 0x000001DE53C86ED0>",
+  "tokens": 43703,
+  "iterations": 10,
+  "duration_ms": 12297,
+  "finish": "max_iterations",
+  "scores": {
+    "relevancia": 1,
+    "correccion": 1,
+    "completitud": 1,
+    "accionabilidad": 1
+  },
+  "score_total": 1.0
+}

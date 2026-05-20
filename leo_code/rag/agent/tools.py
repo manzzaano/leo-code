@@ -125,6 +125,10 @@ class ToolRegistry:
     def read_file(self, args: dict, repo_path: str) -> str:
         path = Path(repo_path) / args.get("file_path", "")
         try:
+            if path.is_dir():
+                items = sorted(path.iterdir())[:50]
+                listing = "\n".join(f"  {'📁' if p.is_dir() else '📄'} {p.name}" for p in items)
+                return f"[{path} es un directorio. Usa list_files para explorar.]\nContenido:\n{listing}"
             return path.read_text(encoding="utf-8")
         except Exception as e:
             return f"[Error leyendo {path}: {e}]"

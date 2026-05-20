@@ -45,41 +45,39 @@ def compress(
         fw_caps = [c for c in all_capsules if c.properties.get("framework") == framework]
         top_capsules = _interleave_framework(top_capsules, fw_caps)
 
+    result = ""
+
     if task_type == "code_gen":
-        # code_gen queries need actual code content (signatures, bodies) not just directory structure
-        return _compress_query(top_capsules, budget_tokens)
+        result = _compress_query(top_capsules, budget_tokens)
+    elif task_type == "code_edit":
+        result = _compress_code_edit(top_capsules)
+    elif task_type == "search":
+        result = _compress_search(top_capsules, all_capsules, budget_tokens, dir_filter)
+    elif task_type == "refactor":
+        result = _compress_refactor(top_capsules, all_capsules)
+    elif task_type == "debug":
+        result = _compress_debug(top_capsules, all_capsules)
+    elif task_type == "test_gen":
+        result = _compress_test_gen(top_capsules, all_capsules)
+    elif task_type == "review":
+        result = _compress_review(top_capsules, all_capsules)
+    elif task_type == "optimize":
+        result = _compress_optimize(top_capsules, all_capsules)
+    elif task_type == "audit":
+        result = _compress_audit(top_capsules, all_capsules)
+    elif task_type == "onboard":
+        result = _compress_onboard(all_capsules)
+    elif task_type == "design_review":
+        result = _compress_design_review(top_capsules, all_capsules)
+    else:
+        result = _compress_query(top_capsules, budget_tokens)
 
-    if task_type == "code_edit":
-        return _compress_code_edit(top_capsules)
+    # Inyectar paths explícitos al inicio del contexto
+    files = list(dict.fromkeys(c.file_path for c in top_capsules[:8] if c.file_path))
+    if files and result:
+        result = f"ARCHIVOS: {', '.join(files)}\n\n{result}"
 
-    if task_type == "search":
-        return _compress_search(top_capsules, all_capsules, budget_tokens, dir_filter)
-
-    if task_type == "refactor":
-        return _compress_refactor(top_capsules, all_capsules)
-
-    if task_type == "debug":
-        return _compress_debug(top_capsules, all_capsules)
-
-    if task_type == "test_gen":
-        return _compress_test_gen(top_capsules, all_capsules)
-
-    if task_type == "review":
-        return _compress_review(top_capsules, all_capsules)
-
-    if task_type == "optimize":
-        return _compress_optimize(top_capsules, all_capsules)
-
-    if task_type == "audit":
-        return _compress_audit(top_capsules, all_capsules)
-
-    if task_type == "onboard":
-        return _compress_onboard(all_capsules)
-
-    if task_type == "design_review":
-        return _compress_design_review(top_capsules, all_capsules)
-
-    return _compress_query(top_capsules, budget_tokens)
+    return result
 
 
 def _compress_code_gen(all_capsules: list[Capsule]) -> str:
