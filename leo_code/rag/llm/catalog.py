@@ -76,7 +76,7 @@ CATALOG: dict[str, ModelInfo] = {
     "deepseek/deepseek-v4-flash": ModelInfo(
         id="deepseek/deepseek-v4-flash", provider="openai", name="DeepSeek V4 Flash",
         cost_input=0.14, cost_output=0.28, cost_cache_read=0.014, cost_cache_write=0.014,
-        context_window=1048576, max_output=384000,
+        context_window=1048576, max_output=384000, supports_reasoning=True,
         tier="budget",
     ),
     "deepseek/deepseek-chat": ModelInfo(

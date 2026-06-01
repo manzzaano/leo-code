@@ -32,7 +32,7 @@ TAREA: {task['query']}
 CRITERIOS DE EVALUACIÓN: {task['judge_criteria']}
 
 RESPUESTA DEL AGENTE:
-{response[:3000]}
+{response[:6000]}
 
 Evalúa la respuesta en 4 dimensiones (1-10):
 1. Relevancia: ¿La respuesta aborda EXACTAMENTE lo pedido?
@@ -44,6 +44,8 @@ Responde SOLO con JSON. No añadas texto antes ni después."""
 
     try:
         from leo_code.rag.llm import get_provider
+        import leo_code.rag.llm.openai_adapter as oa
+        # Use synchronous generate via run_in_executor
         provider = get_provider("openai",
             api_key=os.getenv("DEEPSEEK_API_KEY", os.getenv("OPENAI_API_KEY", "")),
             base_url="https://api.deepseek.com",
@@ -52,38 +54,35 @@ Responde SOLO con JSON. No añadas texto antes ni después."""
         messages = [{"role": "system", "content": JUDGE_SYSTEM},
                     {"role": "user", "content": prompt}]
 
-        async def _eval():
-            resp = await provider.generate(messages, tools=[], temperature=0.1)
-            text = resp.text or "{}"
-            # Clean JSON response
-            text = text.strip().strip("`").strip("json").strip()
-            try:
-                return json.loads(text)
-            except json.JSONDecodeError:
-                nums = {}
-                import re
-                for dim in ["relevancia", "correccion", "completitud", "accionabilidad"]:
-                    m = re.search(rf'"{dim}"\s*:\s*(\d+)', text)
-                    if m:
-                        nums[dim] = int(m.group(1))
-                return nums if len(nums) == 4 else {"relevancia": 5, "correccion": 5, "completitud": 5, "accionabilidad": 5}
-
+        # Run in a new event loop (safe for thread calls)
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                import nest_asyncio
-                try:
-                    nest_asyncio.apply()
-                except ImportError:
-                    pass
-                future = asyncio.ensure_future(_eval())
-                return loop.run_until_complete(future)
-            return asyncio.run(_eval())
+            loop = asyncio.get_running_loop()
         except RuntimeError:
-            return asyncio.run(_eval())
+            return asyncio.run(_do_judge(provider, messages))
+        # We're inside a running loop - use run_in_executor with a new loop
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor() as ex:
+            future = ex.submit(lambda: asyncio.run(_do_judge(provider, messages)))
+            return future.result(timeout=30)
 
     except Exception as e:
         return {"relevancia": 5, "correccion": 5, "completitud": 5, "accionabilidad": 5}
+
+
+async def _do_judge(provider, messages: list[dict]) -> dict:
+    resp = await provider.generate(messages, tools=[], temperature=0.1)
+    text = resp.text or "{}"
+    text = text.strip().strip("`").strip("json").strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        nums = {}
+        import re
+        for dim in ["relevancia", "correccion", "completitud", "accionabilidad"]:
+            m = re.search(rf'"{dim}"\s*:\s*(\d+)', text)
+            if m:
+                nums[dim] = int(m.group(1))
+        return nums if len(nums) == 4 else {"relevancia": 5, "correccion": 5, "completitud": 5, "accionabilidad": 5}
 
 
 def score_summary(scores: dict) -> float:

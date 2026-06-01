@@ -1,8 +1,13 @@
-# leo-code
+# Tu agente ya no necesita leer archivos enteros
 
-**KC-RAG — Knowledge Capsule Retrieval-Augmented Generation para código.**
+**El 70-85% del contexto que envías a tu LLM es ruido. KC-RAG entrega ~90% relevante.**
 
-Recuperación estructural de código por subgrafo de dependencias. En lugar de chunking por longitud + similitud coseno de embeddings (como hacen todos los agentes actuales), KC-RAG extrae cápsulas del AST, las indexa en Qdrant, y devuelve el subgrafo de dependencias relevante comprimido según el tipo de tarea.
+Cada vez que tu agente abre un archivo, paga tokens por líneas que no necesita.
+KC-RAG extrae funciones completas con sus dependencias directas del AST, las indexa en Qdrant,
+y devuelve solo el subgrafo relevante comprimido según tu tarea. Sin fragmentos de 500 tokens.
+Sin dependencias perdidas. Sin ruido semántico.
+
+[⚡ Deja de pagar por ruido — instala en 30s →](#instalación)
 
 ---
 
@@ -10,11 +15,9 @@ Recuperación estructural de código por subgrafo de dependencias. En lugar de c
 
 | Fallo | Causa | Consecuencia |
 |-------|-------|-------------|
-| Cortes a mitad de función | El chunk de 500 tokens parte `verifyUser()` | El LLM ve medio comportamiento |
-| Dependencias perdidas | Recupera `verifyUser` pero no `hashPassword` (que es la que falla) | El bug está en una función que no llega al contexto |
-| Falsos positivos semánticos | `verifyEmail` parece relevante para "verify user" | Contexto irrelevante, tokens desperdiciados |
-
-**Resultado típico**: 70-85% del contexto enviado al LLM es ruido.
+| ✂️ Cortes a mitad de función | El chunk de 500 tokens parte `verifyUser()` | El LLM alucina porque ve medio comportamiento |
+| 🧵 Dependencias perdidas | Recupera `verifyUser` pero no `hashPassword` (la que falla) | El bug real no entra al contexto |
+| 🧨 Falsos positivos semánticos | `verifyEmail` puntúa alto en "verify user" | Tokens desperdiciados en ruido
 
 ---
 
@@ -57,11 +60,11 @@ Cliente → POST /context a leo-code-mcp (:9898)
 
 ### Componentes
 
-| Componente | Ubicación | Función |
-|-----------|-----------|---------|
-| **core** | `leo_code/core/` | Librería base: `Capsule`, parser AST, grafo BFS, `serialize_context`, cache Redis, benchmark |
-| **rag** | `leo_code/rag/` | Pipeline KC-RAG: encoder, vector store Qdrant, compressor, classifier, agent loop, LLM providers |
-| **server** | `leo_code/server/` | Servidor FastAPI: `/context`, `/search`, `/index`, `/preindex`, `/health`, `/stats` |
+| Componente | Ubicación | Responsabilidad |
+|-----------|-----------|----------------|
+| **core** | `leo_code/core/` | Define `Capsule`, parsea AST, construye grafo BFS, serializa contexto, cachea con Redis |
+| **rag** | `leo_code/rag/` | Pipeline KC-RAG: encoder → Qdrant → compressor → classifier → agente loop → LLM |
+| **server** | `leo_code/server/` | Expone FastAPI: `/context`, `/search`, `/index`, `/preindex`, `/health`, `/stats` |
 
 ---
 
@@ -216,6 +219,18 @@ El sidecar aplica rate limiting: 30 requests por ventana de 10 segundos por IP.
 - Qdrant (local, sin servidor externo — usa `qdrant-client` en modo archivo)
 - Redis (opcional, para cache L1/L2/L3)
 - Dependencias opcionales por provider: `anthropic`, `openai`, `ollama`
+
+---
+
+## Reduce tu factura de tokens hoy
+
+```bash
+pip install leo-code && leo-code-mcp --workers 2
+```
+
+Primer contexto relevante en 2 comandos. Sin servidores externos. Sin configuración.
+
+[← Volver al inicio](#tu-agente-ya-no-necesita-leer-archivos-enteros)
 
 ---
 

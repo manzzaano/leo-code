@@ -32,11 +32,12 @@ class OpenAIProvider(LLMProvider):
         tools: Optional[list[dict]] = None,
         temperature: float = 0.2,
     ) -> Response:
+        is_thinking = any(x in self.model for x in ("v4-flash", "v4-pro", "reasoner"))
         kwargs = dict(
             model=self.model,
             messages=messages,
             temperature=temperature,
-            max_tokens=4096,
+            max_tokens=16384 if is_thinking else 4096,
         )
         if tools:
             kwargs["tools"] = tools

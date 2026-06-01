@@ -20,7 +20,7 @@ async def main():
         sys.stderr.write(f"__LEO_RESULT__{resp}\n")
         sys.stderr.flush()
     except Exception as e:
-        sys.stderr.write(f"__LEO_RESULT__{json.dumps({'response': f'ERROR: {e}', 'tokens': 0, 'iterations': 0, 'duration_ms': 0}, ensure_ascii=False)}\n")
+        sys.stderr.write(f"__LEO_RESULT__{json.dumps({'response': f'[ERROR: {e}]', 'tokens': 0, 'iterations': 0, 'duration_ms': 0}, ensure_ascii=False)}\n")
         sys.stderr.flush()
 
 asyncio.run(main())
