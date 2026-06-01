@@ -68,19 +68,16 @@ def run_oc_subprocess(query: str, repo_path: str) -> dict:
         return {"system": "OC", "response": f"[Error: {e}]", "tokens": 0, "duration_ms": 0}
 
 
-def run_no_direct(query: str) -> dict:
-    import asyncio as _asyncio
-    async def _run():
-        from leo_code.rag.llm import get_provider
-        provider = get_provider("openai",
-            api_key=os.getenv("DEEPSEEK_API_KEY", ""),
-            base_url="https://api.deepseek.com", model="deepseek-chat")
-        t0 = time.time()
-        resp = await provider.generate([{"role": "user", "content": query}], tools=[], temperature=0.2)
-        return {"system": "NO", "response": (resp.text or "")[:4000],
-                "tokens": resp.usage.input_tokens + resp.usage.output_tokens,
-                "duration_ms": int((time.time() - t0) * 1000)}
-    return _asyncio.run(_run())
+async def run_no_direct_async(query: str) -> dict:
+    from leo_code.rag.llm import get_provider
+    provider = get_provider("openai",
+        api_key=os.getenv("DEEPSEEK_API_KEY", ""),
+        base_url="https://api.deepseek.com", model="deepseek-chat")
+    t0 = time.time()
+    resp = await provider.generate([{"role": "user", "content": query}], tools=[], temperature=0.2)
+    return {"system": "NO", "response": (resp.text or "")[:4000],
+            "tokens": resp.usage.input_tokens + resp.usage.output_tokens,
+            "duration_ms": int((time.time() - t0) * 1000)}
 
 
 async def run_batch(tasks: list[dict], repo_path: str, systems: list[str]) -> list[dict]:
@@ -94,7 +91,7 @@ async def run_batch(tasks: list[dict], repo_path: str, systems: list[str]) -> li
             elif sys_name == "OC":
                 r = await asyncio.to_thread(run_oc_subprocess, task["query"], repo_path)
             else:
-                r = run_no_direct(task["query"])
+                r = await run_no_direct_async(task["query"])
             r["task_id"] = tid
             print(f"      tok={r.get('tokens',0)} time={r.get('duration_ms',0)}ms")
             return r
