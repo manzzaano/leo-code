@@ -361,7 +361,7 @@ class AgentLoop:
             from leo_code.rag.classifier import get_budget
             budget = get_budget(query)
 
-            top_ids = self._vector_store.search(query, top_k=10)
+            top_ids = self._vector_store.search(query, top_k=20)
             top_caps = [caps[rid] for rid in top_ids if rid in caps]
 
             from leo_code.rag.compressor import compress
