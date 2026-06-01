@@ -22,7 +22,7 @@ async def main():
     model = sys.argv[3] if len(sys.argv) > 3 else "deepseek/deepseek-chat"
     try:
         agent = AgentLoop(tools=ToolRegistry(), max_iterations=15)
-        result = await agent.run(query, repo_path=repo, model=model, use_kc_rag=True)
+        result = await agent.run(query, repo_path=repo, model=model, use_kc_rag=True, session_id=None, history=None)
         resp = result.get("respuesta", "")
         print(resp)
     except Exception as e:
