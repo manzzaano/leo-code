@@ -24,6 +24,9 @@ async def main():
         agent = AgentLoop(tools=ToolRegistry(), max_iterations=15)
         result = await agent.run(query, repo_path=repo, model=model, use_kc_rag=True, session_id=None, history=None)
         resp = result.get("respuesta", "")
+        if len(resp) < 100:
+            import sys as _sys
+            _sys.stderr.write(f"[LEO_RESULT_LEN={len(resp)}] keys={list(result.keys())}\n")
         print(resp)
     except Exception as e:
         print(f"[ERROR: {e}]")
