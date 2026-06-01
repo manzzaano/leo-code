@@ -33,7 +33,7 @@ TOKEN_BUDGET = {
     "review": 1200,
     "optimize": 1500,
     "audit": 1000,
-    "onboard": 600,
+    "onboard": 2000,
     "design_review": 1500,
     "no_code": 0,
 }
