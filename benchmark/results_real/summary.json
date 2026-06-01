@@ -1,1 +1,632 @@
-[]
+[
+  {
+    "system": "LEO",
+    "response": "",
+    "tokens": 0,
+    "duration_ms": 786,
+    "task_id": "t1_code_query",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "OC",
+    "response": "[opencode not installed]",
+    "tokens": 0,
+    "duration_ms": 0,
+    "task_id": "t1_code_query",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "NO",
+    "task_id": "t1_code_query",
+    "response": "[No module named 'openai']",
+    "tokens": 0,
+    "duration_ms": 0,
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "LEO",
+    "response": "",
+    "tokens": 0,
+    "duration_ms": 802,
+    "task_id": "t2_debug",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "OC",
+    "response": "[opencode not installed]",
+    "tokens": 0,
+    "duration_ms": 0,
+    "task_id": "t2_debug",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "NO",
+    "task_id": "t2_debug",
+    "response": "[No module named 'openai']",
+    "tokens": 0,
+    "duration_ms": 0,
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "LEO",
+    "response": "",
+    "tokens": 0,
+    "duration_ms": 816,
+    "task_id": "t3_test_gen",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "OC",
+    "response": "[opencode not installed]",
+    "tokens": 0,
+    "duration_ms": 0,
+    "task_id": "t3_test_gen",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "NO",
+    "task_id": "t3_test_gen",
+    "response": "[No module named 'openai']",
+    "tokens": 0,
+    "duration_ms": 0,
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "LEO",
+    "response": "",
+    "tokens": 0,
+    "duration_ms": 721,
+    "task_id": "t4_refactor",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "OC",
+    "response": "[opencode not installed]",
+    "tokens": 0,
+    "duration_ms": 0,
+    "task_id": "t4_refactor",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "NO",
+    "task_id": "t4_refactor",
+    "response": "[No module named 'openai']",
+    "tokens": 0,
+    "duration_ms": 0,
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "LEO",
+    "response": "",
+    "tokens": 0,
+    "duration_ms": 761,
+    "task_id": "t5_search",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "OC",
+    "response": "[opencode not installed]",
+    "tokens": 0,
+    "duration_ms": 0,
+    "task_id": "t5_search",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "NO",
+    "task_id": "t5_search",
+    "response": "[No module named 'openai']",
+    "tokens": 0,
+    "duration_ms": 0,
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "LEO",
+    "response": "",
+    "tokens": 0,
+    "duration_ms": 747,
+    "task_id": "t6_code_gen",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "OC",
+    "response": "[opencode not installed]",
+    "tokens": 0,
+    "duration_ms": 0,
+    "task_id": "t6_code_gen",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "NO",
+    "task_id": "t6_code_gen",
+    "response": "[No module named 'openai']",
+    "tokens": 0,
+    "duration_ms": 0,
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "LEO",
+    "response": "",
+    "tokens": 0,
+    "duration_ms": 705,
+    "task_id": "t7_code_edit",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "OC",
+    "response": "[opencode not installed]",
+    "tokens": 0,
+    "duration_ms": 0,
+    "task_id": "t7_code_edit",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "NO",
+    "task_id": "t7_code_edit",
+    "response": "[No module named 'openai']",
+    "tokens": 0,
+    "duration_ms": 0,
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "LEO",
+    "response": "",
+    "tokens": 0,
+    "duration_ms": 732,
+    "task_id": "t8_review",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "OC",
+    "response": "[opencode not installed]",
+    "tokens": 0,
+    "duration_ms": 0,
+    "task_id": "t8_review",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "NO",
+    "task_id": "t8_review",
+    "response": "[No module named 'openai']",
+    "tokens": 0,
+    "duration_ms": 0,
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "LEO",
+    "response": "",
+    "tokens": 0,
+    "duration_ms": 693,
+    "task_id": "t9_optimize",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "OC",
+    "response": "[opencode not installed]",
+    "tokens": 0,
+    "duration_ms": 0,
+    "task_id": "t9_optimize",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "NO",
+    "task_id": "t9_optimize",
+    "response": "[No module named 'openai']",
+    "tokens": 0,
+    "duration_ms": 0,
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "LEO",
+    "response": "",
+    "tokens": 0,
+    "duration_ms": 933,
+    "task_id": "t10_audit",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "OC",
+    "response": "[opencode not installed]",
+    "tokens": 0,
+    "duration_ms": 0,
+    "task_id": "t10_audit",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "NO",
+    "task_id": "t10_audit",
+    "response": "[No module named 'openai']",
+    "tokens": 0,
+    "duration_ms": 0,
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "LEO",
+    "response": "",
+    "tokens": 0,
+    "duration_ms": 940,
+    "task_id": "t11_onboard",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "OC",
+    "response": "[opencode not installed]",
+    "tokens": 0,
+    "duration_ms": 0,
+    "task_id": "t11_onboard",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "NO",
+    "task_id": "t11_onboard",
+    "response": "[No module named 'openai']",
+    "tokens": 0,
+    "duration_ms": 0,
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "LEO",
+    "response": "",
+    "tokens": 0,
+    "duration_ms": 907,
+    "task_id": "t12_design_review",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "OC",
+    "response": "[opencode not installed]",
+    "tokens": 0,
+    "duration_ms": 0,
+    "task_id": "t12_design_review",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "NO",
+    "task_id": "t12_design_review",
+    "response": "[No module named 'openai']",
+    "tokens": 0,
+    "duration_ms": 0,
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "LEO",
+    "response": "",
+    "tokens": 0,
+    "duration_ms": 757,
+    "task_id": "t13_framework",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "OC",
+    "response": "[opencode not installed]",
+    "tokens": 0,
+    "duration_ms": 0,
+    "task_id": "t13_framework",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "NO",
+    "task_id": "t13_framework",
+    "response": "[No module named 'openai']",
+    "tokens": 0,
+    "duration_ms": 0,
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "LEO",
+    "response": "",
+    "tokens": 0,
+    "duration_ms": 747,
+    "task_id": "t14_cross_file",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "OC",
+    "response": "[opencode not installed]",
+    "tokens": 0,
+    "duration_ms": 0,
+    "task_id": "t14_cross_file",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "NO",
+    "task_id": "t14_cross_file",
+    "response": "[No module named 'openai']",
+    "tokens": 0,
+    "duration_ms": 0,
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "LEO",
+    "response": "",
+    "tokens": 0,
+    "duration_ms": 721,
+    "task_id": "t15_plugin_arch",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "OC",
+    "response": "[opencode not installed]",
+    "tokens": 0,
+    "duration_ms": 0,
+    "task_id": "t15_plugin_arch",
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  },
+  {
+    "system": "NO",
+    "task_id": "t15_plugin_arch",
+    "response": "[No module named 'openai']",
+    "tokens": 0,
+    "duration_ms": 0,
+    "scores": {
+      "relevancia": 1,
+      "correccion": 1,
+      "completitud": 1,
+      "accionabilidad": 1
+    },
+    "score_total": 1.0
+  }
+]

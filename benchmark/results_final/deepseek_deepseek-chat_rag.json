@@ -6,6 +6,7 @@
     "duration_s": 0.5,
     "model": "deepseek/deepseek-chat",
     "mode": "rag",
+    "iterations": 0,
     "task_id": "t1_code_query",
     "score": 0
   },
@@ -16,6 +17,7 @@
     "duration_s": 0.4,
     "model": "deepseek/deepseek-chat",
     "mode": "rag",
+    "iterations": 0,
     "task_id": "t8_review",
     "score": 0
   },
@@ -23,9 +25,10 @@
     "system": "LEO-RAG",
     "response": "[ERROR: No module named 'openai']",
     "tokens": 0,
-    "duration_s": 0.3,
+    "duration_s": 0.4,
     "model": "deepseek/deepseek-chat",
     "mode": "rag",
+    "iterations": 0,
     "task_id": "t11_onboard",
     "score": 0
   },
@@ -33,9 +36,10 @@
     "system": "LEO-RAG",
     "response": "[ERROR: No module named 'openai']",
     "tokens": 0,
-    "duration_s": 0.3,
+    "duration_s": 0.4,
     "model": "deepseek/deepseek-chat",
     "mode": "rag",
+    "iterations": 0,
     "task_id": "t12_design_review",
     "score": 0
   }
