@@ -1,0 +1,40 @@
+{
+  "models": [
+    "deepseek/deepseek-chat",
+    "deepseek/deepseek-reasoner",
+    "deepseek/deepseek-v4-flash",
+    "deepseek/deepseek-v4-pro"
+  ],
+  "tasks": [
+    {
+      "id": "t1_code_query",
+      "type": "code_query",
+      "query": "Qué hace la función detect_frameworks en leo_code/core/parser.py? Dame la lista completa de frameworks que detecta.",
+      "criteria": "Debe listar los 37 frameworks, explicar el mecanismo de deteccion, y los tipos de capsula que genera."
+    },
+    {
+      "id": "t8_review",
+      "type": "review",
+      "query": "Haz code review de leo_code/rag/compressor.py. Evalua SOLID, naming, complejidad, manejo de errores. Da 3 recomendaciones concretas con ejemplos de codigo.",
+      "criteria": "Debe evaluar especificamente compressor.py, mencionar la cadena if/elif del dispatch, y dar recomendaciones accionables con codigo."
+    },
+    {
+      "id": "t11_onboard",
+      "type": "onboard",
+      "query": "Explica la arquitectura de leo-code para un nuevo desarrollador: estructura de directorios, entrypoints, flujo de una query desde que el usuario escribe hasta que recibe respuesta, y los modulos principales.",
+      "criteria": "Debe mencionar la estructura real, entrypoints (leo-code ask/chat/index, leo-code-mcp), pipeline KC-RAG, y los 3 modulos core/rag/server."
+    },
+    {
+      "id": "t12_design_review",
+      "type": "design_review",
+      "query": "Analiza el diseno y copy del README.md y docs/index.md de leo-code. Sugiere mejoras concretas de claridad, persuasion y estructura.",
+      "criteria": "Debe leer los archivos markdown reales, analizar estructura, proponer mejoras de copy y evaluar jerarquia de informacion."
+    }
+  ],
+  "matrix": {
+    "deepseek/deepseek-chat": ["rag", "agent", "oc"],
+    "deepseek/deepseek-reasoner": ["rag", "oc"],
+    "deepseek/deepseek-v4-flash": ["rag", "agent", "oc"],
+    "deepseek/deepseek-v4-pro": ["rag", "agent", "oc"]
+  }
+}

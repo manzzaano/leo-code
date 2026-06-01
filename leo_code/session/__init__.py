@@ -30,7 +30,7 @@ class Message:
     created_at: float = 0
 
 
-_SCHEMA = """
+_SCHEMA_TABLES = """
 CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
     repo_path TEXT NOT NULL,
@@ -52,8 +52,6 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at);
-PRAGMA journal_mode=WAL;
-PRAGMA foreign_keys=ON;
 """
 
 
@@ -62,13 +60,15 @@ class SessionManager:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
-        self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
+        self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False, timeout=5)
         self._conn.row_factory = sqlite3.Row
         self._init_db()
 
     def _init_db(self):
         with self._lock:
-            self._conn.executescript(_SCHEMA)
+            self._conn.execute("PRAGMA journal_mode=DELETE")
+            self._conn.execute("PRAGMA foreign_keys=ON")
+            self._conn.executescript(_SCHEMA_TABLES)
 
     def create_session(self, repo_path: str, model: str = "") -> Session:
         import uuid

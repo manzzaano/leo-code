@@ -15,6 +15,71 @@ from pathlib import Path
 
 VERSION = "0.2.0"
 
+_ENV_VAR_MAP = {
+    "deepseek": "DEEPSEEK_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+    "google": "GOOGLE_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+    "mistral": "MISTRAL_API_KEY",
+    "groq": "GROQ_API_KEY",
+    "cohere": "COHERE_API_KEY",
+    "together": "TOGETHER_API_KEY",
+    "ollama": None,
+}
+
+
+def _load_dotenv(path: str | Path | None = None) -> None:
+    """Carga .env simple sin dependencias."""
+    candidates = [Path(p).resolve() / ".env" for p in ([path] if path else [".", "~"])]
+    for p in candidates:
+        p = p.expanduser()
+        if p.exists():
+            for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, val = line.partition("=")
+                key, val = key.strip(), val.strip().strip("\"'")
+                if key not in os.environ:
+                    os.environ[key] = val
+
+
+def _providers_with_keys() -> dict[str, str]:
+    """Retorna {provider: env_var} para cada provider con API key configurada."""
+    result = {}
+    for provider, var in _ENV_VAR_MAP.items():
+        if var and os.getenv(var):
+            result[provider] = var
+    try:
+        import httpx
+        if httpx.get("http://localhost:11434/api/tags", timeout=1).status_code == 200:
+            result["ollama"] = None
+    except Exception:
+        pass
+    return result
+
+
+def _save_key_to_env(provider: str, api_key: str) -> Path:
+    """Guarda la API key en .env del repo actual y ~/.leo-code/.env."""
+    var = _ENV_VAR_MAP.get(provider)
+    if not var:
+        raise ValueError(f"Provider desconocido: {provider}")
+    entry = f"{var}={api_key}\n"
+    paths = [Path.cwd() / ".env", Path.home() / ".leo-code" / ".env"]
+    saved = []
+    for p in paths:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        existing = p.read_text(encoding="utf-8", errors="replace") if p.exists() else ""
+        lines = [l for l in existing.splitlines() if not l.startswith(var)]
+        lines.append(entry.strip())
+        p.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        saved.append(p)
+    os.environ[var] = api_key
+    return saved[0]
+
+
 class CancelToken:
     def __init__(self):
         self.cancelled = False
@@ -45,10 +110,14 @@ def cli():
 
     Model-agnostic (12 providers). 28 lenguajes. 15x menos tokens.
     """
-    pass
+    _load_dotenv()
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
 
 
-def _render_stream(console, events, status, total_saved_ref):
+async def _render_stream(console, events, status, total_saved_ref):
     """Render streaming con markdown, syntax highlight, spinner, impacto."""
     from rich.markdown import Markdown
     from rich.syntax import Syntax
@@ -60,7 +129,7 @@ def _render_stream(console, events, status, total_saved_ref):
     _code_lang = ""
     _first_token = False
 
-    for event in events:
+    async for event in events:
         yield event  # for cancellation check
         etype = event["type"]
 
@@ -145,6 +214,22 @@ def _render_stream(console, events, status, total_saved_ref):
                 else:
                     console.print(f"  [dim]{out}[/dim]")
 
+        elif etype == "error":
+            msg = event['message']
+            console.print(f"[red]X {msg}[/red]")
+            if "credentials" in msg.lower() or "api_key" in msg.lower():
+                available = _providers_with_keys()
+                if not available:
+                    console.print("\n[yellow]  No hay ninguna API key configurada.[/yellow]")
+                    console.print("  [dim]Usa [cyan]/key set <proveedor>[/cyan] en el chat o[/dim]")
+                    console.print("  [dim]  [cyan]leo-code setup[/cyan] para configuracion guiada.[/dim]\n")
+                    console.print("  [dim]Proveedores disponibles:[/dim]")
+                    for prov, var in sorted(_ENV_VAR_MAP.items()):
+                        if var:
+                            console.print(f"    [cyan]{prov:<12}[/cyan] {var}")
+                    console.print(f"    [cyan]ollama      [/cyan] (local, sin API key)")
+                    console.print()
+
 
 def _render_impact(console, tokens: int, saved: int, its: int, dur: int):
     from rich.table import Table
@@ -185,7 +270,7 @@ def ask(query: str, model: str, repo: str, no_rag: bool, image: tuple[str]):
             query, repo_path=repo, model=model, use_kc_rag=not no_rag,
             images=list(image) if image else None,
         )
-        for event in _render_stream(console, events, None, ts):
+        async for event in _render_stream(console, events, None, ts):
             if _cancel.cancelled:
                 agent.interrupt = True
             if event.get("type") == "done":
@@ -286,7 +371,7 @@ def chat(model: str, repo: str, image: tuple[str]):
                 session_id=sid, images=images if images else None,
                 plugin_manager=pm, skill_manager=skill_mgr,
             )
-            for event in _render_stream(console, events, status, total_saved_ref):
+            async for event in _render_stream(console, events, status, total_saved_ref):
                 if _cancel.cancelled:
                     agent.interrupt = True
 
@@ -316,7 +401,8 @@ def _read_input() -> str | None:
                 text = document.text_before_cursor
                 if text.startswith("/"):
                     for cmd in ["/help", "/model ", "/image ", "/diff", "/clear",
-                                "/session", "/sessions", "/exit", "/quit"]:
+                                "/session", "/sessions", "/exit", "/quit",
+                                "/key ", "/permissions"]:
                         if cmd.startswith(text):
                             yield Completion(cmd, start_position=-len(text))
                 else:
@@ -384,6 +470,7 @@ def _handle_command(cmd: str, state: dict, sm, sid: str, console) -> str | None:
   /doctor         Diagnóstico del sistema (providers, cache, índice)
   /cost           Ver costes de la sesión por modelo
   /compact        Compactar historial de la conversación
+  /key            Gestionar API keys (list/set/remove)
   /permissions    Configurar permisos de tools (auto/ask/deny)
   /diff           Ver git diff de los cambios hechos
   /clear          Limpiar pantalla
@@ -473,6 +560,9 @@ def _handle_command(cmd: str, state: dict, sm, sid: str, console) -> str | None:
     if cmd.startswith("/permissions"):
         return _handle_permissions(cmd, state, console)
 
+    if cmd.startswith("/key"):
+        return _handle_key(cmd, state, console)
+
     return None
 
 
@@ -493,6 +583,72 @@ def index(repo: str, languages: str, verbose: bool):
     indexer = Indexer()
     count = indexer.build(repo, languages=langs, verbose=verbose)
     console.print(f"[green]✓ Listo. {count} cápsulas indexadas.[/green]")
+
+
+@cli.command()
+@click.option("--provider", "-p", default=None,
+              help="Proveedor a configurar (deepseek, openai, anthropic, ...)")
+def setup(provider: str | None):
+    """Configuracion interactiva de API keys y modelo default."""
+    from rich.console import Console
+    from rich.panel import Panel
+    console = Console(highlight=False, color_system="truecolor")
+
+    console.print(Panel.fit(
+        "[bold bright_blue]leo-code setup[/bold bright_blue]\n"
+        "Configura tu API key y modelo por defecto.\n"
+        "[dim]Las claves se guardan en .env del proyecto y ~/.leo-code/.env[/dim]",
+        border_style="bright_blue",
+        padding=(1, 3),
+    ))
+
+    if not provider:
+        console.print("\n[bold]Proveedores disponibles:[/bold]\n")
+        items = [(p, v) for p, v in _ENV_VAR_MAP.items() if p != "ollama"]
+        for i, (prov, var) in enumerate(items, 1):
+            console.print(f"  [cyan]{i}.[/cyan] {prov:<12} {var}")
+        try:
+            choice = input("\nSelecciona un numero o nombre: ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            console.print("[yellow]Cancelado[/yellow]")
+            return
+        if choice.isdigit():
+            idx = int(choice) - 1
+            if 0 <= idx < len(items):
+                provider = items[idx][0]
+        elif choice in _ENV_VAR_MAP:
+            provider = choice
+
+    if not provider or provider not in _ENV_VAR_MAP:
+        console.print("[red]Proveedor no valido[/red]")
+        return
+
+    var = _ENV_VAR_MAP[provider]
+    if not var:
+        console.print("[yellow]Ollama no necesita API key. Solo asegurate de tenerlo corriendo.[/yellow]")
+        return
+
+    current = os.getenv(var, "")
+    label = f"API key para {provider} ({var})"
+    if current:
+        label += f" [dim](actual: {current[:12]}...)[/dim]"
+    try:
+        api_key = input(f"  {label}: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        console.print("[yellow]Cancelado[/yellow]")
+        return
+
+    if not api_key:
+        console.print("[yellow] cancelado[/yellow]")
+        return
+
+    path = _save_key_to_env(provider, api_key)
+    console.print(f"\n[green]  ✓ API key guardada en:[/green]")
+    console.print(f"    [dim]{path}[/dim]")
+    console.print(f"\n  [dim]Ahora puedes usar:[/dim]")
+    console.print(f"    [cyan]leo-code chat -m {provider}/...[/cyan]")
+    console.print(f"    [dim]o cambia de modelo dentro del chat con: /model {provider}/...[/dim]\n")
+    console.print(f"  [dim]Ejecuta [cyan]leo-code chat[/cyan] para empezar.[/dim]\n")
 
 
 def _handle_goal(cmd: str, state: dict, console, sid: str,
@@ -717,6 +873,93 @@ def _handle_permissions(cmd: str, state: dict, console) -> str | None:
     elif cmd == "/permissions deny":
         console.print("[red]Permisos: deny[/red]")
     return ""
+
+
+def _handle_key(cmd: str, state: dict, console) -> str | None:
+    """Gestiona API keys: list, set, remove."""
+    rest = cmd.removeprefix("/key").strip()
+    subcmd, _, arg = rest.partition(" ")
+
+    if not subcmd or subcmd == "list":
+        console.print("\n[bold]API Keys configuradas:[/bold]")
+        available = _providers_with_keys()
+        for provider, var in sorted(_ENV_VAR_MAP.items()):
+            if var:
+                status = "[green]✓[/green]" if provider in available else "[dim]○[/dim]"
+                console.print(f"  {status} {provider:<12} {var}")
+        if "ollama" in available:
+            console.print(f"  [green]✓[/green] ollama       (local)")
+        console.print(f"\n  [dim]/key set <proveedor>  — configurar API key[/dim]")
+        console.print(f"  [dim]/key remove <proveedor>  — eliminar API key[/dim]")
+        console.print()
+        return ""
+
+    if subcmd == "set":
+        provider = arg.strip() or _prompt_provider(console)
+        if not provider:
+            return ""
+        var = _ENV_VAR_MAP.get(provider)
+        if not var:
+            console.print(f"[red]Proveedor desconocido: {provider}[/red]")
+            console.print(f"[dim]Disponibles: {', '.join(_ENV_VAR_MAP)}[/dim]")
+            return ""
+        current = os.getenv(var, "")
+        prompt = f"  API key para {provider} ({var})"
+        if current:
+            prompt += f" [dim](actual: {current[:8]}...)[/dim]"
+        api_key = _prompt_input(console, prompt + ": ")
+        if not api_key:
+            return ""
+        path = _save_key_to_env(provider, api_key)
+        console.print(f"[green]  ✓ API key guardada en {path}[/green]")
+        console.print(f"  [dim]Para usarla ahora, cambia el modelo: /model {provider}/...[/dim]\n")
+        return ""
+
+    if subcmd == "remove":
+        provider = arg.strip()
+        if not provider or provider not in _ENV_VAR_MAP:
+            console.print(f"[red]Proveedor desconocido: {provider}[/red]")
+            return ""
+        var = _ENV_VAR_MAP.get(provider)
+        if not var:
+            return ""
+        os.environ.pop(var, None)
+        for p in [Path.cwd() / ".env", Path.home() / ".leo-code" / ".env"]:
+            if p.exists():
+                lines = [l for l in p.read_text().splitlines() if not l.startswith(var)]
+                p.write_text("\n".join(lines) + "\n")
+        console.print(f"[yellow]  ✓ API key eliminada: {provider}[/yellow]")
+        return ""
+
+    console.print(f"[yellow]Uso: /key list | /key set [proveedor] | /key remove <proveedor>[/yellow]")
+    return ""
+
+
+def _prompt_provider(console) -> str | None:
+    """Muestra menu de proveedores y retorna el seleccionado."""
+    console.print("\n[bold]Proveedores disponibles:[/bold]\n")
+    items = [(p, v) for p, v in _ENV_VAR_MAP.items() if p != "ollama"]
+    for i, (prov, var) in enumerate(items, 1):
+        console.print(f"  [cyan]{i}.[/cyan] {prov:<12} {var or '(local)'}")
+    try:
+        choice = input("\n  Selecciona un numero o nombre: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        return None
+    if choice.isdigit():
+        idx = int(choice) - 1
+        if 0 <= idx < len(items):
+            return items[idx][0]
+    elif choice in _ENV_VAR_MAP:
+        return choice
+    return None
+
+
+def _prompt_input(console, prompt: str) -> str:
+    """Lee input del usuario con manejo de interrupcion."""
+    try:
+        return input(prompt).strip()
+    except (EOFError, KeyboardInterrupt):
+        return ""
 
 
 if __name__ == "__main__":

@@ -1,34 +1,41 @@
-# leo-code
+# leo-code — Docs
 
-**KC-RAG — Knowledge Capsule Retrieval-Augmented Generation para código.**
+Funciones completas con sus dependencias, no fragmentos de 500 tokens.
+**~90% de contexto relevante contra el ~20% del chunking tradicional.**
 
-leo-code es un asistente de código que recupera contexto estructural por subgrafo de dependencias.
-En lugar de chunking por longitud + embeddings, extrae cápsulas del AST y devuelve el subgrafo
-relevante comprimido según el tipo de tarea.
-
-## ¿Por qué leo-code?
-
-| | Chunking tradicional | **leo-code (KC-RAG)** |
-|---|---|---|
-| Contexto | Fragmentos de 500 tokens | Funciones completas + dependencias |
-| Calidad | 70-85% ruido | ~90% relevante |
-| Tokens/query | ~20K promedio | ~1.5K comprimidos |
-| Lenguajes | Cualquiera (texto plano) | Python (AST) + tree-sitter |
-| Búsqueda | Solo embeddings | Híbrida: exacta + semántica |
-| Providers | 1-2 | 12 providers, auto-detectados |
-
-## Instalación rápida
+## Empieza aquí
 
 ```bash
 pip install leo-code
-leo-code-mcp --workers 2  # Arranca en :9898
+leo-code-mcp --workers 2
 ```
 
-## Uso desde Python
+- [Instalación rápida](instalacion.md) — pip install + arranque en 30 segundos
+- [Uso básico](uso.md) — indexar un repo, consultar contexto, buscar
+- [Arquitectura](arquitectura.md) — cómo funciona KC-RAG paso a paso
+
+## Conceptos clave
+
+| Concepto | Qué es |
+|----------|--------|
+| **Cápsula** | Unidad mínima de conocimiento: función, clase o módulo con metadatos del AST |
+| **KC-RAG** | Pipeline que extrae cápsulas, las indexa en Qdrant y comprime el subgrafo relevante |
+| **Compresión adaptativa** | El contexto se ajusta según el tipo de tarea: code_query, refactor, code_gen, etc. |
+
+## Referencia
+
+- [API Endpoints](api.md) — `/context`, `/search`, `/index`, `/health`, `/stats`
+- [Configuración](configuracion.md) — providers, cache Redis, rate limiting
+- [Parser AST](parser.md) — Python AST + tree-sitter multi-lenguaje
+- [Compresor](compresor.md) — reglas de compresión por tipo de tarea
+
+---
 
 ```python
 from leo_code.sdk import connect
 client = connect("http://localhost:9898")
-ctx = client.context("qué hace la función process_payment", "./mi-repo")
+ctx = client.context("qué hace process_payment", "./mi-repo")
 print(ctx.context)
 ```
+
+**Repo**: [github.com/manzzaano/leo-code](https://github.com/manzzaano/leo-code) • **Licencia**: MIT
