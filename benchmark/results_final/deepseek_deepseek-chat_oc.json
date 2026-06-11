@@ -1,66 +1,42 @@
 [
   {
     "system": "OC",
-    "response": "La función `detect_frameworks` (línea 263) recorre las cápsulas ya extraídas y, según el contenido, decoradores, herencia, lenguaje y nombre del archivo, **reclasifica el tipo** (`endpoint`, `component`, `model`, `controller`, `task`, `middleware`, `schema`, `entrypoint`) y **asigna el framework** en `c.properties[\"framework\"]`.\nLista completa de frameworks que detecta, por lenguaje:\n**Python**: `fastapi`, `flask`, `django`, `pydantic`, `sqlalchemy`, `celery`, `aiohttp`, `sqlmodel`, `strawberry`, `graphql`, `grpc`\n**JavaScript/TypeScript**: `react`, `nextjs`, `nestjs`, `express`, `vue`, `angular`, `svelte`, `nuxt`, `remix`, `graphql`, `grpc`\n**Java/Kotlin**: `spring`, `hibernate`, `jakarta`, `quarkus`\n**PHP**: `laravel`, `symfony`\n**C#**: `dotnet`, `entity_framework`\n**Ruby**: `rails`, `sinatra`\n**Go**: `gin`, `echo`, `fiber`\n**Rust**: `actix`, `axum`\n**Elixir**: `phoenix`\n**Multi-lenguaje** (por señales en contenido/nombre de archivo): `graphql`, `grpc`\nAdemás, al final asigna `middleware` (Python → `fastapi`, JS → `express`).",
-    "tokens": 260,
-    "duration_s": 10.7,
+    "response": "[TIMEOUT 300s]",
+    "tokens": 0,
+    "duration_s": 300,
     "model": "deepseek/deepseek-chat",
     "mode": "oc",
     "task_id": "t1_code_query",
-    "scores": {
-      "relevancia": 9,
-      "correccion": 8,
-      "completitud": 7,
-      "accionabilidad": 8
-    },
-    "score": 8.05
+    "score": 0
   },
   {
     "system": "OC",
-    "response": "## Code Review: `leo_code/rag/compressor.py` (657 lines)\n### Evaluación\n**SOLID** — OK aceptable. Cada estrategia es una función separada (SRP). `compress()` es el único punto que viola OCP: agregar una estrategia requiere modificar el `if/elif` del dispatcher.\n**Naming** — OK mayormente. Los nombres de estrategias son descriptivos. `_compress_query` es ambiguo (hace más que comprimir query de búsqueda).\n**Complejidad ciclomática** — Baja por función individual (< 8 rutas cada una). El dispatcher en `compress()` tiene 13 ramas, lo que da alta complejidad agregada.\n**Duplicación de código** — **Problema principal.** Los nodos de cápsulas se construyen con el mismo patrón repetido ~10 veces: `{\"id\": c.id, \"name\": c.name, \"type\": c.type, \"properties\": {...}}`. Firmas repetidas: `\"signature\"`, `\"file_path\"`, `\"docstring\"`, `\"parametros\"`, `\"calls\"`.\n**Manejo de errores** — Ausente. Accesos a `c.properties[\"parametros\"]` con `[]` sin fallback en varios lugares (líneas 122, 173–175, 213, 326–327, 375–377). Si `c.properties` no tiene la key, lanza `KeyError`. `top_capsules[0]` sin guard en varias funciones.\n**Edge cases** — `_compress_refactor` y `_compress_debug` fallan si `top_capsules` está vacío, pero no caen en `IndexError` porque tienen guard. Sin embargo `_compress_code_edit` accede a `c.signature`, `c.docstring` etc sin validar — si `Capsule` tiene esos campos como `None`, concatenar strings funciona, pero podría producir salida confusa.\n---\n### 3 Recomendaciones concretas\n#### 1. Extraer builder de nodos para eliminar duplicación\n~10 funciones repiten el mismo patrón de construcción de dicts. Una función helper unifica todo.\n```python\ndef _build_node(c: Capsule, *, include_content=False, include_calls=False,\n                include_params=False, include_return=False, include_lines=False) -> dict:\n    props = {\n        \"signature\": c.signature,\n        \"file_path\": c.file_path,\n        \"docstring\": c.docstring or \"\",\n    }\n    if include_content and c.content:\n        props[\"content\"] = (c.content[:3000] + \"\\n# ... [truncado]\") if len(c.content) > 3000 else c.content\n    if include_calls and c.calls:\n        props[\"calls\"] = \", \".join(c.calls[:8])\n    if include_params:\n        props[\"parametros\"] = c.properties.get(\"parametros\", \"\")\n    if include_return:\n        props[\"tipo_retorno\"] = c.properties.get(\"tipo_retorno\", \"\")\n    if include_lines:\n        props[\"lineas\"] = c.properties.get(\"lineas\", c.end_line - c.start_line + 1)\n    return {\"id\": c.id, \"name\": c.name, \"type\": c.type, \"properties\": props}\n```\n#### 2. Reemplazar `dict.get` con `|` para acceso seguro a properties\nLas funciones que acceden a `c.properties[\"parametros\"]` lanzan `KeyError`. Usar `.get` con fallback.\n```python\n# Antes (línea 213)\n\"parametros\": target.properties.get(\"parametros\", \"\"),\n# Después (ya lo usan algunas, falta en otras líneas — usar consistentemente)\n\"parametros\": c.properties.get(\"parametros\", \"\"),\n```\nRevisar todas las ocurrencias de `c.properties[\"...\"]` (líneas 122, 173-175, 213, 326-327, 375-377, 508) y cambiarlas a `.get`.\n#### 3. Reemplazar dispatcher if/elif con un registry strategy\nAgregar una estrategia nueva requiere añadir otro `elif` en `compress()` y una función `_compress_X`. Con un dict de estrategias se cumple OCP.\n```python\n_STRATEGIES: dict[str, Callable] = {}\ndef register_strategy(name: str):\n    def wrapper(fn):\n        _STRATEGIES[name] = fn\n        return fn\n    return wrapper\n@register_strategy(\"code_gen\")\ndef _compress_code_gen(...): ...\n# compress() se reduce a:\nstrategy = _STRATEGIES.get(task_type, _compress_query)\nresult = strategy(top_capsules, all_capsules, budget_tokens, dir_filter, query)\n```\nEsto elimina las 13 ramas del `if/elif`, cumple OCP, y cada estrategia nueva solo necesita el decorador.",
-    "tokens": 945,
-    "duration_s": 19.1,
+    "response": "[TIMEOUT 300s]",
+    "tokens": 0,
+    "duration_s": 300,
     "model": "deepseek/deepseek-chat",
     "mode": "oc",
     "task_id": "t8_review",
-    "scores": {
-      "relevancia": 9,
-      "correccion": 9,
-      "completitud": 8,
-      "accionabilidad": 9
-    },
-    "score": 8.75
+    "score": 0
   },
   {
     "system": "OC",
-    "response": "Let me check the actual package structure:\nAquí tienes la explicación completa de la arquitectura de **leo-code** para un nuevo desarrollador.\n---\n## Estructura de directorios\n```\nleo-code/\n├── pyproject.toml           # Entradas CLI: leo-code y leo-code-mcp\n├── leo_code/\n│   ├── core/                # Librería fundamental (AST, grafo, contexto, caché)\n│   ├── rag/                 # Pipeline de Retrieval-Augmented Generation\n│   │   ├── cli/             # CLI con click (ask, chat, index)\n│   │   ├── agent/           # Bucle agente: loop, tools, goals, permissions\n│   │   ├── indexer/         # Indexación paralela + watchdog\n│   │   ├── llm/             # 12 providers de LLM (ABC unificado)\n│   │   ├── encoder.py       # all-MiniLM-L6-v2 embeddings\n│   │   ├── vector_store.py  # Qdrant HNSW (local)\n│   │   ├── bm25.py          # BM25 sparse retrieval\n│   │   ├── expander.py      # Expansión BFS del grafo de dependencias\n│   │   ├── reranker.py      # BGE cross-encoder reranker\n│   │   ├── classifier.py    # 13 tipos de tarea con budget de tokens\n│   │   └── compressor.py    # 11 estrategias de compresión\n│   ├── server/              # FastAPI sidecar (puerto 9898)\n│   ├── sdk/                 # KCRAGClient — HTTP client para el sidecar\n│   ├── plugins/             # PluginManager + plugins built-in\n│   ├── session/             # SessionManager + compactor (SQLite)\n│   ├── skills/              # SkillManager + skills YAML frontmatter\n│   └── tui/                 # LeoStatus HUD (terminal dashboard)\n```\n---\n## Entrypoints\nDesde `pyproject.toml`:\n| Comando | Entrypoint | Qué lanza |\n|---------|-----------|-----------|\n| `leo-code` | `leo_code.rag.cli.app:cli` | CLI interactiva con click (subcomandos `ask`, `chat`, `index`) |\n| `leo-code-mcp` | `leo_code.server.server:main` | Servidor FastAPI sidecar en puerto 9898 |\nLa **CLI** es el uso principal: `ask` para consultas únicas, `chat` para sesiones multi-turno, `index` para indexar un repositorio. El **sidecar** expone los mismos endpoints vía HTTP para integración con editores/IDEs.\n---\n## Flujo de una query (KC-RAG)\n```\nUsuario escribe query\n       │\n       ▼\n┌──────────────────┐\n│  Classifier      │  ← 13 tipos: code_gen, debug, audit, review, etc.\n│  (9 líneas)      │     Devuelve: task_type + token_budget + signals\n└──────┬───────────┘\n       │\n       ▼\n┌──────────────────┐\n│  Hybrid Search   │  ← 3 retrievers en paralelo:\n│  (3 vías)        │     ├── Exact match (nombre fichero/función/ruta)\n│                  │     ├── Qdrant HNSW (semántico, 384-dim)\n│                  │     └── BM25 (sparse TF-IDF)\n└──────┬───────────┘\n       │\n       ▼\n┌──────────────────┐\n│  RRF Fusion      │  ← Reciprocal Rank Fusion (k=60)\n│  (3 → 1 ranking) │     Fusiona los 3 rankings en uno solo\n└──────┬───────────┘\n       │\n       ▼\n┌──────────────────┐\n│  Expander (BFS)  │  ← Navega el grafo de llamadas/imports\n│  (profundidad 2) │     Partiendo de las cápsulas seed\n└──────┬───────────┘\n       │\n       ▼\n┌──────────────────┐\n│  Reranker        │  ← BGE cross-encoder reordena por relevancia\n│  (cross-encoder) │     Query vs cada cápsula\n└──────┬───────────┘\n       │\n       ▼\n┌──────────────────┐\n│  Compressor      │  ← 11 estrategias adaptativas según task_type\n│  (400-2500 tok)  │     code_query → bodies+signatures\n│                  │     code_gen   → directory tree\n│                  │     debug      → full bodies depth 2\n│                  │     review     → target + callers + callees\n└──────┬───────────┘\n       │\n       ▼\n┌──────────────────┐\n│  Contexto        │  ← Contexto compacto listo para el LLM\n│  comprimido      │     (sin chunks truncados, sin ruido)\n└──────┬───────────┘\n       │\n       ▼\n┌──────────────────┐\n│  LLM Provider    │  ← 12 providers (Anthropic, OpenAI, Ollama, etc.)\n│  (streaming)     │     Routing por complejidad de la tarea\n└──────┬───────────┘\n       │\n       ▼\nUsuario recibe respuesta en tiempo real (streaming)\n```\n---\n## Los 3 módulos principales\n### `core/` — Fundame",
-    "tokens": 1878,
-    "duration_s": 111.5,
+    "response": "[TIMEOUT 300s]",
+    "tokens": 0,
+    "duration_s": 300,
     "model": "deepseek/deepseek-chat",
     "mode": "oc",
     "task_id": "t11_onboard",
-    "scores": {
-      "relevancia": 9,
-      "correccion": 9,
-      "completitud": 8,
-      "accionabilidad": 9
-    },
-    "score": 8.75
+    "score": 0
   },
   {
     "system": "OC",
-    "response": "Let me first read both files to analyze them.\n## Análisis de diseño y copy\n### 🔴 README.md\n**Jerarquía visual**\n- Las tablas de \"Tipos de tarea\" y \"Componentes\" tienen buen formato pero dificultan el escaneo rápido — hay 5 tablas en total, demasiadas.\n- La sección \"Estructura interna\" (línea 130) es **muy pesada**: el `@dataclass` de `Capsule` se lleva ~20 líneas que el 90% de visitantes no necesita.\n- El pipeline ASCII (\"Código fuente → AST → Cápsulas → ...\") es confuso sin contexto — mezcla implementación con flujo de datos sin explicación clara.\n**Persuasión**\n- El headline (línea 1) dice qué hace pero no el **beneficio**: \"Contexto estructural para agentes de código\" es técnico, no vende.\n- El claim \"70-85% ruido → ~90% relevante\" (línea 3) es el mejor copy del documento — pero está enterrado bajo el headline débil.\n- La tabla de \"El problema\" comunica dolor de forma efectiva, pero la solución llega 20 líneas después.\n- CTA final (línea 228): \"¿Listo para dejar de pagar por ruido?\" es bueno pero **se pierde** — sin botón visual ni diferenciación.\n### 🔵 docs/index.md\n**Jerarquía visual**\n- Bien estructurado: \"Empieza aquí\" → \"Conceptos clave\" → \"Referencia\" es el orden correcto.\n- El quickstart con código Python (línea 34-38) es innecesario para una landing page de docs — ocupa espacio que debería ser para enlaces.\n- La sección \"Conceptos clave\" en tabla (línea 14-18) es la parte más débil: las definiciones son genéricas y no diferencian el producto.\n**Copy**\n- Primera frase: \"leo-code es un asistente de código con recuperación estructural por subgrafo de dependencias (KC-RAG)\" — **demasiadas palabras técnicas en la primera oración**.\n- \"~90% de contexto relevante\" aparece como un dato suelto en la intro, pero es el claim más potente. Debería ser el headline.\n---\n### Mejoras concretas\n#### Headline sugerido\n| Versión actual | Propuesta |\n|---|---|\n| leo-code — Contexto estructural para agentes de código | **Deja de pagar por tokens basura. KC-RAG entrega ~90% de contexto relevante.** |\nSubheadline: *\"Funciones completas con sus dependencias reales, no fragmentos de 500 tokens que el LLM alucina.\"*\n#### CTA\n| Actual | Propuesta |\n|---|---|\n| `pip install leo-code && leo-code-mcp --workers 2` | **`pip install leo-code`** `<br>` luego `leo-code-mcp --workers 2` en dos líneas separadas con copy narrativo: \"Primer comando instala, segundo arranca. Listo.\" |\nAgregar un bloque visual tipo **callout** con borde o icono para el CTA final en lugar de una línea de bash estática.\n#### Reestructuración del README\n```\n[HEADLINE + SUBHEADLINE + CTA]           ← sin tablas ni código todavía\n  └── El problema (tabla compacta)\n  └── Cómo lo resuelve KC-RAG (3 bullets, no pipeline ASCII)\n  └── Ver funcionamiento → link a docs  \n  └── Quickstart (mínimo: 2 comandos)\n  └── [opcional] Componentes / Estructura\n```\nMover el bloque `@dataclass` de `Capsule` y la tabla de providers a la documentación — en el README sobran.\n#### docs/index.md\n- Cambiar headline a: **\"leo-code: contexto que tu LLM realmente necesita\"**\n- Mover el quickstart de Python a la página de \"Uso básico\". Dejar solo el bloque bash de 2 líneas.\n- Reemplazar la tabla de conceptos con 3 tarjetas visuales (cápsula, KC-RAG, compresión adaptativa) con ejemplos concretos de cada una.",
-    "tokens": 821,
-    "duration_s": 19.3,
+    "response": "[TIMEOUT 300s]",
+    "tokens": 0,
+    "duration_s": 300,
     "model": "deepseek/deepseek-chat",
     "mode": "oc",
     "task_id": "t12_design_review",
-    "scores": {
-      "relevancia": 9,
-      "correccion": 9,
-      "completitud": 8,
-      "accionabilidad": 9
-    },
-    "score": 8.75
+    "score": 0
   }
 ]

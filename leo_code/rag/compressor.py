@@ -15,8 +15,53 @@ Estrategias:
 - no_code: solo cápsulas tipo documento
 """
 
+from dataclasses import dataclass
 from leo_code.core.parser import Capsule
 from leo_code.core.context import serialize_context
+
+
+@dataclass
+class CompressConfig:
+    """Config para estrategia de compresión."""
+    include_body: bool = False
+    include_calls: bool = False
+    include_imports: bool = False
+    max_items: int = 10
+    include_callees: bool = False
+    include_callers: bool = False
+    callees_depth: int = 1
+    callers_limit: int = 5
+    type_filter: set[str] | None = None
+    footer_msg: str = ""
+
+
+COMPRESS_STRATEGIES = {
+    "code_edit": CompressConfig(
+        max_items=5, include_calls=False, type_filter={"function", "class"},
+        footer_msg="\n\nUsa read_file para ver el contenido completo antes de modificar."
+    ),
+    "refactor": CompressConfig(
+        include_callees=True, include_callers=True, callers_limit=5,
+        footer_msg="\n\nRefactoriza considerando callers y callees."
+    ),
+    "debug": CompressConfig(
+        include_body=True, include_callees=True, include_callers=True,
+        callers_limit=5, callees_depth=2,
+        footer_msg="\n\nDepura la funcion target. Revisa callers y callees. Usa read_file si necesitas mas contexto."
+    ),
+    "test_gen": CompressConfig(
+        include_calls=True, max_items=10,
+        footer_msg="\n\nGenera tests para la funcion target. Usa los tests existentes como referencia de estilo."
+    ),
+    "review": CompressConfig(
+        include_calls=True, max_items=10,
+        footer_msg="\n\nRevisa este codigo. Busca bugs, problemas de estilo, seguridad, y mejoras."
+    ),
+    "audit": CompressConfig(
+        include_calls=True, max_items=10,
+        footer_msg="\n\nAudita este codigo por seguridad. Busca: SQL injection, XSS, path traversal, hardcoded secrets, input validation, auth bypass."
+    ),
+}
 
 
 def compress(
@@ -48,28 +93,21 @@ def compress(
     result = ""
 
     if task_type == "code_gen":
-        result = _compress_query(top_capsules, budget_tokens)
-    elif task_type == "code_edit":
-        result = _compress_code_edit(top_capsules)
+        result = _compress_code_gen(all_capsules)
     elif task_type == "search":
         result = _compress_search(top_capsules, all_capsules, budget_tokens, dir_filter)
-    elif task_type == "refactor":
-        result = _compress_refactor(top_capsules, all_capsules)
-    elif task_type == "debug":
-        result = _compress_debug(top_capsules, all_capsules)
-    elif task_type == "test_gen":
-        result = _compress_test_gen(top_capsules, all_capsules)
-    elif task_type == "review":
-        result = _compress_review(top_capsules, all_capsules)
-    elif task_type == "optimize":
-        result = _compress_optimize(top_capsules, all_capsules)
-    elif task_type == "audit":
-        result = _compress_audit(top_capsules, all_capsules)
     elif task_type == "onboard":
         result = _compress_onboard(all_capsules)
     elif task_type == "design_review":
         result = _compress_design_review(top_capsules, all_capsules)
+    elif task_type == "optimize":
+        result = _compress_optimize(top_capsules, all_capsules)
+    elif task_type in COMPRESS_STRATEGIES:
+        # Usar estrategia configurada
+        config = COMPRESS_STRATEGIES[task_type]
+        result = _build_nodes_from_config(top_capsules, all_capsules, config, task_type)
     else:
+        # Default: code_query
         result = _compress_query(top_capsules, budget_tokens)
 
     # Inyectar paths explícitos al inicio del contexto
@@ -78,6 +116,114 @@ def compress(
         result = f"ARCHIVOS: {', '.join(files)}\n\n{result}"
 
     return result
+
+
+def _build_nodes_from_config(
+    top_capsules: list[Capsule],
+    all_capsules: list[Capsule],
+    config: CompressConfig,
+    task_type: str,
+) -> str:
+    """Construye nodos según config. Consolida lógica duplicada."""
+    target = top_capsules[0] if top_capsules else None
+    if not target and task_type != "test_gen":
+        return ""
+
+    nodes = []
+    all_by_name = {c.name: c for c in all_capsules}
+    seen = set()
+
+    # Target o primeros capsules
+    for i, c in enumerate(top_capsules[:config.max_items]):
+        if c.name in seen:
+            continue
+        if config.type_filter and c.type not in config.type_filter:
+            continue
+        seen.add(c.name)
+
+        props = {
+            "signature": c.signature,
+            "file_path": c.file_path,
+            "docstring": c.docstring or "",
+        }
+
+        if config.include_body and c.content:
+            body = c.content
+            if len(body) > 2000:
+                body = body[:2000] + "\n# ... [truncado]"
+            props["content"] = body
+
+        if config.include_calls and c.calls:
+            props["calls"] = ", ".join(c.calls[:8])
+
+        if config.include_imports and c.imports:
+            props["imports"] = ", ".join(c.imports[:8])
+
+        if "parametros" in c.properties:
+            props["parametros"] = c.properties["parametros"]
+        if "tipo_retorno" in c.properties:
+            props["tipo_retorno"] = c.properties["tipo_retorno"]
+        if "lineas" in c.properties:
+            props["lineas"] = c.properties["lineas"]
+
+        nodes.append({"id": c.id, "name": c.name, "type": c.type, "properties": props})
+
+        if i == 0 and config.include_callees:
+            # Callees del target
+            for call in c.calls[:8]:
+                if call in all_by_name and call not in seen:
+                    callee = all_by_name[call]
+                    seen.add(callee.name)
+                    nodes.append({
+                        "id": callee.id, "name": callee.name, "type": callee.type,
+                        "properties": {
+                            "signature": callee.signature,
+                            "file_path": callee.file_path,
+                            "docstring": callee.docstring or "",
+                        },
+                    })
+
+        if i == 0 and config.include_callers:
+            # Callers del target
+            callers = [c2 for c2 in all_capsules if target.name in c2.calls]
+            for caller in callers[:config.callers_limit]:
+                if caller.name not in seen:
+                    seen.add(caller.name)
+                    nodes.append({
+                        "id": caller.id, "name": caller.name, "type": caller.type,
+                        "properties": {
+                            "signature": caller.signature,
+                            "file_path": caller.file_path,
+                            "docstring": caller.docstring or "",
+                            "calls": ", ".join(caller.calls[:5]) if caller.calls else "",
+                        },
+                    })
+
+    # Tests existentes (solo test_gen)
+    if task_type == "test_gen":
+        test_caps = [c for c in all_capsules if "test" in c.name.lower() and c.type in ("function", "class")]
+        if test_caps:
+            nodes.append({
+                "id": "__tests__", "name": "__tests__", "type": "section",
+                "properties": {"descripcion": f"{len(test_caps)} tests existentes en el repo"},
+            })
+            for tc in test_caps[:8]:
+                nodes.append({
+                    "id": tc.id, "name": tc.name, "type": tc.type,
+                    "properties": {
+                        "signature": tc.signature,
+                        "file_path": tc.file_path,
+                        "docstring": tc.docstring or "",
+                    },
+                })
+
+    if not nodes:
+        return ""
+
+    context = serialize_context(nodes)
+    if config.footer_msg:
+        context += config.footer_msg
+    return context
 
 
 def _compress_code_gen(all_capsules: list[Capsule]) -> str:
@@ -104,31 +250,6 @@ def _compress_code_gen(all_capsules: list[Capsule]) -> str:
     return "\n".join(lines)
 
 
-def _compress_code_edit(top_capsules: list[Capsule]) -> str:
-    """Función target + imports. Sin cuerpos completos."""
-    nodes = []
-    seen = set()
-
-    for c in top_capsules[:5]:
-        if c.type in ("function", "class") and c.name not in seen:
-            seen.add(c.name)
-            nodes.append({
-                "id": c.id, "name": c.name, "type": c.type,
-                "properties": {
-                    "signature": c.signature,
-                    "file_path": c.file_path,
-                    "docstring": c.docstring or "",
-                    "parametros": c.properties.get("parametros", ""),
-                    "lineas": c.properties.get("lineas", c.end_line - c.start_line + 1),
-                },
-            })
-
-    if not nodes:
-        return ""
-
-    context = serialize_context(nodes)
-    context += "\n\nUsa read_file para ver el contenido completo antes de modificar."
-    return context
 
 
 def _compress_query(top_capsules: list[Capsule], budget_tokens: int) -> str:
@@ -197,47 +318,6 @@ def _compress_query(top_capsules: list[Capsule], budget_tokens: int) -> str:
     return context
 
 
-def _compress_refactor(top_capsules: list[Capsule], all_capsules: list[Capsule]) -> str:
-    """Target + callers + callees con firmas."""
-    target = top_capsules[0] if top_capsules else None
-    if not target:
-        return ""
-
-    nodes = [{
-        "id": target.id, "name": target.name, "type": target.type,
-        "properties": {
-            "signature": target.signature,
-            "file_path": target.file_path,
-            "docstring": target.docstring or "",
-            "parametros": target.properties.get("parametros", ""),
-        },
-    }]
-
-    all_by_name = {c.name: c for c in all_capsules}
-    for call in target.calls:
-        if call in all_by_name:
-            c = all_by_name[call]
-            nodes.append({
-                "id": c.id, "name": c.name, "type": c.type,
-                "properties": {
-                    "signature": c.signature,
-                    "file_path": c.file_path,
-                    "docstring": c.docstring or "",
-                },
-            })
-
-    for c in all_capsules:
-        if target.name in c.calls:
-            nodes.append({
-                "id": c.id, "name": c.name, "type": c.type,
-                "properties": {
-                    "signature": c.signature,
-                    "file_path": c.file_path,
-                    "docstring": c.docstring or "",
-                },
-            })
-
-    return serialize_context(nodes)
 
 
 def _compress_search(
@@ -302,150 +382,10 @@ def _compress_search(
     return "\n".join(summary + map_lines)
 
 
-def _compress_debug(top_capsules: list[Capsule], all_capsules: list[Capsule]) -> str:
-    """Función target + cuerpo completo + callers + callees depth 2. Máximo contexto para debugging."""
-    target = top_capsules[0] if top_capsules else None
-    if not target:
-        return _compress_query(top_capsules, 2500)
-
-    all_by_name = {c.name: c for c in all_capsules}
-    nodes = []
-
-    # Target con cuerpo completo
-    target_body = target.content or target.signature
-    if target.content and len(target.content) > 3000:
-        target_body = target.content[:3000] + "\n# ... [truncado]"
-    nodes.append({
-        "id": target.id, "name": target.name, "type": target.type,
-        "properties": {
-            "signature": target.signature,
-            "file_path": target.file_path,
-            "docstring": target.docstring or "",
-            "content": target_body,
-            "parametros": target.properties.get("parametros", ""),
-            "tipo_retorno": target.properties.get("tipo_retorno", ""),
-            "lineas": target.properties.get("lineas", target.end_line - target.start_line + 1),
-        },
-    })
-
-    # Callees depth 1
-    for call in target.calls:
-        if call in all_by_name:
-            c = all_by_name[call]
-            nodes.append({
-                "id": c.id, "name": c.name, "type": c.type,
-                "properties": {
-                    "signature": c.signature,
-                    "file_path": c.file_path,
-                    "docstring": c.docstring or "",
-                    "parametros": c.properties.get("parametros", ""),
-                },
-            })
-
-    # Callers que llaman al target
-    callers = [c for c in all_capsules if target.name in c.calls]
-    for c in callers[:5]:
-        nodes.append({
-            "id": c.id, "name": c.name, "type": c.type,
-            "properties": {
-                "signature": c.signature,
-                "file_path": c.file_path,
-                "docstring": c.docstring or "",
-                "calls": ", ".join(c.calls[:8]),
-            },
-        })
-
-    context = serialize_context(nodes)
-    context += "\n\nDepura la funcion target. Revisa callers y callees. Usa read_file si necesitas mas contexto."
-    return context
 
 
-def _compress_test_gen(top_capsules: list[Capsule], all_capsules: list[Capsule]) -> str:
-    """Función target + tests existentes en el repo como referencia."""
-    target = top_capsules[0] if top_capsules else None
-    nodes = []
-
-    if target:
-        nodes.append({
-            "id": target.id, "name": target.name, "type": target.type,
-            "properties": {
-                "signature": target.signature,
-                "file_path": target.file_path,
-                "docstring": target.docstring or "",
-                "parametros": target.properties.get("parametros", ""),
-                "tipo_retorno": target.properties.get("tipo_retorno", ""),
-                "calls": ", ".join(target.calls[:8]),
-            },
-        })
-
-    # Buscar tests existentes (funciones/clases con 'test' en nombre)
-    test_caps = [c for c in all_capsules if "test" in c.name.lower() and c.type in ("function", "class")]
-    if test_caps:
-        nodes.append({
-            "id": "__tests__", "name": "__tests__", "type": "section",
-            "properties": {
-                "descripcion": f"{len(test_caps)} tests existentes en el repo",
-            },
-        })
-        for tc in test_caps[:8]:
-            nodes.append({
-                "id": tc.id, "name": tc.name, "type": tc.type,
-                "properties": {
-                    "signature": tc.signature,
-                    "file_path": tc.file_path,
-                    "docstring": tc.docstring or "",
-                },
-            })
-
-    if not nodes:
-        return ""
-
-    context = serialize_context(nodes)
-    context += "\n\nGenera tests para la funcion target. Usa los tests existentes como referencia de estilo."
-    if test_caps:
-        context += f" Hay {len(test_caps)} tests en el repo. Lee los mas relevantes con read_file."
-    return context
 
 
-def _compress_review(top_capsules: list[Capsule], all_capsules: list[Capsule]) -> str:
-    """Top funciones modificadas + estructura de dependencias para code review."""
-    target = top_capsules[0] if top_capsules else None
-    nodes = []
-
-    if target:
-        nodes.append({
-            "id": target.id, "name": target.name, "type": target.type,
-            "properties": {
-                "signature": target.signature,
-                "file_path": target.file_path,
-                "docstring": target.docstring or "",
-                "parametros": target.properties.get("parametros", ""),
-                "tipo_retorno": target.properties.get("tipo_retorno", ""),
-                "lineas": target.properties.get("lineas", target.end_line - target.start_line + 1),
-                "calls": ", ".join(target.calls[:8]),
-            },
-        })
-
-    all_by_name = {c.name: c for c in all_capsules}
-    for c in top_capsules[1:10]:
-        if c.type not in ("function", "class", "async_function", "test"):
-            continue
-        nodes.append({
-            "id": c.id, "name": c.name, "type": c.type,
-            "properties": {
-                "signature": c.signature,
-                "file_path": c.file_path,
-                "docstring": c.docstring or "",
-                "calls": ", ".join(c.calls[:5]),
-            },
-        })
-
-    if not nodes:
-        return ""
-
-    context = serialize_context(nodes)
-    context += "\n\nRevisa este codigo. Busca bugs, problemas de estilo, seguridad, y mejoras."
-    return context
 
 
 def _compress_optimize(top_capsules: list[Capsule], all_capsules: list[Capsule]) -> str:
@@ -491,36 +431,6 @@ def _compress_optimize(top_capsules: list[Capsule], all_capsules: list[Capsule])
     return context
 
 
-def _compress_audit(top_capsules: list[Capsule], all_capsules: list[Capsule]) -> str:
-    """Funciones target con foco en seguridad."""
-    nodes = []
-    seen = set()
-
-    for c in top_capsules:
-        if c.name in seen or c.type not in ("function", "class", "async_function"):
-            continue
-        seen.add(c.name)
-        props = {
-            "signature": c.signature,
-            "file_path": c.file_path,
-            "docstring": c.docstring or "",
-            "parametros": c.properties.get("parametros", ""),
-            "calls": ", ".join(c.calls[:8]),
-        }
-        nodes.append({
-            "id": c.id, "name": c.name, "type": c.type,
-            "properties": props,
-        })
-        if len(nodes) >= 10:
-            break
-
-    if not nodes:
-        return ""
-
-    context = serialize_context(nodes)
-    context += "\n\nAudita este codigo por seguridad. Busca: SQL injection, XSS, "
-    context += "path traversal, hardcoded secrets, input validation, auth bypass."
-    return context
 
 
 def _compress_onboard(all_capsules: list[Capsule]) -> str:

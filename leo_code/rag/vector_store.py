@@ -1,5 +1,6 @@
 """VectorStore: Qdrant local con búsqueda HNSW sobre embeddings de cápsulas."""
 
+import os
 from leo_code.core.parser import Capsule
 
 
@@ -7,8 +8,14 @@ class VectorStore:
     """Almacena y busca cápsulas por similitud semántica en Qdrant local."""
 
     def __init__(self, collection_name: str = "kc_code_capsules",
-                 path: str = "./cache/qdrant", dim: int = 384):
-        self.collection_name = collection_name
+                 path: str = "./cache/qdrant", dim: int = 384,
+                 use_process_id: bool = True):
+        # Use process ID for concurrent access (tests/benchmark)
+        if use_process_id and "_" not in collection_name:
+            pid = os.getpid()
+            self.collection_name = f"{collection_name}_{pid}"
+        else:
+            self.collection_name = collection_name
         self.path = path
         self.dim = dim
         self._client = None

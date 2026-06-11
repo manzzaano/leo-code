@@ -1,4 +1,4 @@
-"""Tests: session manager — SQLite persistence."""
+"""Tests: session manager — SQLite persistence + compactor."""
 
 import pytest
 from leo_code.session import SessionManager
@@ -65,3 +65,34 @@ def test_session_messages_deleted_cascade(sm):
     sm.add_message(s.id, "user", "test")
     sm.delete_session(s.id)
     assert sm.get_session(s.id) is None
+
+
+# ── compactor ──────────────────────────────────────────────────────────────────
+
+
+def _make_messages(n: int) -> list[dict]:
+    return [{"role": "user" if i % 2 == 0 else "assistant", "content": f"mensaje {i}"}
+            for i in range(n)]
+
+
+def test_compact_empty():
+    from leo_code.session.compactor import compact_history
+    assert compact_history([], max_messages=30) == []
+
+
+def test_compact_under_threshold():
+    from leo_code.session.compactor import compact_history
+    msgs = _make_messages(10)
+    result = compact_history(msgs, max_messages=30)
+    assert result is msgs
+    assert len(result) == 10
+
+
+def test_compact_over_threshold():
+    from leo_code.session.compactor import compact_history
+    msgs = _make_messages(50)
+    result = compact_history(msgs, max_messages=30)
+    assert len(result) <= 30
+    assert result[0]["role"] == "system"
+    assert result[0]["content"].startswith("[Resumen de conversacion anterior]")
+    assert result[-1] == msgs[-1]

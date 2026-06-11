@@ -8,6 +8,7 @@ Endpoints:
   POST /preindex            — Pre-indexar sin consultar (background)
   GET  /stats               — Estadísticas del índice
   GET  /metrics             — Métricas de uso (tokens ahorrados, latencia, etc.)
+  GET  /benchmark           — Métricas históricas del benchmark
   GET  /sessions            — Listar sesiones guardadas
 
 Ejecutar: python -m leo_code.server.server  (puerto 9898)
@@ -113,6 +114,14 @@ class StatsResponse(BaseModel):
     total_files: int
     by_type: dict
     repos_indexed: list[str]
+
+
+class BenchmarkResponse(BaseModel):
+    queries_total: int
+    tokens_saved_vs_baseline: int
+    tokens_used: int
+    task_type_distribution: dict
+    top_5_tasks: list[dict]
 
 
 def _get_indexer():
@@ -523,6 +532,54 @@ async def metrics():
     }
 
 
+@app.get("/benchmark", response_model=BenchmarkResponse)
+async def benchmark():
+    """Métricas históricas del benchmark: queries, tokens, task_types, top tareas."""
+    snap = get_metrics().snapshot()
+    tasks_map: dict[str, str] = {}
+    results_dir = Path("benchmark/results_final")
+    results_tasks: list[dict] = []
+    dist: dict[str, int] = {}
+
+    try:
+        tasks_path = Path("benchmark/tasks.json")
+        if tasks_path.exists():
+            tasks_raw = json.loads(tasks_path.read_text(encoding="utf-8"))
+            tasks_map = {t["id"]: t["type"] for t in tasks_raw}
+
+        if results_dir.exists():
+            for f in results_dir.glob("*.json"):
+                if f.name == "summary.json":
+                    continue
+                data = json.loads(f.read_text(encoding="utf-8"))
+                items = data if isinstance(data, list) else [data]
+                for item in items:
+                    tid = item.get("task_id", "")
+                    ttype = tasks_map.get(tid, "unknown")
+                    dist[ttype] = dist.get(ttype, 0) + 1
+                    results_tasks.append({
+                        "task_id": tid,
+                        "type": ttype,
+                        "model": item.get("model", ""),
+                        "mode": item.get("mode", ""),
+                        "score": item.get("score", 0),
+                        "tokens": item.get("tokens", 0),
+                        "duration_s": item.get("duration_s", 0),
+                    })
+    except Exception:
+        pass
+
+    results_tasks.sort(key=lambda x: x.get("score", 0), reverse=True)
+
+    return BenchmarkResponse(
+        queries_total=snap.queries_total,
+        tokens_saved_vs_baseline=snap.tokens_saved,
+        tokens_used=snap.tokens_used,
+        task_type_distribution=dist,
+        top_5_tasks=results_tasks[:5],
+    )
+
+
 @app.get("/sessions")
 async def list_sessions(limit: int = Query(20, ge=1, le=100)):
     """Lista sesiones guardadas (multi-turn)."""
@@ -603,6 +660,7 @@ def main():
     print(f"  POST http://{args.host}:{args.port}/preindex")
     print(f"  GET  http://{args.host}:{args.port}/stats")
     print(f"  GET  http://{args.host}:{args.port}/metrics")
+    print(f"  GET  http://{args.host}:{args.port}/benchmark")
     print(f"  GET  http://{args.host}:{args.port}/sessions")
     print(f"  GET  http://{args.host}:{args.port}/plugins")
     if _global_plugin_manager:
