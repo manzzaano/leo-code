@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Optional
 from leo_code.rag.agent.tools import ToolRegistry
 from leo_code.core.metrics import get_metrics
+from leo_code.rag.conversation_history import ConversationHistory
 
 log = logging.getLogger("leo.agent")
 
@@ -28,6 +29,7 @@ class AgentLoop:
         self._indexer = None
         self._vector_store = None
         self._bm25 = None
+        self._conversation_history = None
         self._indexed_repos = set()
         self._recent_calls: set[str] = set()  # anti-loop
         self._tool_call_count = 0
@@ -108,6 +110,9 @@ class AgentLoop:
             if not resp.tool_calls:
                 if session_id:
                     self._persist_turn(session_id, query, text, model, total_tokens)
+                # Save to conversation history
+                if self._conversation_history and context:
+                    self._conversation_history.save_conversation(query, context, total_tokens, iteration + 1)
                 duration_ms = int((time.time() - t0) * 1000)
                 get_metrics().record_query(total_tokens, duration_ms,
                                           t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms)
@@ -346,6 +351,9 @@ class AgentLoop:
                 total_tokens += len(text) // 4
                 if session_id:
                     self._persist_turn(session_id, query, text, model, total_tokens)
+                # Save to conversation history
+                if self._conversation_history and context:
+                    self._conversation_history.save_conversation(query, context, total_tokens, iteration + 1)
                 duration_ms = int((time.time() - t0) * 1000)
                 get_metrics().record_query(total_tokens, duration_ms,
                                           t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms)
@@ -454,6 +462,14 @@ class AgentLoop:
             from leo_code.rag.compressor import compress
             context = compress(top_caps, list(caps.values()), budget_tokens=budget, task_type=task_type)
             timings["t_compress_ms"] = (time.perf_counter() - t_comp0) * 1000
+
+            # Load previous conversation context if available
+            if self._conversation_history:
+                prev = self._conversation_history.load_previous_contexts(query, limit=2)
+                if prev.get("accumulated_context"):
+                    # Prepend previous context with separator
+                    context = f"{prev['accumulated_context']}\n--- Current Query ---\n{context}"
+
             return context, timings
         except Exception as e:
             log.exception(f"KC-RAG error: {e}")
@@ -492,6 +508,9 @@ class AgentLoop:
         from leo_code.rag.bm25 import BM25Index
         self._bm25 = BM25Index()
         self._bm25.add(caps_list)
+
+        # Initialize conversation history
+        self._conversation_history = ConversationHistory(repo_path)
 
         self._indexed_repos.add(repo_path)
 
