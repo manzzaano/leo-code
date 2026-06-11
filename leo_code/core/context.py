@@ -1,15 +1,17 @@
-"""Serialización compacta de contexto para enviar al LLM."""
+"""Serialización markdown de contexto para enviar al LLM."""
 
 
 def serialize_context(nodes: list[dict], edges: list[dict] = None) -> str:
     """
-    Formato compacto: 1 línea por entidad + sección de relaciones.
-    [nombre|tipo] prop1=val1, prop2=val2
-    ---
-    [from]-[REL]-[to]
+    Markdown format: readable to LLM, visual hierarchy.
 
-    Incluye campos de código Y de dominio (descripcion, precio, descuento…).
-    Excluye embeddings, hashes y metadatos internos.
+    Format per entity:
+    ## name (type)
+    **File:** path
+    **Signature:** function_signature
+    **Doc:** brief description
+
+    Relations at end if edges provided.
     """
     lines = []
     node_map = {n["id"]: n.get("name", n["id"]) for n in nodes}
@@ -23,7 +25,8 @@ def serialize_context(nodes: list[dict], edges: list[dict] = None) -> str:
     target_keys = {
         # Código
         "parametros", "lineas_aprox", "lineas", "module", "docstring", "tipo_retorno",
-        "metodos_publicos", "metodos", "hereda_de", "path", "importado_por", "confidence",
+        "metodos_publicos", "metodos", "hereda_de", "file_path", "path", "importado_por", "confidence",
+        "calls", "imports",
         # Dominio
         "descripcion", "description", "precio", "precio_base", "precio_final",
         "descuento", "descuento_pct", "porcentaje", "valor", "valor_maximo",
@@ -34,38 +37,46 @@ def serialize_context(nodes: list[dict], edges: list[dict] = None) -> str:
 
     for node in nodes:
         name = node.get("name", node.get("id", "?"))
-        ntype = node.get("type", "")
-        props: dict[str, str] = {}
+        ntype = node.get("type", "").upper() or "ENTITY"
 
-        # 1. Campos del sub-dict "properties" (si existe)
+        # Header
+        lines.append(f"## {name} ({ntype})")
+        lines.append("")
+
+        # Props from properties dict + root fields
         props_source = node.get("properties", {}) or {}
-        for k, v in props_source.items():
-            if v and k not in skip_keys:
-                vshort = str(v).replace("\n", " ").strip()
-                if len(vshort) > 120:
-                    vshort = vshort[:117] + "..."
-                props[k] = vshort
 
-        # 2. Campos root-level en target_keys
+        # Build ordered output
         for k in target_keys:
-            v = node.get(k)
-            if v and k not in props:
-                vshort = str(v).replace("\n", " ").strip()
-                if len(vshort) > 120:
-                    vshort = vshort[:117] + "..."
-                props[k] = vshort
+            # Try properties dict first, then root
+            v = props_source.get(k) or node.get(k)
+            if v and k not in skip_keys:
+                v_str = str(v).replace("\n", " ").strip()
+                if len(v_str) > 120:
+                    v_str = v_str[:117] + "..."
+                # Format key name
+                key_label = k.replace("_", " ").title()
+                lines.append(f"**{key_label}:** {v_str}")
 
-        props_str = ", ".join(f"{k}={v}" for k, v in props.items())
-        line = f"[{name}|{ntype}]"
-        if props_str:
-            line += f" {props_str}"
-        lines.append(line)
+        # Any remaining props in properties dict
+        for k, v in props_source.items():
+            if v and k not in skip_keys and k not in target_keys:
+                v_str = str(v).replace("\n", " ").strip()
+                if len(v_str) > 120:
+                    v_str = v_str[:117] + "..."
+                key_label = k.replace("_", " ").title()
+                lines.append(f"**{key_label}:** {v_str}")
 
+        lines.append("")  # Blank line between entities
+
+    # Edges section
     if edges:
-        lines.append("---")
+        lines.append("## Relations")
+        lines.append("")
         for edge in edges:
             from_name = node_map.get(edge["from"], edge["from"][:12])
             to_name = node_map.get(edge["to"], edge["to"][:12])
-            lines.append(f"[{from_name}]-[{edge['type']}]-[{to_name}]")
+            rel_type = edge.get("type", "RELATES")
+            lines.append(f"- {from_name} **[{rel_type}]** {to_name}")
 
     return "\n".join(lines)
