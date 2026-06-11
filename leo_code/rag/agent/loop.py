@@ -13,6 +13,8 @@ from typing import Optional
 from leo_code.rag.agent.tools import ToolRegistry
 from leo_code.core.metrics import get_metrics
 from leo_code.rag.conversation_history import ConversationHistory
+from leo_code.rag.semantic_clustering import SemanticClusterer
+from leo_code.rag.cluster_serializer import serialize_clusters
 
 log = logging.getLogger("leo.agent")
 
@@ -29,6 +31,8 @@ class AgentLoop:
         self._indexer = None
         self._vector_store = None
         self._bm25 = None
+        self._clusterer = None
+        self._clusters = None
         self._conversation_history = None
         self._indexed_repos = set()
         self._recent_calls: set[str] = set()  # anti-loop
@@ -459,8 +463,24 @@ class AgentLoop:
             timings["t_search_ms"] = (time.perf_counter() - t_search0) * 1000
 
             t_comp0 = time.perf_counter()
-            from leo_code.rag.compressor import compress
-            context = compress(top_caps, list(caps.values()), budget_tokens=budget, task_type=task_type)
+
+            # Use hierarchical cluster serialization if available
+            if self._clusters and top_caps:
+                # Find clusters containing top_caps
+                cluster_ids = set()
+                for cap in top_caps:
+                    cid = self._clusterer.capsule_to_cluster.get(cap.id)
+                    if cid is not None:
+                        cluster_ids.add(cid)
+
+                # Get clusters and serialize hierarchically
+                relevant_clusters = [self._clusters[cid] for cid in sorted(cluster_ids) if cid < len(self._clusters)]
+                context = serialize_clusters(relevant_clusters)
+            else:
+                # Fallback to compression
+                from leo_code.rag.compressor import compress
+                context = compress(top_caps, list(caps.values()), budget_tokens=budget, task_type=task_type)
+
             timings["t_compress_ms"] = (time.perf_counter() - t_comp0) * 1000
 
             # Load previous conversation context if available
@@ -508,6 +528,15 @@ class AgentLoop:
         from leo_code.rag.bm25 import BM25Index
         self._bm25 = BM25Index()
         self._bm25.add(caps_list)
+
+        # Initialize semantic clustering
+        from leo_code.rag.encoder import Encoder
+        encoder = Encoder()
+        self._clusterer = SemanticClusterer(encoder)
+
+        # Encode all capsules and cluster them
+        embeddings = encoder.encode_batch([f"{c.name} {c.docstring or ''}" for c in caps_list])
+        self._clusters = self._clusterer.cluster(caps_list, embeddings)
 
         # Initialize conversation history
         self._conversation_history = ConversationHistory(repo_path)
