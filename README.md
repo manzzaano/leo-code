@@ -38,15 +38,7 @@ Contexto estructural (~400–2000 tokens)
 El modelo responde sin haber abierto ningún archivo
 ```
 
-## 📊 Resultados en repos reales
-
-| Repo | Chunking tradicional | KC-RAG | Reducción |
-|------|---------------------|--------|-----------|
-| django (1.2M LOC) | ~8,200 tokens/consulta | ~1,100 tokens/consulta | **86% menos** |
-| fastapi (65k LOC) | ~4,500 tokens/consulta | ~680 tokens/consulta | **85% menos** |
-| leo-code (10k LOC) | ~2,300 tokens/consulta | ~420 tokens/consulta | **82% menos** |
-
-> *Resultados estimados basados en consultas típicas de "explain function" y "find bug".*
+## 📊 Compresión de contexto
 
 ### Tipos de tarea y compresión adaptativa
 
