@@ -29,7 +29,7 @@ def run_leo(query: str, repo: str) -> dict:
         env = {**os.environ, "DEEPSEEK_API_KEY": os.getenv("DEEPSEEK_API_KEY", "")}
         r = subprocess.run(
             LEO_CMD + [query, repo, MODEL],
-            capture_output=True, text=True, timeout=300, env=env, cwd=repo,
+            capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=300, env=env, cwd=repo,
         )
         # Parse from stderr (leo_ask writes result to stderr)
         stderr = r.stderr or ""
@@ -59,7 +59,7 @@ def run_oc(query: str, repo: str) -> dict:
         env = {**os.environ, "DEEPSEEK_API_KEY": os.getenv("DEEPSEEK_API_KEY", "")}
         r = subprocess.run(
             OC_CMD + [query, "-m", "deepseek/deepseek-chat"],
-            capture_output=True, text=True, timeout=300, env=env, cwd=repo,
+            capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=300, env=env, cwd=repo,
         )
         out = r.stdout or ""
         # Filter ANSI and log lines

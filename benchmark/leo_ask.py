@@ -1,6 +1,13 @@
 """Launcher para benchmark: emula leo-code ask como subproceso."""
 import sys, asyncio, os, json
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env.local from project root, not from current working directory
+project_root = Path(__file__).parent.parent
+load_dotenv(project_root / '.env.local')
+
+sys.path.insert(0, str(project_root))
 from leo_code.rag.agent.loop import AgentLoop
 from leo_code.rag.agent.tools import ToolRegistry
 

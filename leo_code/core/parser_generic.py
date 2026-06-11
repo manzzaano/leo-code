@@ -255,43 +255,71 @@ def _find_block_end(lines: list[str], start_lineno: int, language: str) -> int:
     if start_lineno < 1 or start_lineno > len(lines):
         return min(start_lineno + 10, len(lines))
 
+    MAX_BLOCK = 200
+    _openers = {"do", "if", "unless", "case", "while", "until", "for", "begin", "def", "class", "module"}
     brace_langs = {"javascript", "typescript", "go", "rust", "java", "c", "cpp", "csharp",
                    "php", "swift", "kotlin", "scala", "dart", "objectivec", "perl", "shell"}
+
     if language in brace_langs:
-        depth = 0
-        started = False
-        for i in range(start_lineno - 1, len(lines)):
-            line = lines[i]
-            depth += line.count("{") - line.count("}")
-            if "{" in line:
-                started = True
-            if started and depth == 0:
-                return i + 1
+        end = min(len(lines), start_lineno - 1 + MAX_BLOCK)
+        text = "\n".join(lines[start_lineno - 1 : end])
+        open_pos = text.find("{")
+        if open_pos == -1:
+            return min(start_lineno + 10, len(lines))
+        depth = 1
+        idx = open_pos + 1
+        while idx < len(text):
+            if text[idx] == "{":
+                depth += 1
+            elif text[idx] == "}":
+                depth -= 1
+                if depth == 0:
+                    return start_lineno + text[:idx].count("\n")
+            idx += 1
         return min(start_lineno + 20, len(lines))
 
     if language in ("ruby", "lua", "elixir", "julia"):
-        match = re.match(r"^\s*", lines[start_lineno - 1])
-        base_indent = len(match.group()) if match else 0
-        for i in range(start_lineno, len(lines)):
-            line = lines[i].strip()
-            if line == "end":
-                return i + 1
-            if line and not line.startswith(" " * (base_indent + 1)):
-                if i > start_lineno + 1:
-                    return i
+        base_indent = len(lines[start_lineno - 1]) - len(lines[start_lineno - 1].lstrip())
+        end = min(len(lines), start_lineno + MAX_BLOCK)
+        text = "\n".join(lines[start_lineno - 1 : end])
+        lines_sub = text.split("\n")
+        for i, line in enumerate(lines_sub):
+            stripped = line.strip()
+            if not stripped or stripped.startswith(("#", "--", "//")):
+                continue
+            if stripped == "end":
+                indent = len(line) - len(line.lstrip())
+                if depth == 0:
+                    if indent <= base_indent:
+                        return start_lineno + i
+                else:
+                    depth -= 1
+            else:
+                first = stripped.split(None, 1)[0]
+                if first in _openers:
+                    depth += 1
         return min(start_lineno + 30, len(lines))
 
     if language == "sql":
+        text = "\n".join(lines[start_lineno - 1 : min(len(lines), start_lineno - 1 + MAX_BLOCK)])
+        upper = text.upper()
         depth = 0
-        started = False
-        for i in range(start_lineno - 1, len(lines)):
-            line = lines[i].upper().strip()
-            depth += line.count("BEGIN") - line.count("END")
-            if "BEGIN" in line:
-                started = True
-            if started and depth == 0:
-                return i + 1
-        return min(start_lineno + 30, len(lines))
+        pos = 0
+        while True:
+            begin = upper.find("BEGIN", pos)
+            end = upper.find("END", pos)
+            if begin == -1 and end == -1:
+                return min(start_lineno + 30, len(lines))
+            next_pos = min(begin, end) if begin != -1 and end != -1 else (begin if begin != -1 else end)
+            token = "BEGIN" if next_pos == begin else "END"
+            line_s = upper.rfind("\n", 0, next_pos) + 1
+            line_e = upper.index("\n", next_pos + 1) if "\n" in upper[next_pos + 1:] else len(upper)
+            line = upper[line_s:line_e].strip()
+            if not re.match(r'^[^{}]*$', line):
+                depth += 1 if token == "BEGIN" else -1
+                if depth == 0:
+                    return start_lineno + upper[:next_pos].count("\n") + (1 if "BEGIN" in line else 0)
+            pos = next_pos + 1
 
     return min(start_lineno + 10, len(lines))
 

@@ -68,11 +68,11 @@ class GoalRunner:
 
         # Fase 1: PLANIFICAR
         yield {"type": "goal_phase", "phase": "planning"}
-        plan = await self._plan(goal_text, repo_path, model, plugin_manager, skill_manager)
+        plan = await self._plan(goal_text, repo_path, model, plugin_manager, skill_manager, max_steps=12)
         if not plan:
             yield {"type": "goal_error", "error": "No se pudo generar un plan"}
             return
-        for i, step_desc in enumerate(plan[:12], 1):
+        for i, step_desc in enumerate(plan, 1):
             self.goal.steps.append(GoalStep(index=i, description=step_desc))
         yield {"type": "plan", "steps": [s.description for s in self.goal.steps]}
 
@@ -142,7 +142,7 @@ class GoalRunner:
                "iterations": self.goal.iterations}
 
     async def _plan(self, goal_text: str, repo_path: str, model: str,
-                    plugin_manager, skill_manager) -> list[str]:
+                    plugin_manager, skill_manager, max_steps: int = 12) -> list[str]:
         """LLM descompone el goal en pasos concretos."""
         query = f"""Descompón esta tarea en pasos concretos y ordenados. Responde SOLO con una lista numerada, un paso por línea. Sé específico: menciona archivos, funciones, herramientas a usar.
 
@@ -168,7 +168,7 @@ Formato:
                     step = line.lstrip("0123456789. -)").strip()
                     if step and len(step) > 3:
                         steps.append(step)
-            return steps[:12] if steps else [goal_text[:120]]
+            return steps[:max_steps] if steps else [goal_text[:120]]
         except Exception:
             return [goal_text[:120]]
 
@@ -188,7 +188,7 @@ Formato:
             try:
                 from leo_code.rag.classifier import classify_task
                 tt = classify_task(query)
-                ctx = self.agent._build_context(query, repo_path, tt)
+                ctx, _ = self.agent._build_context(query, repo_path, tt)
                 if ctx:
                     context = ctx
                     messages.insert(1, {"role": "system", "content": f"Contexto:\n{context}"})

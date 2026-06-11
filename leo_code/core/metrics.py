@@ -26,6 +26,11 @@ class MetricsSnapshot:
     capsules_indexed: int = 0
     repos_indexed: int = 0
     uptime_seconds: float = 0
+    t_index_ms: float = 0
+    t_classify_ms: float = 0
+    t_search_ms: float = 0
+    t_compress_ms: float = 0
+    t_llm_ms: float = 0
 
 
 class MetricsTracker:
@@ -39,14 +44,29 @@ class MetricsTracker:
         self._latencies: list[int] = []
         self._capsules = 0
         self._repos = 0
+        self._phase_timings = {
+            "t_index_ms": [],
+            "t_classify_ms": [],
+            "t_search_ms": [],
+            "t_compress_ms": [],
+            "t_llm_ms": [],
+        }
 
-    def record_query(self, tokens: int, latency_ms: int):
+    def record_query(self, tokens: int, latency_ms: int,
+                     t_index_ms: float = 0, t_classify_ms: float = 0,
+                     t_search_ms: float = 0, t_compress_ms: float = 0,
+                     t_llm_ms: float = 0):
         with self._lock:
             self._queries += 1
             self._tokens_used += tokens
             self._latencies.append(latency_ms)
             if len(self._latencies) > 10_000:
                 self._latencies = self._latencies[-5_000:]
+            self._phase_timings["t_index_ms"].append(t_index_ms)
+            self._phase_timings["t_classify_ms"].append(t_classify_ms)
+            self._phase_timings["t_search_ms"].append(t_search_ms)
+            self._phase_timings["t_compress_ms"].append(t_compress_ms)
+            self._phase_timings["t_llm_ms"].append(t_llm_ms)
 
     def record_cache_hit(self):
         with self._lock:
@@ -67,6 +87,9 @@ class MetricsTracker:
             saved = max(0, baseline - self._tokens_used)
             latencies = sorted(self._latencies) if self._latencies else [0]
 
+            def _avg(lst: list[float]) -> float:
+                return sum(lst) / len(lst) if lst else 0
+
             return MetricsSnapshot(
                 queries_total=self._queries,
                 tokens_saved=saved,
@@ -79,6 +102,11 @@ class MetricsTracker:
                 capsules_indexed=self._capsules,
                 repos_indexed=self._repos,
                 uptime_seconds=time.time() - self._start_time,
+                t_index_ms=_avg(self._phase_timings["t_index_ms"]),
+                t_classify_ms=_avg(self._phase_timings["t_classify_ms"]),
+                t_search_ms=_avg(self._phase_timings["t_search_ms"]),
+                t_compress_ms=_avg(self._phase_timings["t_compress_ms"]),
+                t_llm_ms=_avg(self._phase_timings["t_llm_ms"]),
             )
 
     @property
