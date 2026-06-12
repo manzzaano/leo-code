@@ -44,10 +44,10 @@ def serialize_clusters(clusters: list[SemanticCluster], token_budget: int = 4000
         lines.append(header.rstrip())
         char_count += len(header)
 
-        # Nodes in cluster: limit based on available space
+        # Nodes in cluster: limit based on available space, but cap at 8
         remaining_budget = char_budget - char_count
         avg_node_size = 200  # Rough estimate
-        max_nodes = max(1, remaining_budget // avg_node_size)
+        max_nodes = min(8, max(1, remaining_budget // avg_node_size))
 
         for node in cluster.capsules[:max_nodes]:
             node_header = f"## {node.name} ({node.type})\n"
