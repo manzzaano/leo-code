@@ -261,29 +261,24 @@ def _find_block_end(lines: list[str], start_lineno: int, language: str) -> int:
                    "php", "swift", "kotlin", "scala", "dart", "objectivec", "perl", "shell"}
 
     if language in brace_langs:
-        end = min(len(lines), start_lineno - 1 + MAX_BLOCK)
-        text = "\n".join(lines[start_lineno - 1 : end])
-        open_pos = text.find("{")
-        if open_pos == -1:
-            return min(start_lineno + 10, len(lines))
-        depth = 1
-        idx = open_pos + 1
-        while idx < len(text):
-            if text[idx] == "{":
-                depth += 1
-            elif text[idx] == "}":
-                depth -= 1
-                if depth == 0:
-                    return start_lineno + text[:idx].count("\n")
-            idx += 1
+        max_lineno = min(len(lines), start_lineno - 1 + MAX_BLOCK)
+        depth = 0
+        for lineno in range(start_lineno, max_lineno + 1):
+            for ch in lines[lineno - 1]:
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        return lineno
         return min(start_lineno + 20, len(lines))
 
     if language in ("ruby", "lua", "elixir", "julia"):
         base_indent = len(lines[start_lineno - 1]) - len(lines[start_lineno - 1].lstrip())
         end = min(len(lines), start_lineno + MAX_BLOCK)
-        text = "\n".join(lines[start_lineno - 1 : end])
-        lines_sub = text.split("\n")
-        for i, line in enumerate(lines_sub):
+        depth = 0
+        for i in range(start_lineno, end):
+            line = lines[i - 1]
             stripped = line.strip()
             if not stripped or stripped.startswith(("#", "--", "//")):
                 continue
@@ -291,10 +286,10 @@ def _find_block_end(lines: list[str], start_lineno: int, language: str) -> int:
                 indent = len(line) - len(line.lstrip())
                 if depth == 0:
                     if indent <= base_indent:
-                        return start_lineno + i
+                        return i
                 else:
                     depth -= 1
-            else:
+            elif not stripped.startswith("end"):
                 first = stripped.split(None, 1)[0]
                 if first in _openers:
                     depth += 1

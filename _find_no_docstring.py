@@ -1,66 +1,71 @@
 import ast
 import os
-import sys
 
-def has_docstring(node):
-    if (node.body and 
-        isinstance(node.body[0], ast.Expr) and 
-        isinstance(node.body[0].value, (ast.Constant, ast.Str))):
-        doc = node.body[0].value.value if isinstance(node.body[0].value, ast.Constant) else node.body[0].value.s
-        if isinstance(doc, str) and doc.strip():
-            return True
-    return False
-
-def count_loc(filepath, start_line, end_line):
-    with open(filepath, 'r', encoding='utf-8') as f:
-        lines = f.readlines()
-    count = 0
-    for i in range(start_line - 1, min(end_line, len(lines))):
-        line = lines[i].strip()
-        if line and not line.startswith('#'):
-            count += 1
-    return count
-
-results = []
-root_dir = '.'
-exclude_dirs = {'__pycache__', '.git', 'venv', '.venv', 'node_modules', '.pytest_cache', '.mypy_cache', '.ruff_cache'}
-
-for dirpath, dirnames, filenames in os.walk(root_dir):
-    dirnames[:] = [d for d in dirnames if d not in exclude_dirs and not d.startswith('.')]
-    for fname in filenames:
-        if not fname.endswith('.py'):
-            continue
-        fpath = os.path.join(dirpath, fname)
-        try:
-            with open(fpath, 'r', encoding='utf-8') as f:
-                source = f.read()
-            tree = ast.parse(source, filename=fpath)
-        except Exception as e:
-            sys.stderr.write(f"Error parsing {fpath}: {e}\n")
-            continue
+def get_function_class_info(filepath):
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+        tree = ast.parse(content, filename=filepath)
+    except (SyntaxError, UnicodeDecodeError) as e:
+        return []
+    
+    results = []
+    
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            name = node.name
+            lineno = node.lineno
+            end_lineno = node.end_lineno if hasattr(node, 'end_lineno') else lineno
+            lines_of_code = end_lineno - lineno + 1
+            
+            has_docstring = False
+            if node.body and isinstance(node.body[0], ast.Expr) and isinstance(node.body[0].value, (ast.Str, ast.Constant)):
+                val = node.body[0].value
+                if isinstance(val, ast.Constant) and isinstance(val.value, str):
+                    has_docstring = True
+                elif isinstance(val, ast.Str):
+                    has_docstring = True
+            
+            if not has_docstring:
+                results.append((filepath, lineno, name, 'function', lines_of_code))
         
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                if not has_docstring(node):
-                    name = node.name
-                    kind = 'Class' if isinstance(node, ast.ClassDef) else 'Function'
-                    loc = count_loc(fpath, node.lineno, node.end_lineno)
-                    results.append((loc, fpath, node.lineno, kind, name))
+        if isinstance(node, ast.ClassDef):
+            name = node.name
+            lineno = node.lineno
+            end_lineno = node.end_lineno if hasattr(node, 'end_lineno') else lineno
+            lines_of_code = end_lineno - lineno + 1
+            
+            has_docstring = False
+            if node.body and isinstance(node.body[0], ast.Expr) and isinstance(node.body[0].value, (ast.Str, ast.Constant)):
+                val = node.body[0].value
+                if isinstance(val, ast.Constant) and isinstance(val.value, str):
+                    has_docstring = True
+                elif isinstance(val, ast.Str):
+                    has_docstring = True
+            
+            if not has_docstring:
+                results.append((filepath, lineno, name, 'class', lines_of_code))
+    
+    return results
 
-results.sort(key=lambda x: -x[0])
+# Buscar recursivamente
+all_results = []
+for root, dirs, files in os.walk('.'):
+    dirs[:] = [d for d in dirs if d not in ('__pycache__', '.git', 'venv', 'env', '.venv', 'node_modules', '.pytest_cache', '.mypy_cache')]
+    for f in files:
+        if f.endswith('.py'):
+            filepath = os.path.join(root, f)
+            all_results.extend(get_function_class_info(filepath))
 
-print(f"Total: {len(results)} funciones/clases sin docstring")
+all_results.sort(key=lambda x: x[4], reverse=True)
+
+print(f'Total de funciones/clases sin docstring: {len(all_results)}')
 print()
-print("Top 10:")
-print(f"{'LOC':<6} {'Tipo':<10} {'Nombre':<50} {'Archivo':<60} {'Linea':<6}")
-print("-" * 130)
-for loc, fpath, lineno, kind, name in results[:10]:
-    relpath = os.path.relpath(fpath, root_dir)
-    print(f"{loc:<6} {kind:<10} {name:<50} {relpath:<60} {lineno:<6}")
-
-print()
-print("--- Todas con >= 10 LOC ---")
-for loc, fpath, lineno, kind, name in results:
-    if loc >= 10:
-        relpath = os.path.relpath(fpath, root_dir)
-        print(f"{loc:<6} {kind:<10} {name:<50} {relpath:<60} {lineno:<6}")
+print('TOP 10 - Funciones/Clases sin docstring (ordenadas por líneas de código):')
+print('=' * 110)
+print(f'{"#":<4} {"Archivo":<50} {"Línea":<6} {"Tipo":<10} {"Nombre":<30} {"LOC":<6}')
+print('=' * 110)
+for i, (filepath, lineno, name, typ, loc) in enumerate(all_results[:10], 1):
+    short_path = filepath.replace('\\', '/').replace('./', '')
+    print(f'{i:<4} {short_path:<50} {lineno:<6} {typ:<10} {name:<30} {loc:<6}')
+print('=' * 110)
