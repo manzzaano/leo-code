@@ -466,16 +466,16 @@ class AgentLoop:
 
             # Use hierarchical cluster serialization if available
             if self._clusters and top_caps:
-                # Find clusters containing top_caps
+                # Find clusters containing top_caps (already ranked by hybrid search)
                 cluster_ids = set()
                 for cap in top_caps:
                     cid = self._clusterer.capsule_to_cluster.get(cap.id)
                     if cid is not None:
                         cluster_ids.add(cid)
 
-                # Get clusters and serialize hierarchically
+                # Get clusters and serialize hierarchically (dynamic by token budget)
                 relevant_clusters = [self._clusters[cid] for cid in sorted(cluster_ids) if cid < len(self._clusters)]
-                context = serialize_clusters(relevant_clusters)
+                context = serialize_clusters(relevant_clusters, token_budget=budget)
             else:
                 # Fallback to compression
                 from leo_code.rag.compressor import compress
