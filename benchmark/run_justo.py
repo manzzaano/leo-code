@@ -71,8 +71,11 @@ def run_oc(query: str, repo: str) -> dict:
             if s and not s[:4] in ("INFO", "WARN", "ERRO") and not s.startswith("---"):
                 lines.append(s)
         response = "\n".join(lines).strip()
+        # Estimate tokens: ~4 chars per token
+        estimated_tokens = len(response) // 4
         return {"system": "OC", "response": response[:4000],
-                "duration_s": round(time.time() - t0, 1)}
+                "duration_s": round(time.time() - t0, 1),
+                "tokens": estimated_tokens}
     except subprocess.TimeoutExpired:
         return {"system": "OC", "response": "[TIMEOUT 300s]", "duration_s": 300}
     except Exception as e:

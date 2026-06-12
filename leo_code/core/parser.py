@@ -486,7 +486,9 @@ def _detect_python_extra(c: Capsule, content: str, content_lower: str = "", deco
     return False
 
 
-def _detect_middleware(c: Capsule, content_lower: str, lang: str) -> None:
+def _detect_middleware(c: Capsule, content: str = "", content_lower: str = "", decorators: str = "", hereda: str = "", decos: str = "") -> None:
+    content_lower = content_lower or (c.content or "").lower()
+    lang = c.language
     is_mw_py = lang == "python" and "middleware" in (c.name or "").lower()
     is_mw_js = lang in ("javascript", "typescript") and any(s in content_lower for s in ("next()", "res.status", "req.", "req.body"))
     if is_mw_py or is_mw_js:
@@ -495,60 +497,34 @@ def _detect_middleware(c: Capsule, content_lower: str, lang: str) -> None:
             c.properties.setdefault("framework", "express" if lang == "javascript" else "fastapi")
 
 
-def _detect_lang_python(c: Capsule, content: str, content_lower: str, decorators: str, hereda: str, decos: str) -> None:
+def _dispatch_python(c: Capsule, content: str, content_lower: str, decorators: str, hereda: str, decos: str) -> None:
     _detect_python(c, content, content_lower, decorators, hereda, decos)
     _detect_python_extra(c, content, content_lower, decorators, hereda, decos)
+    _detect_middleware(c, content, content_lower, decorators, hereda, decos)
 
 
-def _detect_lang_jsts(c: Capsule, content: str, content_lower: str, decorators: str, hereda: str, decos: str) -> None:
+def _dispatch_jsts(c: Capsule, content: str, content_lower: str, decorators: str, hereda: str, decos: str) -> None:
     _detect_jsts(c, content, content_lower, decorators, hereda, decos)
     _detect_vue(c, content, content_lower, decorators, hereda, decos)
     _detect_angular(c, content, content_lower, decorators, hereda, decos)
     _detect_svelte(c, content, content_lower, decorators, hereda, decos)
     _detect_nuxt(c, content, content_lower, decorators, hereda, decos)
     _detect_remix(c, content, content_lower, decorators, hereda, decos)
-
-
-def _detect_lang_java_kotlin(c: Capsule, content: str, content_lower: str, decorators: str, hereda: str, decos: str) -> None:
-    _detect_java_kotlin(c, content, content_lower, decorators, hereda, decos)
-
-
-def _detect_lang_php(c: Capsule, content: str, content_lower: str, decorators: str, hereda: str, decos: str) -> None:
-    _detect_php(c, content, content_lower, decorators, hereda, decos)
-
-
-def _detect_lang_csharp(c: Capsule, content: str, content_lower: str, decorators: str, hereda: str, decos: str) -> None:
-    _detect_csharp(c, content, content_lower, decorators, hereda, decos)
-
-
-def _detect_lang_ruby(c: Capsule, content: str, content_lower: str, decorators: str, hereda: str, decos: str) -> None:
-    _detect_ruby(c, content, content_lower, decorators, hereda, decos)
-
-
-def _detect_lang_go(c: Capsule, content: str, content_lower: str, decorators: str, hereda: str, decos: str) -> None:
-    _detect_go(c, content, content_lower, decorators, hereda, decos)
-
-
-def _detect_lang_rust(c: Capsule, content: str, content_lower: str, decorators: str, hereda: str, decos: str) -> None:
-    _detect_rust(c, content, content_lower, decorators, hereda, decos)
-
-
-def _detect_lang_elixir(c: Capsule, content: str, content_lower: str, decorators: str, hereda: str, decos: str) -> None:
-    _detect_elixir(c, content, content_lower, decorators, hereda, decos)
+    _detect_middleware(c, content, content_lower, decorators, hereda, decos)
 
 
 _LANG_DISPATCH: dict[str, tuple] = {
-    "python": (_detect_lang_python,),
-    "javascript": (_detect_lang_jsts,),
-    "typescript": (_detect_lang_jsts,),
-    "java": (_detect_lang_java_kotlin,),
-    "kotlin": (_detect_lang_java_kotlin,),
-    "php": (_detect_lang_php,),
-    "csharp": (_detect_lang_csharp,),
-    "ruby": (_detect_lang_ruby,),
-    "go": (_detect_lang_go,),
-    "rust": (_detect_lang_rust,),
-    "elixir": (_detect_lang_elixir,),
+    "python": _dispatch_python,
+    "javascript": _dispatch_jsts,
+    "typescript": _dispatch_jsts,
+    "java": _detect_java_kotlin,
+    "kotlin": _detect_java_kotlin,
+    "php": _detect_php,
+    "csharp": _detect_csharp,
+    "ruby": _detect_ruby,
+    "go": _detect_go,
+    "rust": _detect_rust,
+    "elixir": _detect_elixir,
 }
 
 
@@ -564,11 +540,10 @@ def detect_frameworks(capsules: list[Capsule]) -> list[Capsule]:
 
         dispatch = _LANG_DISPATCH.get(lang)
         if dispatch is not None:
-            dispatch[0](c, content, content_lower, decorators, hereda, decos)
+            dispatch(c, content, content_lower, decorators, hereda, decos)
 
         _detect_graphql(c, content, lang)
         _detect_grpc(c, content, filepath)
-        _detect_middleware(c, content_lower, lang)
 
     return capsules
 
