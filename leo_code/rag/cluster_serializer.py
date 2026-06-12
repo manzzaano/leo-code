@@ -3,7 +3,7 @@
 from leo_code.rag.semantic_clustering import SemanticCluster
 
 
-def serialize_clusters(clusters: list[SemanticCluster], token_budget: int = 3000) -> str:
+def serialize_clusters(clusters: list[SemanticCluster], token_budget: int = 3500) -> str:
     """Convert clusters to hierarchical markdown, fixed params (agnóstico al repo).
 
     Estrategia simple y escalable: top N clusters, M nodes per cluster.
@@ -29,11 +29,11 @@ def serialize_clusters(clusters: list[SemanticCluster], token_budget: int = 3000
     char_budget = token_budget * 4  # Rough: 4 chars per token
     char_count = 0
 
-    # Fixed: top 3 clusters (smallest first for diversity)
-    max_clusters = 3
-    max_nodes_per_cluster = 6
+    # Fixed: top 4 clusters (smallest first for diversity)
+    max_clusters = 4
+    max_nodes_per_cluster = 7
 
-    # Sort by size ascending, take top 2
+    # Sort by size ascending, take top 4
     relevant = sorted(clusters, key=lambda c: c.size)[:max_clusters]
 
     for cluster in relevant:

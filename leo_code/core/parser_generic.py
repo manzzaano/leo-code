@@ -261,38 +261,54 @@ def _find_block_end(lines: list[str], start_lineno: int, language: str) -> int:
                    "php", "swift", "kotlin", "scala", "dart", "objectivec", "perl", "shell"}
 
     if language in brace_langs:
-        max_lineno = min(len(lines), start_lineno - 1 + MAX_BLOCK)
+        block = "\n".join(lines[start_lineno - 1:start_lineno - 1 + MAX_BLOCK])
         depth = 0
-        for lineno in range(start_lineno, max_lineno + 1):
-            for ch in lines[lineno - 1]:
-                if ch == "{":
-                    depth += 1
-                elif ch == "}":
-                    depth -= 1
-                    if depth == 0:
-                        return lineno
+        pos = 0
+        while True:
+            open_pos = block.find("{", pos)
+            close_pos = block.find("}", pos)
+            if close_pos == -1:
+                return min(start_lineno + 20, len(lines))
+            if open_pos != -1 and open_pos < close_pos:
+                depth += 1
+                pos = open_pos + 1
+            else:
+                depth -= 1
+                if depth == 0:
+                    return start_lineno + block[:close_pos].count("\n")
+                pos = close_pos + 1
         return min(start_lineno + 20, len(lines))
 
     if language in ("ruby", "lua", "elixir", "julia"):
         base_indent = len(lines[start_lineno - 1]) - len(lines[start_lineno - 1].lstrip())
-        end = min(len(lines), start_lineno + MAX_BLOCK)
+        block = "\n".join(lines[start_lineno - 1:start_lineno - 1 + MAX_BLOCK])
         depth = 0
-        for i in range(start_lineno, end):
-            line = lines[i - 1]
-            stripped = line.strip()
-            if not stripped or stripped.startswith(("#", "--", "//")):
+        pos = 0
+        while True:
+            end_pos = block.find("\nend", pos)
+            if pos == 0 and block.startswith("end", pos):
+                end_pos = 0
+            if end_pos == -1:
+                return min(start_lineno + 30, len(lines))
+            after = end_pos + 4
+            if after < len(block) and block[after].isalnum():
+                pos = after
                 continue
+            line_start = block.rfind("\n", 0, end_pos) + 1 if end_pos > 0 else 0
+            raw_line = block[line_start:end_pos + 4] if end_pos > 0 else "end"
+            stripped = raw_line.strip()
+            indent = len(raw_line) - len(raw_line.lstrip())
             if stripped == "end":
-                indent = len(line) - len(line.lstrip())
                 if depth == 0:
                     if indent <= base_indent:
-                        return i
+                        return start_lineno + block[:end_pos].count("\n")
                 else:
                     depth -= 1
             elif not stripped.startswith("end"):
                 first = stripped.split(None, 1)[0]
                 if first in _openers:
                     depth += 1
+            pos = end_pos + 4
         return min(start_lineno + 30, len(lines))
 
     if language == "sql":
