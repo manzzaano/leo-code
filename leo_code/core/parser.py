@@ -7,6 +7,7 @@ import ast
 import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
+from collections.abc import Callable
 from typing import Optional
 
 
@@ -497,13 +498,25 @@ def _detect_middleware(c: Capsule, content: str = "", content_lower: str = "", d
             c.properties.setdefault("framework", "express" if lang == "javascript" else "fastapi")
 
 
-def _dispatch_python(c: Capsule, content: str, content_lower: str, decorators: str, hereda: str, decos: str) -> None:
+def _dispatch_python(c: Capsule) -> None:
+    content = c.content or ""
+    content_lower = content.lower()
+    decorators = c.properties.get("decorators", "")
+    hereda = c.properties.get("hereda_de", "")
+    decos = decorators.lower()
     _detect_python(c, content, content_lower, decorators, hereda, decos)
     _detect_python_extra(c, content, content_lower, decorators, hereda, decos)
     _detect_middleware(c, content, content_lower, decorators, hereda, decos)
+    _detect_graphql(c, content, c.language)
+    _detect_grpc(c, content, (c.file_path or "").lower())
 
 
-def _dispatch_jsts(c: Capsule, content: str, content_lower: str, decorators: str, hereda: str, decos: str) -> None:
+def _dispatch_jsts(c: Capsule) -> None:
+    content = c.content or ""
+    content_lower = content.lower()
+    decorators = c.properties.get("decorators", "")
+    hereda = c.properties.get("hereda_de", "")
+    decos = decorators.lower()
     _detect_jsts(c, content, content_lower, decorators, hereda, decos)
     _detect_vue(c, content, content_lower, decorators, hereda, decos)
     _detect_angular(c, content, content_lower, decorators, hereda, decos)
@@ -511,39 +524,82 @@ def _dispatch_jsts(c: Capsule, content: str, content_lower: str, decorators: str
     _detect_nuxt(c, content, content_lower, decorators, hereda, decos)
     _detect_remix(c, content, content_lower, decorators, hereda, decos)
     _detect_middleware(c, content, content_lower, decorators, hereda, decos)
+    _detect_graphql(c, content, c.language)
+    _detect_grpc(c, content, (c.file_path or "").lower())
 
 
-_LANG_DISPATCH: dict[str, tuple] = {
+def _dispatch_java_kotlin(c: Capsule) -> None:
+    content = c.content or ""
+    content_lower = content.lower()
+    decorators = c.properties.get("decorators", "")
+    hereda = c.properties.get("hereda_de", "")
+    decos = decorators.lower()
+    _detect_java_kotlin(c, content, content_lower, decorators, hereda, decos)
+    _detect_graphql(c, content, c.language)
+    _detect_grpc(c, content, (c.file_path or "").lower())
+
+
+def _dispatch_php(c: Capsule) -> None:
+    _detect_php(c, c.content or "")
+    _detect_graphql(c, c.content or "", c.language)
+    _detect_grpc(c, c.content or "", (c.file_path or "").lower())
+
+
+def _dispatch_csharp(c: Capsule) -> None:
+    content = c.content or ""
+    content_lower = content.lower()
+    decorators = c.properties.get("decorators", "")
+    hereda = c.properties.get("hereda_de", "")
+    decos = decorators.lower()
+    _detect_csharp(c, content, content_lower, decorators, hereda, decos)
+    _detect_graphql(c, content, c.language)
+    _detect_grpc(c, content, (c.file_path or "").lower())
+
+
+def _dispatch_ruby(c: Capsule) -> None:
+    _detect_ruby(c, c.content or "")
+    _detect_graphql(c, c.content or "", c.language)
+    _detect_grpc(c, c.content or "", (c.file_path or "").lower())
+
+
+def _dispatch_go(c: Capsule) -> None:
+    _detect_go(c, c.content or "")
+    _detect_graphql(c, c.content or "", c.language)
+    _detect_grpc(c, c.content or "", (c.file_path or "").lower())
+
+
+def _dispatch_rust(c: Capsule) -> None:
+    _detect_rust(c, c.content or "")
+    _detect_graphql(c, c.content or "", c.language)
+    _detect_grpc(c, c.content or "", (c.file_path or "").lower())
+
+
+def _dispatch_elixir(c: Capsule) -> None:
+    _detect_elixir(c, c.content or "")
+    _detect_graphql(c, c.content or "", c.language)
+    _detect_grpc(c, c.content or "", (c.file_path or "").lower())
+
+
+_LANG_DISPATCH: dict[str, Callable[[Capsule], None]] = {
     "python": _dispatch_python,
     "javascript": _dispatch_jsts,
     "typescript": _dispatch_jsts,
-    "java": _detect_java_kotlin,
-    "kotlin": _detect_java_kotlin,
-    "php": _detect_php,
-    "csharp": _detect_csharp,
-    "ruby": _detect_ruby,
-    "go": _detect_go,
-    "rust": _detect_rust,
-    "elixir": _detect_elixir,
+    "java": _dispatch_java_kotlin,
+    "kotlin": _dispatch_java_kotlin,
+    "php": _dispatch_php,
+    "csharp": _dispatch_csharp,
+    "ruby": _dispatch_ruby,
+    "go": _dispatch_go,
+    "rust": _dispatch_rust,
+    "elixir": _dispatch_elixir,
 }
 
 
 def detect_frameworks(capsules: list[Capsule]) -> list[Capsule]:
     for c in capsules:
-        content = c.content or ""
-        content_lower = content.lower()
-        decorators = c.properties.get("decorators", "")
-        hereda = c.properties.get("hereda_de", "")
-        filepath = (c.file_path or "").lower()
-        lang = c.language
-        decos = decorators.lower()
-
-        dispatch = _LANG_DISPATCH.get(lang)
+        dispatch = _LANG_DISPATCH.get(c.language)
         if dispatch is not None:
-            dispatch(c, content, content_lower, decorators, hereda, decos)
-
-        _detect_graphql(c, content, lang)
-        _detect_grpc(c, content, filepath)
+            dispatch(c)
 
     return capsules
 
