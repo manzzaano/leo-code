@@ -23,6 +23,7 @@ env/
 .codex/
 .serena/
 
+
 # OS
 .DS_Store
 Thumbs.db
@@ -39,6 +40,9 @@ cache/
 tmp/
 logs/
 *.log
+_find_*.py
+_output_*.txt
+benchmark_run.log
 
 # Local dev
 leo-code-dev
