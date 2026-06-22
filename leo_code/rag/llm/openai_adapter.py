@@ -2,8 +2,32 @@
 
 import json
 import os
+import re
 from typing import Optional
 from leo_code.rag.llm.provider import LLMProvider, Response, TokenUsage, ToolCall
+
+# DeepSeek a veces serializa tool-calls como markup DSML en el texto en vez de
+# usar el campo estructurado. Anclamos en 'invoke name=' / 'parameter name=',
+# tolerando el prefijo de barras (｜｜DSML｜｜) en los tags.
+_INVOKE_RE = re.compile(r'invoke name="([^"]+)">(.*?)</\S*?invoke>', re.S)
+_PARAM_RE = re.compile(r'parameter name="([^"]+)"[^>]*>(.*?)</\S*?parameter>', re.S)
+
+
+def _parse_dsml_tool_calls(text: str) -> tuple[list, str]:
+    """Extrae tool-calls del markup DSML embebido en texto. Devuelve (tool_calls, texto_limpio)."""
+    calls = []
+    for i, (name, body) in enumerate(_INVOKE_RE.findall(text)):
+        args = {}
+        for pname, pval in _PARAM_RE.findall(body):
+            v = pval.strip()
+            if v in ("true", "false"):
+                v = v == "true"
+            args[pname] = v
+        calls.append(ToolCall(name=name.strip(), arguments=args, id=f"dsml_{i}"))
+    # Quitar todo el bloque de markup del texto visible
+    clean = re.sub(r'<?\S*?(tool_calls|invoke|parameter)\b.*?>', '', text, flags=re.S)
+    clean = re.sub(r'</\S*?(tool_calls|invoke|parameter)>', '', clean)
+    return calls, clean.strip()
 
 
 class OpenAIProvider(LLMProvider):
@@ -64,8 +88,15 @@ class OpenAIProvider(LLMProvider):
                     id=tc.id,
                 ))
 
+        text = msg.content or ""
+        # Fallback DeepSeek: a veces emite tool-calls como texto DSML en vez del
+        # campo estructurado. Parsearlos para que el agente no los trate como respuesta.
+        if not tool_calls and text and "invoke name=" in text:
+            parsed, text = _parse_dsml_tool_calls(text)
+            tool_calls = parsed
+
         return Response(
-            text=msg.content or "",
+            text=text,
             tool_calls=tool_calls,
             usage=TokenUsage(
                 input_tokens=resp.usage.prompt_tokens,

@@ -181,6 +181,29 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
                 properties=props,
             ))
 
+            # Emitir cada método como cápsula buscable (antes solo vivían en props["metodos"]).
+            for m in node.body:
+                if not isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                m_args = [a.arg for a in m.args.args]
+                m_ret = ast.unparse(m.returns) if m.returns else "None"
+                m_prefix = "async def" if isinstance(m, ast.AsyncFunctionDef) else "def"
+                m_sig = f"{m_prefix} {node.name}.{m.name}({', '.join(m_args)}) -> {m_ret}"
+                m_calls = [c.func.id for c in ast.walk(m)
+                           if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)]
+                m_calls += [c.func.attr for c in ast.walk(m)
+                            if isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute)]
+                capsules.append(Capsule(
+                    id=_make_id(file_path, m.lineno, m_sig),
+                    type="method", name=m.name, file_path=file_path,
+                    start_line=m.lineno, end_line=m.end_lineno or m.lineno,
+                    language="python", signature=m_sig,
+                    content=ast.get_source_segment(content, m) or ast.unparse(m),
+                    docstring=ast.get_docstring(m), calls=m_calls,
+                    properties={"class": node.name, "qualified": f"{node.name}.{m.name}",
+                                "module": module_name},
+                ))
+
         elif isinstance(node, (ast.Assign, ast.AnnAssign)):
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
             for t in targets:

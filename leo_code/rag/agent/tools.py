@@ -18,8 +18,28 @@ class ToolRegistry:
             "run_tests": self.run_tests,
             "git_diff": self.git_diff,
             "search_code": self.search_code,
+            "find_symbol": self.find_symbol,
+            "read_symbol": self.read_symbol,
+            "who_calls": self.who_calls,
+            "callees": self.callees,
+            "impact": self.impact,
+            "list_by_kind": self.list_by_kind,
         }
         self._definitions: list[dict] = []  # extended by plugins
+        self._capsules: dict = {}            # id -> Capsule (structural index)
+        self._by_name: dict[str, list] = {}  # name -> [Capsule]
+        self._callers: dict[str, list] = {}  # name -> [Capsule que lo llaman]
+
+    def set_index(self, capsules: dict):
+        """Conecta el índice estructural (capsules + grafo de llamadas) a las tools."""
+        self._capsules = capsules or {}
+        self._by_name = {}
+        self._callers = {}
+        for c in self._capsules.values():
+            self._by_name.setdefault(c.name, []).append(c)
+        for c in self._capsules.values():
+            for callee in (getattr(c, "calls", None) or []):
+                self._callers.setdefault(callee, []).append(c)
 
     def register(self, name: str, fn, definition: dict):
         self._tools[name] = fn
@@ -29,10 +49,14 @@ class ToolRegistry:
         return [
             {"type": "function", "function": {
                 "name": "read_file",
-                "description": "Lee el contenido completo de un archivo del repositorio",
+                "description": "Lee un archivo. Archivos grandes (>200 lineas) se capan: usa start_line/end_line para un rango, o read_symbol para una funcion concreta.",
                 "parameters": {
                     "type": "object",
-                    "properties": {"file_path": {"type": "string", "description": "Ruta relativa al archivo"}},
+                    "properties": {
+                        "file_path": {"type": "string", "description": "Ruta relativa al archivo"},
+                        "start_line": {"type": "integer", "description": "Linea inicial (opcional)"},
+                        "end_line": {"type": "integer", "description": "Linea final (opcional)"},
+                    },
                     "required": ["file_path"],
                 },
             }},
@@ -102,13 +126,67 @@ class ToolRegistry:
             }},
             {"type": "function", "function": {
                 "name": "search_code",
-                "description": "Busca un patron de texto en los archivos del repositorio",
+                "description": "Busca un patron de texto en los archivos del repositorio. Devuelve lineas file:line coincidentes (no archivos enteros).",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "pattern": {"type": "string", "description": "Patron a buscar"},
                     },
                     "required": ["pattern"],
+                },
+            }},
+            {"type": "function", "function": {
+                "name": "find_symbol",
+                "description": "Busca simbolos (funciones, clases, metodos) por nombre o subcadena. Devuelve nombre, tipo, file:line y firma. Empieza SIEMPRE por aqui para localizar codigo.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"pattern": {"type": "string", "description": "Nombre o subcadena del simbolo (ej. 'detect_frameworks')"}},
+                    "required": ["pattern"],
+                },
+            }},
+            {"type": "function", "function": {
+                "name": "read_symbol",
+                "description": "Devuelve el cuerpo completo de UN simbolo (firma + docstring + codigo), no el archivo entero. Usa esto en vez de read_file para leer una funcion/clase concreta.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"name": {"type": "string", "description": "Nombre exacto del simbolo"}},
+                    "required": ["name"],
+                },
+            }},
+            {"type": "function", "function": {
+                "name": "who_calls",
+                "description": "Lista los simbolos que LLAMAN a un simbolo dado (callers directos). Para entender impacto y uso.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"name": {"type": "string", "description": "Nombre del simbolo"}},
+                    "required": ["name"],
+                },
+            }},
+            {"type": "function", "function": {
+                "name": "callees",
+                "description": "Lista los simbolos a los que LLAMA un simbolo dado (sus dependencias directas).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"name": {"type": "string", "description": "Nombre del simbolo"}},
+                    "required": ["name"],
+                },
+            }},
+            {"type": "function", "function": {
+                "name": "impact",
+                "description": "Callers transitivos de un simbolo: que se romperia si lo cambias. BFS sobre el grafo de llamadas.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"name": {"type": "string", "description": "Nombre del simbolo"}},
+                    "required": ["name"],
+                },
+            }},
+            {"type": "function", "function": {
+                "name": "list_by_kind",
+                "description": "Lista TODOS los simbolos de un tipo (endpoint, class, method, function, dataclass, model, test...). Usalo para preguntas agregadas: 'cuantos endpoints hay', 'lista las clases'.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"kind": {"type": "string", "description": "Tipo: endpoint, class, method, function, dataclass, model, test, constant..."}},
+                    "required": ["kind"],
                 },
             }},
         ] + self._definitions
@@ -124,11 +202,25 @@ class ToolRegistry:
 
     def read_file(self, args: dict, repo_path: str) -> str:
         path = Path(repo_path) / args.get("file_path", "")
+        start = args.get("start_line")
+        end = args.get("end_line")
         try:
             if path.is_dir():
                 items = sorted(path.iterdir())[:50]
                 listing = "\n".join(f"  {'📁' if p.is_dir() else '📄'} {p.name}" for p in items)
                 return f"[{path} es un directorio. Usa list_files para explorar.]\nContenido:\n{listing}"
+            lines = path.read_text(encoding="utf-8").split("\n")
+            n = len(lines)
+            if start is not None or end is not None:
+                s = max(1, int(start or 1))
+                e = min(n, int(end or n))
+                body = "\n".join(f"{i}\t{lines[i-1]}" for i in range(s, e + 1))
+                return f"[{path.name} lineas {s}-{e} de {n}]\n{body}"
+            # ponytail: archivo grande inunda contexto; cap por lineas y empuja a read_symbol
+            if n > 200:
+                head = "\n".join(f"{i}\t{lines[i-1]}" for i in range(1, 201))
+                return (f"[{path.name}: {n} lineas (grande). Mostrando 1-200. "
+                        f"Usa read_symbol('nombre') para una funcion concreta o read_file con start_line/end_line.]\n{head}")
             return path.read_text(encoding="utf-8")
         except Exception as e:
             return f"[Error leyendo {path}: {e}]"
@@ -139,7 +231,7 @@ class ToolRegistry:
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content, encoding="utf-8")
-            return f"[Escrito: {path} ({len(content)} chars)]"
+            return f"[Escrito: {path} ({len(content)} chars)]{_verify_py(path)}"
         except Exception as e:
             return f"[Error escribiendo {path}: {e}]"
 
@@ -158,7 +250,7 @@ class ToolRegistry:
                 return f"[Error: old_string aparece {count} veces en {path}. Debe ser unico.]"
             content = content.replace(old, new, 1)
             path.write_text(content, encoding="utf-8")
-            return f"[Reemplazado en {path}: {len(old)} → {len(new)} chars]"
+            return f"[Reemplazado en {path}: {len(old)} → {len(new)} chars]{_verify_py(path)}"
         except Exception as e:
             return f"[Error en replace_in_file {path}: {e}]"
 
@@ -270,6 +362,125 @@ class ToolRegistry:
                 except Exception:
                     continue
             return "\n".join(matches[:20]) or "[No encontrado]"
+
+    # ---- Tools estructurales (sobre el indice de capsules + grafo de llamadas) ----
+
+    def _rel(self, c) -> str:
+        fp = getattr(c, "file_path", "") or ""
+        return f"{Path(fp).name}:{getattr(c, 'start_line', 0)}"
+
+    def find_symbol(self, args: dict, repo_path: str) -> str:
+        pat = (args.get("pattern") or args.get("name") or args.get("query") or "").lower()
+        if not pat:
+            return "[Error: pattern vacio]"
+        if not self._capsules:
+            return "[Indice no disponible. Usa search_code/grep.]"
+        exact, partial = [], []
+        for c in self._capsules.values():
+            nm = c.name.lower()
+            if nm == pat:
+                exact.append(c)
+            elif pat in nm:
+                partial.append(c)
+        hits = (exact + partial)[:20]
+        if not hits:
+            return f"[Sin simbolos que coincidan con '{pat}'. Prueba search_code.]"
+        return "\n".join(f"{c.name} ({c.type}) {self._rel(c)} — {c.signature or ''}".rstrip(" —") for c in hits)
+
+    def _lookup(self, name: str):
+        caps = self._by_name.get(name)
+        if caps:
+            return caps[0]
+        # fallback: subcadena unica
+        matches = [c for c in self._capsules.values() if name.lower() in c.name.lower()]
+        return matches[0] if matches else None
+
+    def read_symbol(self, args: dict, repo_path: str) -> str:
+        name = args.get("name") or ""
+        c = self._lookup(name)
+        if not c:
+            return f"[Simbolo '{name}' no encontrado. Usa find_symbol.]"
+        parts = [f"# {c.name} ({c.type}) — {self._rel(c)}"]
+        if c.signature:
+            parts.append(c.signature)
+        if c.docstring:
+            parts.append(f'"""{c.docstring}"""')
+        body = c.content or ""
+        if len(body) > 2400:
+            body = body[:2400] + "\n# ... [truncado, usa read_file con rango]"
+        parts.append(body)
+        return "\n".join(parts)
+
+    def list_by_kind(self, args: dict, repo_path: str) -> str:
+        kind = (args.get("kind") or "").lower()
+        if not kind:
+            return "[Error: kind vacio]"
+        if not self._capsules:
+            return "[Indice no disponible.]"
+        hits = [c for c in self._capsules.values() if c.type.lower() == kind]
+        if not hits:
+            kinds = sorted({c.type for c in self._capsules.values()})
+            return f"[Sin simbolos de tipo '{kind}'. Tipos disponibles: {', '.join(kinds)}]"
+        hits.sort(key=lambda c: (c.file_path or "", c.start_line))
+        lines = [f"{len(hits)} simbolos de tipo '{kind}':"]
+        lines += [f"{c.name} {self._rel(c)}" for c in hits[:60]]
+        if len(hits) > 60:
+            lines.append(f"... (+{len(hits) - 60} mas)")
+        return "\n".join(lines)
+
+    def who_calls(self, args: dict, repo_path: str) -> str:
+        name = args.get("name") or ""
+        callers = self._callers.get(name)
+        if not callers:
+            c = self._lookup(name)
+            if c:
+                callers = self._callers.get(c.name, [])
+        if not callers:
+            return f"[Nadie llama a '{name}' (o no esta indexado).]"
+        return "\n".join(f"{c.name} ({c.type}) {self._rel(c)}" for c in callers[:20])
+
+    def callees(self, args: dict, repo_path: str) -> str:
+        name = args.get("name") or ""
+        c = self._lookup(name)
+        if not c:
+            return f"[Simbolo '{name}' no encontrado.]"
+        calls = [x for x in (getattr(c, "calls", None) or []) if x in self._by_name]
+        if not calls:
+            return f"[{c.name} no llama a simbolos indexados.]"
+        return "\n".join(dict.fromkeys(calls))[:1000] or "[sin callees]"
+
+    def impact(self, args: dict, repo_path: str) -> str:
+        name = args.get("name") or ""
+        c = self._lookup(name)
+        root = c.name if c else name
+        seen, frontier, order = {root}, [root], []
+        while frontier:
+            cur = frontier.pop(0)
+            for caller in self._callers.get(cur, []):
+                if caller.name not in seen:
+                    seen.add(caller.name)
+                    order.append(caller)
+                    frontier.append(caller.name)
+            if len(order) >= 30:
+                break
+        if not order:
+            return f"[Cambiar '{root}' no afecta a nadie indexado.]"
+        return f"[{len(order)} simbolos afectados (transitivo)]\n" + "\n".join(
+            f"{c.name} ({c.type}) {self._rel(c)}" for c in order[:30])
+
+
+def _verify_py(path: Path) -> str:
+    """Compila el archivo .py recién editado y reporta error de sintaxis al instante."""
+    if path.suffix != ".py":
+        return ""
+    import py_compile
+    try:
+        py_compile.compile(str(path), doraise=True)
+        return "\n[verify: compila OK]"
+    except py_compile.PyCompileError as e:
+        return f"\n[verify: SYNTAX ERROR — el cambio rompe el archivo: {str(e).strip()[:300]}]"
+    except Exception:
+        return ""
 
 
 def _render_file_tree(base: Path, matches: list[Path], max_depth: int) -> str:
