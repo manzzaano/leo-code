@@ -116,6 +116,7 @@ class Indexer:
                 "file_path": c.file_path, "start_line": c.start_line,
                 "end_line": c.end_line, "language": c.language,
                 "signature": c.signature, "docstring": c.docstring,
+                "content": c.content,
                 "calls": c.calls, "called_by": c.called_by,
                 "imports": c.imports, "properties": c.properties,
             }
