@@ -255,7 +255,7 @@ class AgentLoop:
                 total_tokens += len(result) // 4
 
             # Routing: continuación tras tools OK → bajo esfuerzo; tras error → completo.
-            next_effort = "low" if (ran_tool and not any_error) else None
+            next_effort = "low" if (ran_tool and not any_error and os.getenv("LEO_EFFORT", "1") != "0") else None
 
             # SÍNTESIS: tras suficientes iteraciones, fuerza una respuesta final
             # consolidada sin tools (evita devolver texto parcial tipo "(using tools)").
@@ -524,7 +524,7 @@ class AgentLoop:
                 total_tokens += len(result) // 4
 
             # Routing: continuación tras tools OK → bajo esfuerzo; tras error → completo.
-            next_effort = "low" if (ran_tool and not any_error) else None
+            next_effort = "low" if (ran_tool and not any_error and os.getenv("LEO_EFFORT", "1") != "0") else None
 
             # After tools, prompt to finish
             if tool_calls and iteration >= 8:
