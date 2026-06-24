@@ -25,10 +25,10 @@ BATCH_SIZE = 3
 def run_leo_subprocess(query: str, repo_path: str) -> dict:
     t0 = time.time()
     try:
-        env = {**os.environ, "DEEPSEEK_API_KEY": os.getenv("DEEPSEEK_API_KEY", "")}
+        env = {**os.environ, "DEEPSEEK_API_KEY": os.getenv("DEEPSEEK_API_KEY", ""), "PYTHONIOENCODING": "utf-8"}
         r = subprocess.run(
             [sys.executable, RUNNER, query, repo_path, MODEL],
-            capture_output=True, text=True, timeout=300, env=env,
+            capture_output=True, text=True, timeout=300, env=env, encoding="utf-8", errors="replace",
         )
         # La respuesta es la ULTIMA linea de stdout (despues del indexer log)
         stdout = (r.stdout or "").strip()
@@ -47,10 +47,10 @@ def run_leo_subprocess(query: str, repo_path: str) -> dict:
 def run_oc_subprocess(query: str, repo_path: str) -> dict:
     t0 = time.time()
     try:
-        env = {**os.environ, "DEEPSEEK_API_KEY": os.getenv("DEEPSEEK_API_KEY", "")}
+        env = {**os.environ, "DEEPSEEK_API_KEY": os.getenv("DEEPSEEK_API_KEY", ""), "PYTHONIOENCODING": "utf-8"}
         r = subprocess.run(
             ["opencode", "run", query, "-m", "deepseek/deepseek-chat"],
-            capture_output=True, text=True, timeout=180, cwd=repo_path, env=env,
+            capture_output=True, text=True, timeout=180, cwd=repo_path, env=env, encoding="utf-8", errors="replace",
         )
         # Keep all output, just strip ANSI codes
         out = r.stdout or ""
