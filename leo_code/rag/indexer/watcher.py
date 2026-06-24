@@ -47,16 +47,12 @@ class Indexer:
         except Exception as e:
             return [], lang, 0, str(e)
 
-    def build(self, repo_path: str, languages: Optional[list[str]] = None,
-              use_tree_sitter: bool = False, verbose: bool = False) -> int:
-        """Indexa todos los archivos de un repo en paralelo. Retorna número de cápsulas."""
-        if languages is None:
-            languages = ["python"]
+    _EXTENSIONS = {".py": "python", ".js": "javascript", ".ts": "typescript",
+                   ".rs": "rust", ".go": "go", ".java": "java", ".txt": "text"}
 
-        extensions = {".py": "python", ".js": "javascript", ".ts": "typescript",
-                       ".rs": "rust", ".go": "go", ".java": "java", ".txt": "text"}
-        ext_to_lang = {ext: lang for ext, lang in extensions.items() if lang in languages}
-
+    def _discover_files(self, repo_path: str, languages: list[str]) -> list[tuple[Path, str]]:
+        """Lista [(path, lang)] de archivos indexables del repo según languages."""
+        ext_to_lang = {ext: lang for ext, lang in self._EXTENSIONS.items() if lang in languages}
         repo = Path(repo_path)
         files = []
         for ext, lang in ext_to_lang.items():
@@ -66,6 +62,16 @@ class Indexer:
                 if ext == ".txt" and not any(p in {"data", "docs", "doc", "synthetic"} for p in path.parts):
                     continue
                 files.append((path, lang))
+        return files
+
+    def build(self, repo_path: str, languages: Optional[list[str]] = None,
+              use_tree_sitter: bool = False, verbose: bool = False) -> int:
+        """Indexa todos los archivos de un repo en paralelo. Retorna número de cápsulas."""
+        if languages is None:
+            languages = ["python"]
+
+        files = self._discover_files(repo_path, languages)
+        repo = Path(repo_path)
 
         if not files:
             print("[indexer] 0 archivos encontrados")
@@ -150,6 +156,63 @@ class Indexer:
                 properties=d.get("properties", {}),
             )
         print(f"[indexer] Cargado: {path} ({len(self._capsules)} cápsulas)")
+
+    def _rebuild_call_graph(self) -> None:
+        """Re-resuelve called_by global tras un sync (los edges son cross-file)."""
+        caps = list(self._capsules.values())
+        for c in caps:
+            c.called_by = []
+        build_call_graph(caps)
+
+    def sync(self, repo_path: str, since_mtime: float,
+             languages: Optional[list[str]] = None) -> dict:
+        """Actualización incremental sobre un índice ya cargado: re-parsea solo
+        archivos cambiados (mtime > since_mtime) o nuevos, quita los borrados, y
+        re-resuelve el call-graph. Mucho más barato que build() cuando cambian pocos.
+        Devuelve {changed, new, deleted, reparsed_capsules}.
+        """
+        if languages is None:
+            languages = ["python", "text"]
+        files = self._discover_files(repo_path, languages)
+        disk_paths = {str(p) for p, _ in files}
+        indexed_paths = {c.file_path for c in self._capsules.values()}
+
+        changed = [(p, l) for p, l in files if os.path.getmtime(p) > since_mtime]
+        new = [(p, l) for p, l in files if str(p) not in indexed_paths]
+        to_parse = {str(p): (p, l) for p, l in changed}
+        for p, l in new:
+            to_parse[str(p)] = (p, l)
+        deleted = [fp for fp in indexed_paths
+                   if fp not in disk_paths and Path(fp).suffix in self._EXTENSIONS]
+
+        # Quitar cápsulas de archivos a re-parsear + borrados
+        drop = set(to_parse) | set(deleted)
+        if drop:
+            with self._capsules_lock:
+                self._capsules = {cid: c for cid, c in self._capsules.items()
+                                  if c.file_path not in drop}
+
+        # Re-parsear cambiados/nuevos
+        reparsed = 0
+        repo = Path(repo_path)
+        for p, lang in to_parse.values():
+            caps, _, n, _err = self._process_one(p, lang, False, False, repo)
+            if n:
+                with self._capsules_lock:
+                    for c in caps:
+                        self._capsules[c.id] = c
+                reparsed += n
+
+        if drop or reparsed:
+            self._rebuild_call_graph()
+            if self.vector_store and self._capsules:
+                self.vector_store.add(list(self._capsules.values()))
+
+        stats = {"changed": len(changed), "new": len(new),
+                 "deleted": len(deleted), "reparsed_capsules": reparsed}
+        print(f"[indexer] sync: {len(changed)} cambiados, {len(new)} nuevos, "
+              f"{len(deleted)} borrados ({reparsed} cápsulas)")
+        return stats
 
     def watch(self, repo_path: str):
         """Inicia watchdog para reindexar archivos modificados."""
