@@ -615,12 +615,17 @@ class AgentLoop:
 
         self._indexer = Indexer()
 
-        # Try to load from cache if fresh
-        if cache_path.exists() and not self._is_cache_stale(cache_path, repo_path):
-            log.debug(f"Loading index from cache: {cache_path}")
+        # Carga persistente + sync incremental: si el cache existe, cargarlo y
+        # re-parsear SOLO lo cambiado (en vez de rebuild completo). Solo build
+        # full cuando no hay cache.
+        if cache_path.exists():
+            cache_mtime = cache_path.stat().st_mtime
             self._indexer.load(str(cache_path))
+            if self._is_cache_stale(cache_path, repo_path):
+                log.debug(f"Cache stale → sync incremental: {repo_path}")
+                self._indexer.sync(repo_path, since_mtime=cache_mtime)
+                self._indexer.save(str(cache_path))
         else:
-            # Build and save
             log.debug(f"Building index for {repo_path}")
             self._indexer.build(repo_path, verbose=False)
             cache_dir.mkdir(parents=True, exist_ok=True)
