@@ -35,6 +35,13 @@ _YAGNI_DIRECTIVE = (
 )
 _YAGNI_TASKS = ("code_gen", "code_edit", "refactor")
 
+_VERBOSITY_BLOCK = """
+
+Estilo de respuesta (ahorra tokens de salida):
+- Ve al grano. Nada de preambulo ('Claro', 'Por supuesto', 'Voy a...') ni de recapitular lo que ya se dijo.
+- No repitas el codigo del contexto si no aporta; referencia simbolo y archivo:linea.
+- Responde lo justo: conclusiones primero, sin relleno. Fragmentos OK si quedan claros."""
+
 
 class AgentLoop:
     """Bucle principal del agente: razona, ejecuta tools, itera hasta terminar."""
@@ -615,7 +622,7 @@ class AgentLoop:
             return True
 
     def _system_prompt(self) -> str:
-        return """Eres un asistente de programacion experto. Trabajas DENTRO de un repositorio local YA accesible en la ruta actual.
+        base = """Eres un asistente de programacion experto. Trabajas DENTRO de un repositorio local YA accesible en la ruta actual.
 NUNCA pidas al usuario la ruta del proyecto, que lo clone, ni asumas que no tienes acceso: SIEMPRE usa las herramientas directamente sobre el repo.
 No recibes contexto del codigo de antemano: lo recuperas TU MISMO con las herramientas, pidiendo solo lo minimo necesario.
 Si dices que vas a hacer algo (editar, leer, ejecutar), HAZLO en el mismo turno con la herramienta correspondiente — no lo anuncies y pares.
@@ -640,14 +647,12 @@ Reglas:
 - Cuando tengas la informacion suficiente, DA LA RESPUESTA FINAL completa. No pidas mas herramientas de las necesarias.
 - Si no sabes algo, dilo. No inventes.
 - Para execute_command en Windows: usa comandos PowerShell o python.
-- Si recibes imagenes, analizalas visualmente: colores, layout, tipografia, jerarquia.
-
-Estilo de respuesta (ahorra tokens de salida):
-- Ve al grano. Nada de preambulo ('Claro', 'Por supuesto', 'Voy a...') ni de recapitular lo que ya se dijo.
-- No repitas el codigo del contexto si no aporta; referencia simbolo y archivo:linea.
-- Responde lo justo: conclusiones primero, sin relleno. Fragmentos OK si quedan claros."""
-    # ^ Verbosity steering (Headroom): bloque constante byte-estable → reduce tokens
-    #   de salida sin invalidar el prompt cache. ponytail: nivel ~2 por defecto.
+- Si recibes imagenes, analizalas visualmente: colores, layout, tipografia, jerarquia."""
+        # Verbosity steering (Headroom): bloque byte-estable que reduce tokens de
+        # salida. Gateado por env para A/B; default ON. ponytail: nivel ~2.
+        if os.getenv("LEO_VERBOSITY", "1") != "0":
+            base += _VERBOSITY_BLOCK
+        return base
 
 
 def _build_user_content(query: str, images: list[str], repo_path: str) -> list[dict]:
