@@ -32,12 +32,13 @@ class GoogleProvider(LLMProvider):
         messages: list[dict],
         tools: Optional[list[dict]] = None,
         temperature: float = 0.2,
+        effort: Optional[str] = None,
     ) -> Response:
         kwargs = dict(
             model=self.model,
             messages=messages,
             temperature=temperature,
-            max_tokens=8192,
+            max_tokens=self._effort_max_tokens(8192, effort),
         )
         if tools:
             kwargs["tools"] = tools
@@ -71,8 +72,8 @@ class GoogleProvider(LLMProvider):
             finish_reason=choice.finish_reason or "stop",
         )
 
-    async def stream(self, messages: list[dict], tools: Optional[list[dict]] = None):
-        kwargs = dict(model=self.model, messages=messages, temperature=0.2, max_tokens=8192, stream=True)
+    async def stream(self, messages: list[dict], tools: Optional[list[dict]] = None, effort: Optional[str] = None):
+        kwargs = dict(model=self.model, messages=messages, temperature=0.2, max_tokens=self._effort_max_tokens(8192, effort), stream=True)
         if tools:
             kwargs["tools"] = tools
         stream = self.client.chat.completions.create(**kwargs)

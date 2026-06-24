@@ -22,6 +22,7 @@ class AnthropicProvider(LLMProvider):
         messages: list[dict],
         tools: Optional[list[dict]] = None,
         temperature: float = 0.2,
+        effort: Optional[str] = None,
     ) -> Response:
         import anthropic
 
@@ -42,7 +43,7 @@ class AnthropicProvider(LLMProvider):
 
         kwargs: dict = {
             "model": self.model,
-            "max_tokens": 8096,
+            "max_tokens": self._effort_max_tokens(8096, effort),
             "temperature": temperature,
             "messages": anthropic_msgs,
         }
@@ -70,9 +71,9 @@ class AnthropicProvider(LLMProvider):
         finish: str = "tool_use" if tool_calls else "stop"
         return Response(text=text, tool_calls=tool_calls, usage=usage, finish_reason=finish)
 
-    async def stream(self, messages: list[dict], tools: Optional[list[dict]] = None):
+    async def stream(self, messages: list[dict], tools: Optional[list[dict]] = None, effort: Optional[str] = None):
         # Streaming no necesario para el CLI — delegar a generate
-        result = await self.generate(messages, tools)
+        result = await self.generate(messages, tools, effort=effort)
         yield result.text
 
     # ------------------------------------------------------------------

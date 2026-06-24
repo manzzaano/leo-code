@@ -24,11 +24,31 @@ class ToolRegistry:
             "callees": self.callees,
             "impact": self.impact,
             "list_by_kind": self.list_by_kind,
+            "retrieve_full": self.retrieve_full,
         }
         self._definitions: list[dict] = []  # extended by plugins
         self._capsules: dict = {}            # id -> Capsule (structural index)
         self._by_name: dict[str, list] = {}  # name -> [Capsule]
         self._callers: dict[str, list] = {}  # name -> [Capsule que lo llaman]
+        # CCR (compresión reversible): outputs grandes se truncan en el contexto
+        # pero el original se guarda aquí; el modelo lo recupera con retrieve_full.
+        self._ccr_store: dict[str, str] = {}
+        self._ccr_seq = 0
+
+    def store_full(self, text: str) -> str:
+        """Guarda un output completo y devuelve su ref para retrieve_full."""
+        ref = f"ccr{self._ccr_seq}"
+        self._ccr_seq += 1
+        self._ccr_store[ref] = text
+        return ref
+
+    def retrieve_full(self, args: dict, repo_path: str = ".") -> str:
+        """Devuelve el output completo guardado bajo una ref (CCR)."""
+        ref = (args.get("ref") or "").strip()
+        full = self._ccr_store.get(ref)
+        if full is None:
+            return f"[ref CCR '{ref}' no encontrada]"
+        return full
 
     def set_index(self, capsules: dict):
         """Conecta el índice estructural (capsules + grafo de llamadas) a las tools."""
@@ -187,6 +207,15 @@ class ToolRegistry:
                     "type": "object",
                     "properties": {"kind": {"type": "string", "description": "Tipo: endpoint, class, method, function, dataclass, model, test, constant..."}},
                     "required": ["kind"],
+                },
+            }},
+            {"type": "function", "function": {
+                "name": "retrieve_full",
+                "description": "Recupera el output COMPLETO de un tool anterior que se truncó en el contexto. Pasa la ref indicada en el mensaje '[truncado ... usa retrieve_full('ccrN')]'. Úsalo solo si necesitas el detalle que faltaba.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"ref": {"type": "string", "description": "Ref CCR, p.ej. 'ccr0'"}},
+                    "required": ["ref"],
                 },
             }},
         ] + self._definitions

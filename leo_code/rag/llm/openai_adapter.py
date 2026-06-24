@@ -55,14 +55,18 @@ class OpenAIProvider(LLMProvider):
         messages: list[dict],
         tools: Optional[list[dict]] = None,
         temperature: float = 0.2,
+        effort: Optional[str] = None,
     ) -> Response:
         is_thinking = any(x in self.model for x in ("v4-flash", "v4-pro", "reasoner"))
         kwargs = dict(
             model=self.model,
             messages=messages,
             temperature=temperature,
-            max_tokens=16384 if is_thinking else 4096,
+            max_tokens=self._effort_max_tokens(16384 if is_thinking else 4096, effort),
         )
+        # Reasoning models (o-series/gpt-5) aceptan reasoning_effort nativo.
+        if effort and is_thinking:
+            kwargs["reasoning_effort"] = effort
         if tools:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
@@ -110,12 +114,13 @@ class OpenAIProvider(LLMProvider):
         self,
         messages: list[dict],
         tools: Optional[list[dict]] = None,
+        effort: Optional[str] = None,
     ):
         kwargs = dict(
             model=self.model,
             messages=messages,
             temperature=0.2,
-            max_tokens=4096,
+            max_tokens=self._effort_max_tokens(4096, effort),
             stream=True,
             stream_options={"include_usage": True},
         )

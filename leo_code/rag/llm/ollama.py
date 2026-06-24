@@ -30,6 +30,7 @@ class OllamaProvider(LLMProvider):
         messages: list[dict],
         tools: Optional[list[dict]] = None,
         temperature: float = 0.2,
+        effort: Optional[str] = None,
     ) -> Response:
         try:
             ollama_msgs = []
@@ -44,7 +45,7 @@ class OllamaProvider(LLMProvider):
             resp = self.client.chat(
                 model=self.model,
                 messages=ollama_msgs,
-                options={"temperature": temperature, "num_predict": 4096},
+                options={"temperature": temperature, "num_predict": self._effort_max_tokens(4096, effort)},
             )
 
             text = resp.get("message", {}).get("content", "")
@@ -60,7 +61,7 @@ class OllamaProvider(LLMProvider):
                 finish_reason="error",
             )
 
-    async def stream(self, messages: list[dict], tools: Optional[list[dict]] = None):
+    async def stream(self, messages: list[dict], tools: Optional[list[dict]] = None, effort: Optional[str] = None):
         ollama_msgs = []
         for m in messages:
             role = m["role"]
@@ -75,7 +76,7 @@ class OllamaProvider(LLMProvider):
                 model=self.model,
                 messages=ollama_msgs,
                 stream=True,
-                options={"temperature": 0.2, "num_predict": 4096},
+                options={"temperature": 0.2, "num_predict": self._effort_max_tokens(4096, effort)},
             )
             for chunk in stream:
                 delta = chunk.get("message", {}).get("content", "")

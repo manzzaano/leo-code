@@ -16,6 +16,25 @@ from leo_code.rag.conversation_history import ConversationHistory
 
 log = logging.getLogger("leo.agent")
 
+_ERROR_MARKERS = ("error", "traceback", "exception", "[bloqueado", "no encontrad",
+                  "falló", "fallo:", "not found", "denied")
+
+
+def _looks_like_error(result: str) -> bool:
+    """Heurística: ¿el resultado de un tool parece un error? (para effort routing)."""
+    low = (result or "").lower()
+    return any(m in low for m in _ERROR_MARKERS)
+
+
+# YAGNI behavioral skill (Ponytail): solo en tareas de escribir/editar código.
+_YAGNI_DIRECTIVE = (
+    "Para esta tarea de escribir/editar codigo aplica minimalismo (YAGNI): "
+    "primero reutiliza lo que ya existe en el repo; usa stdlib o una dependencia ya "
+    "instalada antes de anadir una nueva; el codigo mas simple que funciona gana. "
+    "No anadas abstracciones, configuracion ni andamiaje no pedidos. Cambios minimos."
+)
+_YAGNI_TASKS = ("code_gen", "code_edit", "refactor")
+
 
 class AgentLoop:
     """Bucle principal del agente: razona, ejecuta tools, itera hasta terminar."""
@@ -54,6 +73,30 @@ class AgentLoop:
         repo_path = os.path.abspath(repo_path)
 
         messages = [{"role": "system", "content": self._system_prompt()}]
+
+        # Memoria persistente cross-sesión (Mem0): recupera facts relevantes del repo.
+        _mem = None
+        try:
+            from leo_code.session import SessionManager
+            _mem = SessionManager()
+            _recalled = _mem.recall(repo_path, query, limit=3)
+            if _recalled:
+                messages.append({"role": "system",
+                    "content": "Memoria del repo (sesiones previas):\n- " + "\n- ".join(_recalled)})
+        except Exception:
+            _mem = None
+
+        # Instincts (aprendizaje continuo): inyecta patrones aprendidos relevantes.
+        _instincts = None
+        try:
+            from leo_code.learning import InstinctStore
+            _instincts = InstinctStore(base_dir="./cache/learning", project_id=repo_path)
+            _block = _instincts.inject_block(query)
+            if _block:
+                messages.append({"role": "system", "content": _block})
+        except Exception:
+            _instincts = None
+
         if session_id:
             from leo_code.session import SessionManager
             sm = SessionManager()
@@ -71,6 +114,8 @@ class AgentLoop:
             t_c0 = time.perf_counter()
             task_type = classify_task(query)
             t_classify_ms = (time.perf_counter() - t_c0) * 1000
+            if task_type in _YAGNI_TASKS:
+                messages.append({"role": "system", "content": _YAGNI_DIRECTIVE})
             ctx, timings = self._build_context(query, repo_path, task_type)
             if ctx:
                 context = ctx
@@ -89,6 +134,10 @@ class AgentLoop:
         noop_nudges = 0
         edit_task = use_kc_rag and task_type in ("code_edit", "code_gen", "refactor", "debug")
 
+        # Effort routing (Headroom): turno trivial (continúa tras tool sin error)
+        # baja el esfuerzo; query inicial / tras error → esfuerzo completo.
+        next_effort: Optional[str] = None
+
         for iteration in range(self.max_iterations):
             if self.interrupt:
                 duration_ms = int((time.time() - t0) * 1000)
@@ -101,7 +150,7 @@ class AgentLoop:
             messages = _compact_messages(messages, keep_last=16)
 
             t_llm0 = time.perf_counter()
-            resp = await self.llm.generate(messages, tool_defs, temperature=0.2)
+            resp = await self.llm.generate(messages, tool_defs, temperature=0.2, effort=next_effort)
             t_llm_ms += (time.perf_counter() - t_llm0) * 1000
             llm_iterations += 1
             total_tokens += resp.usage.input_tokens + resp.usage.output_tokens
@@ -123,6 +172,18 @@ class AgentLoop:
                 # Save to conversation history
                 if self._conversation_history and context:
                     self._conversation_history.save_conversation(query, context, total_tokens, iteration + 1)
+                # Memoria persistente: guarda un fact del intercambio (Mem0).
+                if _mem is not None and text:
+                    try:
+                        _mem.remember(repo_path, f"P: {query[:120]} -> R: {text[:200]}")
+                    except Exception:
+                        pass
+                # Aprendizaje: mina las observaciones de tools de esta sesión.
+                if _instincts is not None and self._tool_call_count >= 3:
+                    try:
+                        _instincts.mine_observations(trigger=query, min_count=3)
+                    except Exception:
+                        pass
                 duration_ms = int((time.time() - t0) * 1000)
                 get_metrics().record_query(total_tokens, duration_ms,
                                           t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms)
@@ -155,6 +216,8 @@ class AgentLoop:
             })
 
             # Execute each tool and append result
+            any_error = False
+            ran_tool = False
             for tc, tc_data in zip(resp.tool_calls, all_tool_calls):
                 args = tc.arguments if isinstance(tc.arguments, dict) else {}
                 if isinstance(args, str):
@@ -168,12 +231,24 @@ class AgentLoop:
                 self._tool_call_count += 1
 
                 result = self.tools.execute(tc.name, args, repo_path)
+                ran_tool = True
+                if _looks_like_error(result):
+                    any_error = True
+                if _instincts is not None:
+                    try:
+                        _instincts.observe({"tool": tc.name, "args": args, "ok": not _looks_like_error(result)})
+                    except Exception:
+                        pass
                 if tc.name in ("write_file", "replace_in_file"):
                     edited = True
                 if len(result) > 800:
-                    result = result[:800] + f"\n[truncado — usa search_code para detalles]"
+                    ref = self.tools.store_full(result)
+                    result = result[:800] + f"\n[truncado {len(result)} chars — usa retrieve_full('{ref}') para el resto]"
                 messages.append({"role": "tool", "tool_call_id": tc_data["id"], "content": result[:1000]})
                 total_tokens += len(result) // 4
+
+            # Routing: continuación tras tools OK → bajo esfuerzo; tras error → completo.
+            next_effort = "low" if (ran_tool and not any_error) else None
 
             # SÍNTESIS: tras suficientes iteraciones, fuerza una respuesta final
             # consolidada sin tools (evita devolver texto parcial tipo "(using tools)").
@@ -306,6 +381,8 @@ class AgentLoop:
             t_c0 = time.perf_counter()
             task_type = classify_task(query)
             t_classify_ms = (time.perf_counter() - t_c0) * 1000
+            if task_type in _YAGNI_TASKS:
+                messages.append({"role": "system", "content": _YAGNI_DIRECTIVE})
             if needs_code_context(query) or task_type in ("code_edit", "code_query", "refactor", "debug"):
                 context, timings = self._build_context(query, repo_path, task_type)
                 t_index_ms = timings.get("t_index_ms", 0)
@@ -340,6 +417,7 @@ class AgentLoop:
         self._tool_call_count = 0
         all_text = ""
         llm_iterations = 0
+        next_effort: Optional[str] = None  # effort routing (Headroom)
 
         for iteration in range(self.max_iterations):
             if self.interrupt:
@@ -357,7 +435,7 @@ class AgentLoop:
             text = ""
             tool_calls: list[dict] = []
             t_llm0 = time.perf_counter()
-            async for chunk in self.llm.stream(messages, tool_defs):
+            async for chunk in self.llm.stream(messages, tool_defs, effort=next_effort):
                 if self.interrupt:
                     break
                 if isinstance(chunk, str):
@@ -396,6 +474,8 @@ class AgentLoop:
                 return
 
             # Execute tools
+            any_error = False
+            ran_tool = False
             for tc in tool_calls:
                 args = tc.get("args", {})
                 tc_id = tc.get("id", f"call_{iteration}_{hash(tc['name']) % 10000}")
@@ -404,6 +484,7 @@ class AgentLoop:
                 if self.perms:
                     allowed, reason = self.perms.check(tc["name"], args)
                     if not allowed:
+                        any_error = True
                         yield {"type": "tool_start", "name": tc["name"], "args": args}
                         yield {"type": "tool_result", "name": tc["name"], "output": f"[Bloqueado: {reason}]"}
                         messages.append({"role": "assistant", "content": text or "", "tool_calls": [{"id": tc_id, "type": "function", "function": {"name": tc["name"], "arguments": str(args)}}]})
@@ -423,13 +504,20 @@ class AgentLoop:
 
                 yield {"type": "tool_start", "name": tc["name"], "args": args}
                 result = self.tools.execute(tc["name"], args, repo_path)
+                ran_tool = True
+                if _looks_like_error(result):
+                    any_error = True
                 # Trim resultes largos
                 if len(result) > 800:
-                    result = result[:800] + f"\n[truncado — usa search_code para detalles]"
+                    ref = self.tools.store_full(result)
+                    result = result[:800] + f"\n[truncado {len(result)} chars — usa retrieve_full('{ref}') para el resto]"
                 yield {"type": "tool_result", "name": tc["name"], "output": result}
                 messages.append({"role": "assistant", "content": text or "", "tool_calls": [{"id": tc_id, "type": "function", "function": {"name": tc["name"], "arguments": str(args)}}]})
                 messages.append({"role": "tool", "tool_call_id": tc_id, "content": result[:1000]})
                 total_tokens += len(result) // 4
+
+            # Routing: continuación tras tools OK → bajo esfuerzo; tras error → completo.
+            next_effort = "low" if (ran_tool and not any_error) else None
 
             # After tools, prompt to finish
             if tool_calls and iteration >= 8:
@@ -552,7 +640,14 @@ Reglas:
 - Cuando tengas la informacion suficiente, DA LA RESPUESTA FINAL completa. No pidas mas herramientas de las necesarias.
 - Si no sabes algo, dilo. No inventes.
 - Para execute_command en Windows: usa comandos PowerShell o python.
-- Si recibes imagenes, analizalas visualmente: colores, layout, tipografia, jerarquia."""
+- Si recibes imagenes, analizalas visualmente: colores, layout, tipografia, jerarquia.
+
+Estilo de respuesta (ahorra tokens de salida):
+- Ve al grano. Nada de preambulo ('Claro', 'Por supuesto', 'Voy a...') ni de recapitular lo que ya se dijo.
+- No repitas el codigo del contexto si no aporta; referencia simbolo y archivo:linea.
+- Responde lo justo: conclusiones primero, sin relleno. Fragmentos OK si quedan claros."""
+    # ^ Verbosity steering (Headroom): bloque constante byte-estable → reduce tokens
+    #   de salida sin invalidar el prompt cache. ponytail: nivel ~2 por defecto.
 
 
 def _build_user_content(query: str, images: list[str], repo_path: str) -> list[dict]:
@@ -595,6 +690,8 @@ def _compact_messages(messages: list[dict], keep_last: int = 6) -> list[dict]:
     old_count = end_idx - 2
 
     if old_count > 0:
-        summary = {"role": "system", "content": f"[Historial compactado: {old_count} mensajes omitidos para ahorrar tokens]"}
+        # Cache alignment (Headroom): contenido del summary byte-estable (sin el
+        # contador volátil) → no invalida el prompt cache en compactaciones repetidas.
+        summary = {"role": "system", "content": "[Historial previo compactado para ahorrar tokens]"}
         return head + [summary] + recent
     return messages

@@ -31,6 +31,7 @@ class BedrockProvider(LLMProvider):
         messages: list[dict],
         tools: Optional[list[dict]] = None,
         temperature: float = 0.2,
+        effort: Optional[str] = None,
     ) -> Response:
         system_parts = []
         msg_list = []
@@ -57,7 +58,7 @@ class BedrockProvider(LLMProvider):
         kwargs = dict(
             modelId=self.model,
             messages=msg_list,
-            inferenceConfig={"temperature": temperature, "maxTokens": 4096},
+            inferenceConfig={"temperature": temperature, "maxTokens": self._effort_max_tokens(4096, effort)},
         )
         if system_parts:
             kwargs["system"] = [{"text": "\n\n".join(system_parts)}]
@@ -93,6 +94,6 @@ class BedrockProvider(LLMProvider):
             finish_reason="stop" if not tool_calls else "tool_use",
         )
 
-    async def stream(self, messages: list[dict], tools: Optional[list[dict]] = None):
-        result = await self.generate(messages, tools)
+    async def stream(self, messages: list[dict], tools: Optional[list[dict]] = None, effort: Optional[str] = None):
+        result = await self.generate(messages, tools, effort=effort)
         yield result.text
