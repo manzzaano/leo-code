@@ -48,8 +48,10 @@ def run_oc_subprocess(query: str, repo_path: str) -> dict:
     t0 = time.time()
     try:
         env = {**os.environ, "DEEPSEEK_API_KEY": os.getenv("DEEPSEEK_API_KEY", ""), "PYTHONIOENCODING": "utf-8"}
+        import shutil
+        oc_bin = shutil.which("opencode") or "opencode"  # Windows: resuelve opencode.cmd
         r = subprocess.run(
-            ["opencode", "run", query, "-m", "deepseek/deepseek-chat"],
+            [oc_bin, "run", query, "-m", "deepseek/deepseek-chat"],
             capture_output=True, text=True, timeout=180, cwd=repo_path, env=env, encoding="utf-8", errors="replace",
         )
         # Keep all output, just strip ANSI codes
