@@ -384,6 +384,23 @@ async def get_context(req: ContextRequest, request: Request):
         except Exception:
             pass
 
+        # Scorer estructural (Fase 1): PageRank + TF-IDF identifier-aware sobre el
+        # pool candidato → señal estructural que ni Qdrant ni BM25 aportan.
+        scorer_ranked: list[str] = []
+        try:
+            from leo_code.rag.scorer import score_capsules
+            pool_ids = list(dict.fromkeys(
+                [c.id for c in exact]
+                + [c.id for c in semantic]
+                + [bm.capsule_id for bm in bm25_results if bm.capsule_id in caps]
+            ))
+            pool = [caps[i] for i in pool_ids if i in caps]
+            if pool:
+                scorer_final, _, _ = score_capsules(pool, req.query)
+                scorer_ranked = sorted(scorer_final, key=scorer_final.get, reverse=True)
+        except Exception:
+            scorer_ranked = []
+
         # Reciprocal Rank Fusion (k=60)
         fused_scores: dict[str, float] = {}
         for rank, c in enumerate(exact):
@@ -393,6 +410,8 @@ async def get_context(req: ContextRequest, request: Request):
         for rank, bm in enumerate(bm25_results):
             if bm.capsule_id in caps:
                 fused_scores[bm.capsule_id] = fused_scores.get(bm.capsule_id, 0) + 1 / (60 + rank + 1)
+        for rank, cid in enumerate(scorer_ranked):
+            fused_scores[cid] = fused_scores.get(cid, 0) + 1 / (60 + rank + 1)
 
         cap = 30 if task_type == "search" else (25 if specific_file_paths else 15)
         fused_ids = sorted(fused_scores, key=fused_scores.get, reverse=True)

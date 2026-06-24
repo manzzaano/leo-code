@@ -52,6 +52,17 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at);
+
+CREATE TABLE IF NOT EXISTS memories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    repo_path TEXT NOT NULL,
+    fact TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    last_used REAL DEFAULT 0,
+    uses INTEGER DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_memories_repo ON memories(repo_path);
 """
 
 
@@ -139,3 +150,51 @@ class SessionManager:
         with self._lock:
             self._conn.execute("PRAGMA foreign_keys=ON")
             self._conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+
+    # ── Memoria persistente cross-sesión (patrón Mem0, sin embeddings) ──────────
+
+    def remember(self, repo_path: str, fact: str) -> bool:
+        """Guarda un fact memorable para un repo. Dedup exacto. Devuelve True si insertó."""
+        fact = (fact or "").strip()
+        if not fact:
+            return False
+        with self._lock:
+            exists = self._conn.execute(
+                "SELECT 1 FROM memories WHERE repo_path = ? AND fact = ? LIMIT 1",
+                (repo_path, fact),
+            ).fetchone()
+            if exists:
+                return False
+            self._conn.execute(
+                "INSERT INTO memories (repo_path, fact, created_at) VALUES (?, ?, ?)",
+                (repo_path, fact, time.time()),
+            )
+        return True
+
+    def recall(self, repo_path: str, query: str, limit: int = 3) -> list[str]:
+        """Recupera los facts más relevantes a la query por overlap de tokens
+        identifier-aware (sin embeddings). Bumpea uses/last_used de los devueltos."""
+        from leo_code.rag.scorer import tokenize
+        q_tokens = set(tokenize(query or ""))
+        if not q_tokens:
+            return []
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT id, fact FROM memories WHERE repo_path = ?", (repo_path,),
+            ).fetchall()
+        scored = []
+        for mid, fact in rows:
+            overlap = len(q_tokens & set(tokenize(fact)))
+            if overlap > 0:
+                scored.append((overlap, mid, fact))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        top = scored[:limit]
+        if top:
+            now = time.time()
+            with self._lock:
+                for _, mid, _ in top:
+                    self._conn.execute(
+                        "UPDATE memories SET uses = uses + 1, last_used = ? WHERE id = ?",
+                        (now, mid),
+                    )
+        return [fact for _, _, fact in top]

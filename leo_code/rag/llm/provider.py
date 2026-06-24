@@ -68,6 +68,15 @@ class LLMProvider(ABC):
         self.cost_tracker = CostTracker()
         self._model_info: Optional[ModelInfo] = None
 
+    @staticmethod
+    def _effort_max_tokens(default: int, effort: Optional[str]) -> int:
+        """Effort routing (Headroom): en turnos triviales (effort='low') capa el
+        presupuesto de salida; 'high'/None mantienen el default. Mapeo universal y
+        seguro para providers sin reasoning nativo."""
+        if effort == "low":
+            return min(default, 2048)
+        return default
+
     @property
     def model_info(self) -> Optional[ModelInfo]:
         if self._model_info is None and self.model:
@@ -85,6 +94,7 @@ class LLMProvider(ABC):
         messages: list[dict],
         tools: Optional[list[dict]] = None,
         temperature: float = 0.2,
+        effort: Optional[str] = None,
     ) -> Response:
         ...
 
@@ -93,6 +103,7 @@ class LLMProvider(ABC):
         self,
         messages: list[dict],
         tools: Optional[list[dict]] = None,
+        effort: Optional[str] = None,
     ):
         ...
 
