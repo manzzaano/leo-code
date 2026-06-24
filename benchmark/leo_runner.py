@@ -10,6 +10,14 @@ from pathlib import Path
 from contextlib import redirect_stdout, redirect_stderr
 import io
 
+# Windows: stdout por defecto es cp1252 y crashea al imprimir → / — / emojis que
+# el modelo emite. Forzar UTF-8 para no perder respuestas en el benchmark.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from leo_code.rag.agent.loop import AgentLoop
