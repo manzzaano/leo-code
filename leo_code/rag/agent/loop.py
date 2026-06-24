@@ -42,6 +42,26 @@ Estilo de respuesta (ahorra tokens de salida):
 - No repitas el codigo del contexto si no aporta; referencia simbolo y archivo:linea.
 - Responde lo justo: conclusiones primero, sin relleno. Fragmentos OK si quedan claros."""
 
+# Tasks de AMPLITUD (review/arquitectura/onboarding): necesitan respuesta extensa.
+# El benchmark N=3 mostró que verbosity steering + effort cap les HACEN DAÑO
+# (-1.2 a -2.2). Para estas: verbosity OFF + effort completo. El classifier es
+# poco fiable aquí (arquitectura cae en code_query), así que combinamos task_type
+# fiable + señales léxicas de amplitud.
+_BREADTH_TASKS = ("review", "design_review", "onboard", "audit")
+_BREADTH_SIGNALS = (
+    "arquitectura", "architecture", "traza", "trace", "cadena completa",
+    "flujo completo", "todo el sistema", "como se relacionan", "overview",
+    "vista general", "todos los tipos", "explica el sistema", "end-to-end",
+    "audita", "auditoria", "code review",
+)
+
+
+def _is_breadth(query: str, task_type: str) -> bool:
+    if task_type in _BREADTH_TASKS:
+        return True
+    q = (query or "").lower()
+    return any(s in q for s in _BREADTH_SIGNALS)
+
 
 class AgentLoop:
     """Bucle principal del agente: razona, ejecuta tools, itera hasta terminar."""
@@ -116,11 +136,16 @@ class AgentLoop:
 
         # KC-RAG context
         context = ""
+        breadth = False
         if use_kc_rag:
             from leo_code.rag.classifier import classify_task
             t_c0 = time.perf_counter()
             task_type = classify_task(query)
             t_classify_ms = (time.perf_counter() - t_c0) * 1000
+            breadth = _is_breadth(query, task_type)
+            # Verbosity steering: solo en tasks NO-amplitud (las de amplitud pierden calidad).
+            if not breadth and os.getenv("LEO_VERBOSITY", "1") != "0":
+                messages.append({"role": "system", "content": _VERBOSITY_BLOCK.strip()})
             if task_type in _YAGNI_TASKS:
                 messages.append({"role": "system", "content": _YAGNI_DIRECTIVE})
             ctx, timings = self._build_context(query, repo_path, task_type)
@@ -255,7 +280,7 @@ class AgentLoop:
                 total_tokens += len(result) // 4
 
             # Routing: continuación tras tools OK → bajo esfuerzo; tras error → completo.
-            next_effort = "low" if (ran_tool and not any_error and os.getenv("LEO_EFFORT", "1") != "0") else None
+            next_effort = "low" if (ran_tool and not any_error and not breadth and os.getenv("LEO_EFFORT", "1") != "0") else None
 
             # SÍNTESIS: tras suficientes iteraciones, fuerza una respuesta final
             # consolidada sin tools (evita devolver texto parcial tipo "(using tools)").
@@ -383,11 +408,15 @@ class AgentLoop:
         # KC-RAG context
         context = ""
         task_type = "code_query"
+        breadth = False
         if use_kc_rag:
             from leo_code.rag.classifier import needs_code_context, classify_task
             t_c0 = time.perf_counter()
             task_type = classify_task(query)
             t_classify_ms = (time.perf_counter() - t_c0) * 1000
+            breadth = _is_breadth(query, task_type)
+            if not breadth and os.getenv("LEO_VERBOSITY", "1") != "0":
+                messages.append({"role": "system", "content": _VERBOSITY_BLOCK.strip()})
             if task_type in _YAGNI_TASKS:
                 messages.append({"role": "system", "content": _YAGNI_DIRECTIVE})
             if needs_code_context(query) or task_type in ("code_edit", "code_query", "refactor", "debug"):
@@ -524,7 +553,7 @@ class AgentLoop:
                 total_tokens += len(result) // 4
 
             # Routing: continuación tras tools OK → bajo esfuerzo; tras error → completo.
-            next_effort = "low" if (ran_tool and not any_error and os.getenv("LEO_EFFORT", "1") != "0") else None
+            next_effort = "low" if (ran_tool and not any_error and not breadth and os.getenv("LEO_EFFORT", "1") != "0") else None
 
             # After tools, prompt to finish
             if tool_calls and iteration >= 8:
@@ -648,10 +677,8 @@ Reglas:
 - Si no sabes algo, dilo. No inventes.
 - Para execute_command en Windows: usa comandos PowerShell o python.
 - Si recibes imagenes, analizalas visualmente: colores, layout, tipografia, jerarquia."""
-        # Verbosity steering (Headroom): bloque byte-estable que reduce tokens de
-        # salida. Gateado por env para A/B; default ON. ponytail: nivel ~2.
-        if os.getenv("LEO_VERBOSITY", "1") != "0":
-            base += _VERBOSITY_BLOCK
+        # Verbosity steering se inyecta condicionalmente en run()/stream_run()
+        # (solo tasks NO-amplitud) — ver _maybe_inject_verbosity.
         return base
 
 
