@@ -23,6 +23,8 @@ class ToolRegistry:
             "who_calls": self.who_calls,
             "callees": self.callees,
             "impact": self.impact,
+            "trace": self.trace,
+            "where": self.where,
             "list_by_kind": self.list_by_kind,
             "retrieve_full": self.retrieve_full,
         }
@@ -30,6 +32,7 @@ class ToolRegistry:
         self._capsules: dict = {}            # id -> Capsule (structural index)
         self._by_name: dict[str, list] = {}  # name -> [Capsule]
         self._callers: dict[str, list] = {}  # name -> [Capsule que lo llaman]
+        self._gq = None                      # GraphQuery: cerebro determinista (con prueba)
         # CCR (compresión reversible): outputs grandes se truncan en el contexto
         # pero el original se guarda aquí; el modelo lo recupera con retrieve_full.
         self._ccr_store: dict[str, str] = {}
@@ -51,7 +54,12 @@ class ToolRegistry:
         return full
 
     def set_index(self, capsules: dict):
-        """Conecta el índice estructural (capsules + grafo de llamadas) a las tools."""
+        """Conecta el índice estructural (capsules + grafo de llamadas) a las tools.
+
+        Además cose las aristas cross-lenguaje (HTTP) y construye el GraphQuery: el
+        cerebro determinista que responde trace/impact/who_calls/where con prueba
+        citable y CERO LLM (las tools del agente lo usan en vez de grepear y alucinar).
+        """
         self._capsules = capsules or {}
         self._by_name = {}
         self._callers = {}
@@ -60,6 +68,13 @@ class ToolRegistry:
         for c in self._capsules.values():
             for callee in (getattr(c, "calls", None) or []):
                 self._callers.setdefault(callee, []).append(c)
+        try:
+            from leo_code.core.boundary import link_http_edges
+            from leo_code.core.graphquery import GraphQuery
+            link_http_edges(self._capsules)  # idempotente
+            self._gq = GraphQuery(self._capsules)
+        except Exception:
+            self._gq = None
 
     def register(self, name: str, fn, definition: dict):
         self._tools[name] = fn
@@ -175,7 +190,7 @@ class ToolRegistry:
             }},
             {"type": "function", "function": {
                 "name": "who_calls",
-                "description": "Lista los simbolos que LLAMAN a un simbolo dado (callers directos). Para entender impacto y uso.",
+                "description": "DETERMINISTA, con PRUEBA (archivo:linea). Quien LLAMA a un simbolo. Preferelo a grep/search: no alucina.",
                 "parameters": {
                     "type": "object",
                     "properties": {"name": {"type": "string", "description": "Nombre del simbolo"}},
@@ -184,7 +199,7 @@ class ToolRegistry:
             }},
             {"type": "function", "function": {
                 "name": "callees",
-                "description": "Lista los simbolos a los que LLAMA un simbolo dado (sus dependencias directas).",
+                "description": "DETERMINISTA, con PRUEBA. A que simbolos LLAMA uno dado (dependencias directas).",
                 "parameters": {
                     "type": "object",
                     "properties": {"name": {"type": "string", "description": "Nombre del simbolo"}},
@@ -193,7 +208,28 @@ class ToolRegistry:
             }},
             {"type": "function", "function": {
                 "name": "impact",
-                "description": "Callers transitivos de un simbolo: que se romperia si lo cambias. BFS sobre el grafo de llamadas.",
+                "description": "DETERMINISTA, con PRUEBA. Que se ROMPE si cambias un simbolo (callers transitivos). Usalo ANTES de editar: es el grafo real, no una estimacion.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"name": {"type": "string", "description": "Nombre del simbolo"}},
+                    "required": ["name"],
+                },
+            }},
+            {"type": "function", "function": {
+                "name": "trace",
+                "description": "DETERMINISTA, con PRUEBA. Camino de llamadas de src a dst (como fluye el control/dato de A a B), cruza archivos/repos/lenguajes. Cada salto citado. Para 'como llega X a Y'.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "src": {"type": "string", "description": "Simbolo origen"},
+                        "dst": {"type": "string", "description": "Simbolo destino"},
+                    },
+                    "required": ["src", "dst"],
+                },
+            }},
+            {"type": "function", "function": {
+                "name": "where",
+                "description": "DETERMINISTA, con PRUEBA. Donde se define un simbolo (todas las definiciones), citado archivo:linea. Preferelo a grep.",
                 "parameters": {
                     "type": "object",
                     "properties": {"name": {"type": "string", "description": "Nombre del simbolo"}},
@@ -457,45 +493,35 @@ class ToolRegistry:
             lines.append(f"... (+{len(hits) - 60} mas)")
         return "\n".join(lines)
 
+    # who_calls / callees / impact / trace / where → cerebro determinista (GraphQuery),
+    # respuesta con PRUEBA citable (archivo:linea + arista) y cero alucinacion.
     def who_calls(self, args: dict, repo_path: str) -> str:
-        name = args.get("name") or ""
-        callers = self._callers.get(name)
-        if not callers:
-            c = self._lookup(name)
-            if c:
-                callers = self._callers.get(c.name, [])
-        if not callers:
-            return f"[Nadie llama a '{name}' (o no esta indexado).]"
-        return "\n".join(f"{c.name} ({c.type}) {self._rel(c)}" for c in callers[:20])
+        if not self._gq:
+            return "[Indice no disponible.]"
+        return self._gq.who_calls(args.get("name") or args.get("symbol") or "", limit=20).render()
 
     def callees(self, args: dict, repo_path: str) -> str:
-        name = args.get("name") or ""
-        c = self._lookup(name)
-        if not c:
-            return f"[Simbolo '{name}' no encontrado.]"
-        calls = [x for x in (getattr(c, "calls", None) or []) if x in self._by_name]
-        if not calls:
-            return f"[{c.name} no llama a simbolos indexados.]"
-        return "\n".join(dict.fromkeys(calls))[:1000] or "[sin callees]"
+        if not self._gq:
+            return "[Indice no disponible.]"
+        return self._gq.callees(args.get("name") or args.get("symbol") or "", limit=20).render()
 
     def impact(self, args: dict, repo_path: str) -> str:
-        name = args.get("name") or ""
-        c = self._lookup(name)
-        root = c.name if c else name
-        seen, frontier, order = {root}, [root], []
-        while frontier:
-            cur = frontier.pop(0)
-            for caller in self._callers.get(cur, []):
-                if caller.name not in seen:
-                    seen.add(caller.name)
-                    order.append(caller)
-                    frontier.append(caller.name)
-            if len(order) >= 30:
-                break
-        if not order:
-            return f"[Cambiar '{root}' no afecta a nadie indexado.]"
-        return f"[{len(order)} simbolos afectados (transitivo)]\n" + "\n".join(
-            f"{c.name} ({c.type}) {self._rel(c)}" for c in order[:30])
+        if not self._gq:
+            return "[Indice no disponible.]"
+        return self._gq.impact(args.get("name") or args.get("symbol") or "", limit=30).render()
+
+    def trace(self, args: dict, repo_path: str) -> str:
+        """Camino de llamadas src→dst (como fluye de A a B), cruza archivos/repos/
+        lenguajes, cada salto citado. Determinista, con prueba."""
+        if not self._gq:
+            return "[Indice no disponible.]"
+        return self._gq.trace(args.get("src") or "", args.get("dst") or "").render()
+
+    def where(self, args: dict, repo_path: str) -> str:
+        """Donde se define un simbolo (todas las definiciones), citado archivo:linea."""
+        if not self._gq:
+            return "[Indice no disponible.]"
+        return self._gq.where(args.get("name") or args.get("symbol") or "").render()
 
 
 def _verify_py(path: Path) -> str:

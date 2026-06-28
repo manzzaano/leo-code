@@ -1,0 +1,20 @@
+# leo-mcp — el motor expuesto como servidor MCP. Depende de leo-code-core.
+[build-system]
+requires = ["setuptools>=65"]
+build-backend = "setuptools.build_meta"
+[project]
+name = "leo-mcp"
+version = "0.2.0"
+description = "El motor KC-RAG de leo-code como servidor MCP para cualquier agente."
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+dependencies = ["leo-code-core==0.2.0", "mcp>=1.0", "fastapi>=0.115", "uvicorn>=0.30"]
+[project.scripts]
+leo-code-mcp-stdio = "leo_code.server.mcp_server:run_stdio"
+leo-code-mcp = "leo_code.server.server:main"
+[tool.setuptools]
+package-dir = {"" = "../.."}
+[tool.setuptools.packages.find]
+where = ["../.."]
+include = ["leo_code.server*"]

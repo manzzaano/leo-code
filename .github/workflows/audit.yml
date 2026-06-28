@@ -1,0 +1,32 @@
+# Auditoría FORMAL en CI: leo demostrado correcto vs oráculos independientes,
+# a escala (≥3 repos reales) y multi-lenguaje (Python vs `ast`, TypeScript vs `tsc`).
+# Una regresión del parser/grafo NO puede mergear.
+name: leo-code formal audit
+on: [push, pull_request]
+jobs:
+  formal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - run: pip install -e . coverage pytest
+      - name: Oráculo TS independiente (compilador TypeScript)
+        run: npm install typescript@5     # `node benchmark/ts_oracle.js` requiere tsc
+      - name: Clonar repos reales a escala (Python ~2M LOC + TypeScript)
+        run: |
+          git clone --depth 1 https://github.com/django/django.git /tmp/django
+          git clone --depth 1 https://github.com/sympy/sympy.git /tmp/sympy
+          git clone --depth 1 https://github.com/scipy/scipy.git /tmp/scipy
+          git clone --depth 1 https://github.com/microsoft/TypeScript.git /tmp/TypeScript
+      - name: Oráculo Python SOUND+COMPLETE en cada repo (precisión+recall 100%)
+        run: |
+          for r in /tmp/django /tmp/sympy /tmp/scipy; do
+            python benchmark/oracle.py --repo "$r"
+          done
+      - name: Oráculo TS SOUND+COMPLETE vs compilador TypeScript (100%)
+        run: NODE_PATH="$(pwd)/node_modules" python benchmark/ts_oracle.py /tmp/TypeScript
+      - name: Auditoría formal (a, a-ts, b, c, d) — exit 0 solo al 100%
+        run: NODE_PATH="$(pwd)/node_modules" python benchmark/audit_formal.py /tmp/django /tmp/sympy /tmp/scipy /tmp/TypeScript

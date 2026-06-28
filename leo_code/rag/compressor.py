@@ -267,8 +267,10 @@ def _compress_query(top_capsules: list[Capsule], budget_tokens: int) -> str:
             continue
         seen.add(c.name)
 
-        # Primera cápsula relevante: incluir cuerpo completo si cabe
-        if i == 0 and c.content and c.type in ("function", "class", "document", "file_header"):
+        # Primera cápsula relevante: incluir cuerpo completo si cabe.
+        # "method" incluido: es el tipo mayoritario del repo; sin él, toda query
+        # sobre un método devolvía solo firma (cero precisión sobre su lógica).
+        if i == 0 and c.content and c.type in ("function", "method", "class", "document", "file_header"):
             if c.type == "document":
                 body_text = f"[{c.name}|doc] {c.file_path}\n{c.content}"
             elif c.type == "file_header":
@@ -279,13 +281,29 @@ def _compress_query(top_capsules: list[Capsule], budget_tokens: int) -> str:
                 parts.append(body_text)
                 total_chars += len(body_text)
                 continue
+            # No cabe entero: truncar la CABEZA (firma + lógica inicial) en vez de
+            # tirar el cuerpo entero. Cero cuerpo = cero precisión sobre la lógica.
+            room = char_budget - total_chars - 80  # margen para fences + marcador
+            if room > 400 and c.type not in ("document", "file_header"):
+                head = c.content[:room]
+                body_text = f"[{c.name}|{c.type}] {c.file_path}\n```\n{head}\n# ... [truncado]\n```"
+                parts.append(body_text)
+                total_chars += len(body_text)
+                continue
 
-        # Resto: firma + docstring + relaciones
-        props = {
-            "signature": c.signature,
-            "file_path": c.file_path,
-            "docstring": c.docstring or "",
-        }
+        # Saltar nodos que son solo imports ("from X import Y" / "import X"): cero
+        # lógica, ya cubiertos por el campo Imports del header → puro ruido de tokens.
+        sig = (c.signature or "").lstrip()
+        if i > 0 and (sig.startswith("from ") or sig.startswith("import ")):
+            continue
+
+        # Resto: firma + docstring + relaciones. Omitir file_path cuando coincide
+        # con el archivo líder (ya está en el header ARCHIVOS) → menos ruido; los
+        # vecinos de OTROS archivos sí lo conservan para no perder atribución.
+        lead_file = top_capsules[0].file_path if top_capsules else None
+        props = {"signature": c.signature, "docstring": c.docstring or ""}
+        if c.file_path and c.file_path != lead_file:
+            props["file_path"] = c.file_path
         if c.calls:
             props["calls"] = ", ".join(c.calls[:8])
         if c.imports:
