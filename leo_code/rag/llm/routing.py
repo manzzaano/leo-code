@@ -16,19 +16,19 @@ COMPLEXITY_ROUTES: dict[str, list[str]] = {
         "openrouter/meta-llama/llama-4-maverick",
     ],
     "medium": [
-        "anthropic/claude-sonnet-4",
+        "anthropic/claude-sonnet-4-6",
         "deepseek/deepseek-v4-pro",
         "openai/gpt-4o",
         "mistral/codestral",
     ],
     "complex": [
-        "anthropic/claude-opus-4",
+        "anthropic/claude-opus-4-8",
         "openai/gpt-5.5",
         "deepseek/deepseek-v4-pro",
         "google/gemini-2.5-pro",
     ],
     "code": [
-        "anthropic/claude-sonnet-4",
+        "anthropic/claude-sonnet-4-6",
         "deepseek/deepseek-v4-pro",
         "deepseek/deepseek-v4-flash",
         "mistral/codestral",

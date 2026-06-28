@@ -586,24 +586,32 @@ class AgentLoop:
         return get_provider(provider_name, model=model_name)
 
     def _build_context(self, query: str, repo_path: str, task_type: str = "code_query") -> tuple[str, dict]:
-        """Cero seed: asegura el índice estructural y lo cablea a las tools.
+        """El agente usa su PROPIO motor: inyecta el contexto KC-RAG comprimido
+        (compute_context, ~80% menos tokens que leer archivos) y cablea el cerebro
+        determinista (GraphQuery) a las tools, para que el agente llame
+        trace/impact/who_calls (con prueba, cero alucinación) en vez de grepear.
 
-        No inyecta contexto — el agente recupera on-demand vía tools estructurales
-        (find_symbol, read_symbol, who_calls, callees, impact). Devuelve ("", timings)
-        para mantener el contrato con run()/goal.py.
+        Devuelve (contexto_comprimido, timings) — contrato con run()/goal.py.
         """
+        from leo_code import engine
         timings = {"t_index_ms": 0, "t_search_ms": 0, "t_compress_ms": 0}
         try:
-            if repo_path not in self._indexed_repos:
-                t_idx0 = time.perf_counter()
-                self._ensure_indexed(repo_path)
-                timings["t_index_ms"] = (time.perf_counter() - t_idx0) * 1000
-            # Cablear el índice a las tools cada llamada (barato; cubre warm reuse)
-            if self._indexer:
-                self.tools.set_index(self._indexer.get_capsules())
-            return "", timings
+            repo = os.path.abspath(repo_path)
+            t_idx0 = time.perf_counter()
+            with engine._index_lock:
+                need = repo not in engine._indexed_repos
+            if need:
+                engine._do_index(repo)
+            timings["t_index_ms"] = (time.perf_counter() - t_idx0) * 1000
+            # Cablea capsules + GraphQuery (cerebro) a las tools cada llamada (barato).
+            self.tools.set_index(engine._get_indexer().get_capsules())
+            # Inyecta el subgrafo comprimido en vez de que el agente lea archivos enteros.
+            t_c0 = time.perf_counter()
+            ctx = engine.compute_context(repo, query, task_type).get("context", "")
+            timings["t_compress_ms"] = (time.perf_counter() - t_c0) * 1000
+            return ctx, timings
         except Exception as e:
-            log.exception(f"Index error: {e}")
+            log.exception(f"Index/context error: {e}")
             return "", timings
 
     def _ensure_indexed(self, repo_path: str):

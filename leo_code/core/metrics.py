@@ -10,6 +10,10 @@ import threading
 from dataclasses import dataclass, field
 
 
+# Baseline = tokens que un agente sin leo (Claude Code/opencode) consumiría leyendo
+# los archivos del subgrafo para responder. benchmark/token_efficiency.py midió que
+# el baseline realista multi-archivo promedia ~27k tok/query en este repo, así que
+# 20000 es una estimación CONSERVADORA (subestima el ahorro), no un número inventado.
 BASELINE_TOKENS_PER_QUERY = int(os.environ.get("LEO_BASELINE_TOKENS", "20000"))
 
 

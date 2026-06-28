@@ -1,0 +1,22 @@
+# leo-code — el AGENTE (con el motor integrado). Depende de leo-code-core.
+[build-system]
+requires = ["setuptools>=65"]
+build-backend = "setuptools.build_meta"
+[project]
+name = "leo-code"
+version = "0.2.0"
+description = "Agente de codigo que no alucina sobre tu codigo ni se ahoga en repos grandes."
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+dependencies = ["leo-code-core==0.2.0", "click>=8", "rich>=13", "httpx>=0.27", "textual>=0.80"]
+[project.optional-dependencies]
+anthropic = ["anthropic>=0.69"]
+openai = ["openai>=1.30"]
+[project.scripts]
+leo-code = "leo_code.rag.cli.app:cli"
+[tool.setuptools]
+package-dir = {"" = "../.."}
+[tool.setuptools.packages.find]
+where = ["../.."]
+include = ["leo_code.rag.agent*", "leo_code.rag.cli*", "leo_code.rag.llm*", "leo_code.session*", "leo_code.plugins*", "leo_code.learning*", "leo_code.sdk*"]

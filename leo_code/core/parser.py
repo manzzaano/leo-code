@@ -34,6 +34,21 @@ def _make_id(file_path: str, start_line: int, signature: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 
+def _node_calls(node) -> list[str]:
+    """Llamadas dentro de un nodo: nombres `foo()` (Name) Y `obj.foo()` (Attribute).
+    Consistente para funciones, métodos y clases — el grafo no debe perder aristas
+    de método según el tipo de cápsula (era un bug: funciones solo capturaban Name)."""
+    calls = []
+    for child in ast.walk(node):
+        if isinstance(child, ast.Call):
+            f = child.func
+            if isinstance(f, ast.Name):
+                calls.append(f.id)
+            elif isinstance(f, ast.Attribute):
+                calls.append(f.attr)
+    return calls
+
+
 def extract_from_python(content: str, file_path: str) -> list[Capsule]:
     """Extrae cápsulas del AST de un archivo Python. 0 dependencias externas."""
     capsules = []
@@ -87,10 +102,7 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
             prefix = "async def" if is_async else "def"
             sig = f"{prefix} {node.name}({', '.join(params)}) -> {returns}"
 
-            calls = []
-            for child in ast.walk(node):
-                if isinstance(child, ast.Call) and isinstance(child.func, ast.Name):
-                    calls.append(child.func.id)
+            calls = _node_calls(node)
 
             if not doc and lines <= 15:
                 doc = (ast.get_source_segment(content, node) or "")[:300]
@@ -137,10 +149,7 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
             lines = (node.end_lineno or node.lineno) - node.lineno + 1
             sig = f"class {node.name}({', '.join(bases)})" if bases else f"class {node.name}"
 
-            calls = []
-            for child in ast.walk(node):
-                if isinstance(child, ast.Call) and isinstance(child.func, ast.Name):
-                    calls.append(child.func.id)
+            calls = _node_calls(node)
 
             decorators = [
                 ast.unparse(d) for d in node.decorator_list
@@ -189,10 +198,12 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
                 m_ret = ast.unparse(m.returns) if m.returns else "None"
                 m_prefix = "async def" if isinstance(m, ast.AsyncFunctionDef) else "def"
                 m_sig = f"{m_prefix} {node.name}.{m.name}({', '.join(m_args)}) -> {m_ret}"
-                m_calls = [c.func.id for c in ast.walk(m)
-                           if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)]
-                m_calls += [c.func.attr for c in ast.walk(m)
-                            if isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute)]
+                m_calls = _node_calls(m)
+                m_decos = [ast.unparse(d) for d in m.decorator_list] if m.decorator_list else []
+                m_props = {"class": node.name, "qualified": f"{node.name}.{m.name}",
+                           "module": module_name}
+                if m_decos:
+                    m_props["decorators"] = ", ".join(m_decos)
                 capsules.append(Capsule(
                     id=_make_id(file_path, m.lineno, m_sig),
                     type="method", name=m.name, file_path=file_path,
@@ -200,8 +211,7 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
                     language="python", signature=m_sig,
                     content=ast.get_source_segment(content, m) or ast.unparse(m),
                     docstring=ast.get_docstring(m), calls=m_calls,
-                    properties={"class": node.name, "qualified": f"{node.name}.{m.name}",
-                                "module": module_name},
+                    properties=m_props,
                 ))
 
         elif isinstance(node, (ast.Assign, ast.AnnAssign)):
@@ -765,6 +775,13 @@ def extract_from_file(path: str, language: str = "python") -> list[Capsule]:
             return detect_frameworks(extract_html_css(content, path, language))
         except ImportError:
             return extract_from_txt(content, path)
+    if language in ("typescript", "javascript"):
+        # AST real (tree-sitter): grafo de llamadas SOUND+COMPLETE, no la regex genérica.
+        try:
+            from leo_code.core.parser_ts import extract_from_tree_sitter as _ts
+            return detect_frameworks(_ts(content, path, language))
+        except Exception:
+            pass   # sin bindings tree-sitter → cae al parser genérico de abajo
     try:
         from leo_code.core.parser_generic import extract_generic
         return detect_frameworks(extract_generic(content, path, language))

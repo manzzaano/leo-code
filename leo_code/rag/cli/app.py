@@ -280,6 +280,71 @@ def ask(query: str, model: str, repo: str, no_rag: bool, image: tuple[str]):
 
 
 @cli.command()
+@click.option("--model", "-m", default="anthropic/claude-opus-4-8",
+              help="Modelo para el chat (los comandos /trace /impact /who no necesitan modelo)")
+@click.option("--repo", "-r", default=".", help="Ruta del repositorio")
+def tui(model: str, repo: str):
+    """TUI Cockpit full-screen: chat + panel de contexto en vivo + grafo determinista.
+
+    Los comandos estructurales (/trace /impact /who /where) funcionan SIN LLM.
+    """
+    from leo_code.rag.cli.tui import run_tui
+    run_tui(repo=repo, model=model)
+
+
+@cli.command()
+@click.option("--repo", "-r", default=".", help="Ruta del repositorio")
+@click.option("--staged", is_flag=True, help="Solo lo staged (pre-commit hook)")
+@click.option("--base", default=None, help="Rama base para revisar un PR (ej. main)")
+@click.option("--symbol", "-s", default=None,
+              help="Antes de editar: muestra el impacto de UN símbolo")
+def guardian(repo: str, staged: bool, base: str, symbol: str):
+    """Guardián DETERMINISTA de cambios: radio de explosión + cobertura de tests.
+
+    Sin símbolo → revisa el diff (working tree / --staged / --base rama) como un PR/CI
+    guardian y sale con código !=0 si hay afectados SIN test. Con -s SÍMBOLO → preview
+    de impacto antes de editar. Cruza lenguajes (HTTP). Cero tokens de LLM, con prueba.
+    """
+    import sys as _sys
+    from rich.console import Console
+    console = Console(highlight=False)
+    if symbol:
+        from leo_code.rag.indexer import Indexer
+        from leo_code.core.boundary import link_http_edges
+        from leo_code.core.guardian import Guardian
+        idx = Indexer(); idx.build(repo, verbose=False)
+        caps = idx.get_capsules(); link_http_edges(caps)
+        console.print(Guardian(caps).review(symbol).render())
+        return
+    from leo_code.core.guardian import guard_repo
+    reports, summ = guard_repo(repo, staged=staged, base=base)
+    if not reports:
+        console.print("[green]guardian: sin símbolos cambiados en el diff.[/green]")
+        return
+    for r in reports:
+        console.print(r.render())
+        console.print()
+    risk = summ["uncovered_risk"]
+    color = "red" if risk else "green"
+    console.print(f"[{color}]guardian · {summ['changed']} cambios · {summ['affected']} "
+                  f"afectados · {risk} SIN test (riesgo)[/{color}]  — determinista, con prueba, cero LLM")
+    _sys.exit(1 if risk else 0)
+
+
+@cli.command()
+def audit():
+    """Auditoría ESTRICTA de todas las promesas del sistema (exit 0 solo al 100%)."""
+    import subprocess
+    import sys as _sys
+    from pathlib import Path
+    script = Path.cwd() / "benchmark" / "audit.py"
+    if not script.exists():
+        click.echo("benchmark/audit.py no encontrado — ejecuta desde el repo.", err=True)
+        _sys.exit(2)
+    _sys.exit(subprocess.run([_sys.executable, str(script)]).returncode)
+
+
+@cli.command()
 @click.option("--model", "-m", default="deepseek/deepseek-v4-flash",
               help="Modelo LLM")
 @click.option("--repo", "-r", default=".", help="Ruta del repositorio")

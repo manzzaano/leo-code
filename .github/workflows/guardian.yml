@@ -1,0 +1,19 @@
+# leo-code guardian — check determinista de PR: radio de explosión + cobertura.
+# Cero coste de LLM. Falla si un cambio toca código cuyo blast radius no tiene test.
+name: leo-code guardian
+on:
+  pull_request:
+jobs:
+  guardian:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # necesita el historial para diff vs base
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar leo-code-core (motor, sin LLM)
+        run: pip install -e .
+      - name: Revisar el PR (impacto + cobertura, con prueba)
+        run: leo-code guardian --base "origin/${{ github.base_ref }}"

@@ -48,3 +48,13 @@ benchmark_run.log
 
 # Local dev
 leo-code-dev
+
+# build artifacts de los wheels de packaging
+packaging/*/dist/
+packaging/*/build/
+packaging/*/*.egg-info/
+
+# artefactos de cobertura / auditoría
+.coverage
+cov.json
+_no_docstring_*.txt
