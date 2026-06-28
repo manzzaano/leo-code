@@ -129,8 +129,17 @@ class OpenAIProvider(LLMProvider):
 
         stream = self.client.chat.completions.create(**kwargs)
         tool_calls_acc: dict[int, dict] = {}
+        reasoning_acc = ""
         for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+            # DeepSeek V4 / reasoner (thinking mode): el modelo EXIGE que le devuelvas el
+            # reasoning_content del turno con tool_calls. Lo acumulamos para reinyectarlo.
+            rc = getattr(delta, "reasoning_content", None)
+            if rc:
+                reasoning_acc += rc
+            if delta.content:
                 yield chunk.choices[0].delta.content
             if chunk.choices and chunk.choices[0].delta.tool_calls:
                 for tc in chunk.choices[0].delta.tool_calls:
@@ -143,6 +152,9 @@ class OpenAIProvider(LLMProvider):
                         tool_calls_acc[idx]["name"] += tc.function.name
                     if tc.function and tc.function.arguments:
                         tool_calls_acc[idx]["args"] += tc.function.arguments
+
+        if reasoning_acc:
+            yield {"type": "reasoning", "content": reasoning_acc}
 
         for tc in tool_calls_acc.values():
             if tc["name"]:
