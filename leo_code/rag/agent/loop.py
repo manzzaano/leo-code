@@ -75,7 +75,7 @@ class AgentLoop:
         self._indexer = None
         self._conversation_history = None
         self._indexed_repos = set()
-        self._recent_calls: set[str] = set()  # anti-loop
+        self._recent_calls: dict[str, int] = {}  # anti-loop: cuenta repeticiones IDÉNTICAS
         self._tool_call_count = 0
 
     async def run(self, query: str, repo_path: str = ".",
@@ -255,11 +255,12 @@ class AgentLoop:
                 if isinstance(args, str):
                     try: args = json.loads(args)
                     except: args = {}
-                call_key = f"{tc.name}:{str(args)[:80]}"
-                if call_key in self._recent_calls:
-                    messages.append({"role": "tool", "tool_call_id": tc_data["id"], "content": "[Llamada repetida]"})
+                call_key = _loop_key(tc.name, args)
+                self._recent_calls[call_key] = self._recent_calls.get(call_key, 0) + 1
+                if self._recent_calls[call_key] >= _LOOP_BLOCK_THRESHOLD:
+                    messages.append({"role": "tool", "tool_call_id": tc_data["id"],
+                                     "content": f"[Llamada idéntica repetida {self._recent_calls[call_key]}× — cambia de estrategia o de argumentos]"})
                     continue
-                self._recent_calls.add(call_key)
                 self._tool_call_count += 1
 
                 result = self.tools.execute(tc.name, args, repo_path)
@@ -451,6 +452,7 @@ class AgentLoop:
         tool_defs = self.tools.get_openai_definitions()
         total_tokens = 0
         self._tool_call_count = 0
+        self._recent_calls.clear()   # anti-loop por query (no arrastrar entre turnos de chat)
         all_text = ""
         llm_iterations = 0
         next_effort: Optional[str] = None  # effort routing (Headroom)
@@ -536,14 +538,15 @@ class AgentLoop:
                         messages.append({"role": "tool", "tool_call_id": tc_id, "content": f"[Bloqueado: {reason}]"})
                         continue
 
-                # Loop detection
-                call_key = f"{tc['name']}:{str(args)[:80]}"
-                if call_key in self._recent_calls:
+                # Loop detection: solo la MISMA tool con args IDÉNTICOS repetida ≥3×.
+                call_key = _loop_key(tc["name"], args)
+                self._recent_calls[call_key] = self._recent_calls.get(call_key, 0) + 1
+                if self._recent_calls[call_key] >= _LOOP_BLOCK_THRESHOLD:
+                    msg = f"[Llamada idéntica a {tc['name']} repetida {self._recent_calls[call_key]}× — cambia de estrategia o de argumentos]"
                     yield {"type": "tool_start", "name": tc["name"], "args": args}
-                    yield {"type": "tool_result", "name": tc["name"], "output": f"[Llamada repetida a {tc['name']} — busca otra estrategia]"}
-                    messages.append({"role": "tool", "tool_call_id": tc_id, "content": f"[Llamada repetida]"})
+                    yield {"type": "tool_result", "name": tc["name"], "output": msg}
+                    messages.append({"role": "tool", "tool_call_id": tc_id, "content": msg})
                     continue
-                self._recent_calls.add(call_key)
                 self._tool_call_count += 1
 
                 yield {"type": "tool_start", "name": tc["name"], "args": args}
@@ -717,6 +720,19 @@ def _build_user_content(query: str, images: list[str], repo_path: str) -> list[d
         except Exception:
             content.append({"type": "text", "text": f"[No se pudo cargar imagen: {img_path}]"})
     return content
+
+
+_LOOP_BLOCK_THRESHOLD = 3   # bloquea solo a la 3ª llamada IDÉNTICA (permite reintentos legítimos)
+
+
+def _loop_key(name: str, args: dict) -> str:
+    """Clave de detección de bucles: tool + args COMPLETOS y ordenados. Misma tool con
+    args DISTINTOS → claves distintas (no se penaliza); solo la repetición exacta cuenta."""
+    try:
+        a = json.dumps(args, sort_keys=True, ensure_ascii=False)
+    except Exception:
+        a = str(sorted(args.items())) if isinstance(args, dict) else str(args)
+    return f"{name}|{a}"
 
 
 def _assistant_tool_msg(text: str, tool_calls: list[dict], reasoning: str = "") -> dict:
