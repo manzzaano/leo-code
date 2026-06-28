@@ -147,7 +147,8 @@ async def _render_stream(console, events, status, total_saved_ref):
         elif etype == "context":
             ttype = event.get("task_type", "")
             color = _TASK_COLORS.get(ttype, "dim")
-            status.update_context(event.get("tokens", 0), ttype)
+            if status is not None:          # `ask` no tiene barra de estado (sí `chat`/`tui`)
+                status.update_context(event.get("tokens", 0), ttype)
             console.print(f"[{color}]  ▸ KC-RAG · {event['tokens']} tok · {ttype}[/{color}]")
 
         elif etype == "token":
@@ -190,7 +191,8 @@ async def _render_stream(console, events, status, total_saved_ref):
             tokens = event.get("total_tokens", 0)
             its = event.get("iterations", 0)
             saved = max(0, 20000 - tokens)
-            status.end_query(tokens, its, dur, saved)
+            if status is not None:
+                status.end_query(tokens, its, dur, saved)
             _render_impact(console, tokens, saved, its, dur)
             total_saved_ref[0] += saved
 
