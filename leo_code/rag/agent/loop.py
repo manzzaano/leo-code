@@ -470,6 +470,7 @@ class AgentLoop:
             # Stream tokens
             text = ""
             tool_calls: list[dict] = []
+            reasoning = ""   # reasoning_content del turno (thinking models: hay que devolverlo)
             t_llm0 = time.perf_counter()
             async for chunk in self.llm.stream(messages, tool_defs, effort=next_effort):
                 if self.interrupt:
@@ -480,6 +481,8 @@ class AgentLoop:
                     yield {"type": "token", "text": chunk}
                 elif isinstance(chunk, dict) and chunk.get("type") == "tool_call":
                     tool_calls.append(chunk)
+                elif isinstance(chunk, dict) and chunk.get("type") == "reasoning":
+                    reasoning = chunk.get("content", "")
             t_llm_ms += (time.perf_counter() - t_llm0) * 1000
             llm_iterations += 1
 
@@ -509,12 +512,19 @@ class AgentLoop:
                        "total_tokens": total_tokens, "duration_ms": duration_ms}
                 return
 
-            # Execute tools
+            # Execute tools.
+            # UN solo mensaje `assistant` con TODOS los tool_calls (spec OpenAI: tool_calls
+            # paralelos + un mensaje `tool` por cada uno), args en JSON (no repr Python), y
+            # reasoning_content reinyectado si el modelo lo exige (DeepSeek V4 thinking).
             any_error = False
             ran_tool = False
+            for i, tc in enumerate(tool_calls):
+                tc["_id"] = tc.get("id") or f"call_{iteration}_{i}"
+            messages.append(_assistant_tool_msg(text, tool_calls, reasoning))
+
             for tc in tool_calls:
                 args = tc.get("args", {})
-                tc_id = tc.get("id", f"call_{iteration}_{hash(tc['name']) % 10000}")
+                tc_id = tc["_id"]
 
                 # Permission check
                 if self.perms:
@@ -523,7 +533,6 @@ class AgentLoop:
                         any_error = True
                         yield {"type": "tool_start", "name": tc["name"], "args": args}
                         yield {"type": "tool_result", "name": tc["name"], "output": f"[Bloqueado: {reason}]"}
-                        messages.append({"role": "assistant", "content": text or "", "tool_calls": [{"id": tc_id, "type": "function", "function": {"name": tc["name"], "arguments": str(args)}}]})
                         messages.append({"role": "tool", "tool_call_id": tc_id, "content": f"[Bloqueado: {reason}]"})
                         continue
 
@@ -532,7 +541,6 @@ class AgentLoop:
                 if call_key in self._recent_calls:
                     yield {"type": "tool_start", "name": tc["name"], "args": args}
                     yield {"type": "tool_result", "name": tc["name"], "output": f"[Llamada repetida a {tc['name']} — busca otra estrategia]"}
-                    messages.append({"role": "assistant", "content": text or "", "tool_calls": [{"id": tc_id, "type": "function", "function": {"name": tc["name"], "arguments": str(args)}}]})
                     messages.append({"role": "tool", "tool_call_id": tc_id, "content": f"[Llamada repetida]"})
                     continue
                 self._recent_calls.add(call_key)
@@ -548,7 +556,6 @@ class AgentLoop:
                     ref = self.tools.store_full(result)
                     result = result[:800] + f"\n[truncado {len(result)} chars — usa retrieve_full('{ref}') para el resto]"
                 yield {"type": "tool_result", "name": tc["name"], "output": result}
-                messages.append({"role": "assistant", "content": text or "", "tool_calls": [{"id": tc_id, "type": "function", "function": {"name": tc["name"], "arguments": str(args)}}]})
                 messages.append({"role": "tool", "tool_call_id": tc_id, "content": result[:1000]})
                 total_tokens += len(result) // 4
 
@@ -710,6 +717,23 @@ def _build_user_content(query: str, images: list[str], repo_path: str) -> list[d
         except Exception:
             content.append({"type": "text", "text": f"[No se pudo cargar imagen: {img_path}]"})
     return content
+
+
+def _assistant_tool_msg(text: str, tool_calls: list[dict], reasoning: str = "") -> dict:
+    """Construye UN mensaje assistant con todos los tool_calls (spec OpenAI), args en JSON,
+    y reasoning_content si el modelo lo exige (DeepSeek V4 thinking lo rechaza si falta).
+    Cada tc debe traer su id estable en `_id`."""
+    msg = {
+        "role": "assistant",
+        "content": text or "",
+        "tool_calls": [{"id": tc["_id"], "type": "function",
+                        "function": {"name": tc["name"],
+                                     "arguments": json.dumps(tc.get("args", {}))}}
+                       for tc in tool_calls],
+    }
+    if reasoning:
+        msg["reasoning_content"] = reasoning
+    return msg
 
 
 def _compact_messages(messages: list[dict], keep_last: int = 6) -> list[dict]:
