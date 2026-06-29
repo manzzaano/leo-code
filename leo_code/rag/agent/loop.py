@@ -274,9 +274,9 @@ class AgentLoop:
                         pass
                 if tc.name in ("write_file", "replace_in_file"):
                     edited = True
-                if len(result) > 800:
+                if len(result) > 4000:
                     ref = self.tools.store_full(result)
-                    result = result[:800] + f"\n[truncado {len(result)} chars — usa retrieve_full('{ref}') para el resto]"
+                    result = result[:4000] + f"\n[truncado {len(result)} chars — usa retrieve_full('{ref}') UNA vez para el resto; NO inventes otras refs]"
                 messages.append({"role": "tool", "tool_call_id": tc_data["id"], "content": result[:1000]})
                 total_tokens += len(result) // 4
 
@@ -474,7 +474,10 @@ class AgentLoop:
             tool_calls: list[dict] = []
             reasoning = ""   # reasoning_content del turno (thinking models: hay que devolverlo)
             t_llm0 = time.perf_counter()
-            async for chunk in self.llm.stream(messages, tool_defs, effort=next_effort):
+            # Últimas 2 iteraciones: sin tools → el modelo DEBE sintetizar respuesta con lo
+            # que ya recopiló (evita agotar iteraciones explorando sin responder nunca).
+            active_tools = None if iteration >= self.max_iterations - 2 else tool_defs
+            async for chunk in self.llm.stream(messages, active_tools, effort=next_effort):
                 if self.interrupt:
                     break
                 if isinstance(chunk, str):
@@ -555,9 +558,9 @@ class AgentLoop:
                 if _looks_like_error(result):
                     any_error = True
                 # Trim resultes largos
-                if len(result) > 800:
+                if len(result) > 4000:
                     ref = self.tools.store_full(result)
-                    result = result[:800] + f"\n[truncado {len(result)} chars — usa retrieve_full('{ref}') para el resto]"
+                    result = result[:4000] + f"\n[truncado {len(result)} chars — usa retrieve_full('{ref}') UNA vez para el resto; NO inventes otras refs]"
                 yield {"type": "tool_result", "name": tc["name"], "output": result}
                 messages.append({"role": "tool", "tool_call_id": tc_id, "content": result[:1000]})
                 total_tokens += len(result) // 4
