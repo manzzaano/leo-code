@@ -321,14 +321,34 @@ class ToolRegistry:
 
     def list_files(self, args: dict, repo_path: str) -> str:
         base = Path(repo_path) / args.get("path", ".")
-        depth = args.get("depth", 2)
+        depth = int(args.get("depth", 2) or 2)
         pattern = args.get("pattern", "")
+        if not base.exists():
+            return f"[No existe: {base}]"
         try:
-            if pattern:
-                matches = sorted(base.rglob(pattern))
-            else:
-                matches = sorted(base.rglob("*"))
-            return _render_file_tree(base, matches, depth)
+            it = base.rglob(pattern) if pattern else base.rglob("*")
+            out: list[str] = []
+            shown = total = 0
+            for p in sorted(it):
+                rel = p.relative_to(base)
+                # filtra ruido (.git, caches, deps) y respeta la profundidad pedida
+                if any(part in _IGNORE_DIRS for part in rel.parts) or p.is_dir() \
+                        or len(rel.parts) > depth:
+                    continue
+                total += 1
+                if shown < 150:
+                    try:
+                        size = p.stat().st_size
+                    except OSError:
+                        size = 0
+                    sz = f"{size}B" if size < 1024 else f"{size // 1024}KB"
+                    out.append(f"  {rel.as_posix()}  ({sz})")   # RELATIVO, no absoluto
+                    shown += 1
+            if total == 0:
+                return f"[Sin archivos{' para ' + pattern if pattern else ''} en {base.name or '.'}]"
+            if total > shown:
+                out.append(f"  … +{total - shown} más (acota con pattern='*.py' o baja depth)")
+            return f"{total} archivos en {base.name or '.'} (depth {depth}):\n" + "\n".join(out)
         except Exception as e:
             return f"[Error listando {base}: {e}]"
 
@@ -538,43 +558,8 @@ def _verify_py(path: Path) -> str:
         return ""
 
 
-def _render_file_tree(base: Path, matches: list[Path], max_depth: int) -> str:
-    """Render file tree with Rich Tree or fallback text."""
-    try:
-        from rich.tree import Tree
-        tree = Tree(f"📁 {base.name or '.'}")
-        nodes: dict[str, object] = {".": tree}
-        count = 0
-        for p in matches[:100]:
-            if p.is_dir():
-                continue
-            rel = p.relative_to(base)
-            if len(rel.parts) > max_depth:
-                continue
-            count += 1
-            parent = tree
-            for i, part in enumerate(rel.parts[:-1]):
-                key = "/".join(rel.parts[:i + 1])
-                if key not in nodes:
-                    nodes[key] = parent.add(f"📁 {part}")
-                parent = nodes[key]
-            name = rel.parts[-1]
-            size = p.stat().st_size
-            suffix = f"  ({size} B)" if size < 1024 else f"  ({size // 1024} KB)"
-            parent.add(f"📄 {name}{suffix}")
-        if count == 0:
-            return "[Directorio vacío]"
-        return str(tree)
-    except ImportError:
-        lines = []
-        count = 0
-        for p in matches[:80]:
-            if p.is_dir():
-                continue
-            rel = p.relative_to(base)
-            if len(rel.parts) > max_depth:
-                continue
-            count += 1
-            size = p.stat().st_size
-            lines.append(f"  {rel} ({size} B)" if size < 1024 else f"  {rel} ({size // 1024} KB)")
-        return "\n".join(lines) if lines else "[Directorio vacío]"
+# Directorios de ruido que list_files nunca debe volcar (rompía al agente: miles de
+# entradas de .git/caches → output gigante → truncado → bucle de retrieve_full).
+_IGNORE_DIRS = {".git", "__pycache__", ".codegraph", "node_modules", ".venv", "venv",
+                "cache", "dist", "build", ".mypy_cache", ".pytest_cache", ".ruff_cache",
+                ".idea", ".vscode", "site-packages", ".egg-info", "htmlcov"}
