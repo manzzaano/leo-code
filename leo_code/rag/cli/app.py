@@ -13,6 +13,15 @@ import asyncio
 import click
 from pathlib import Path
 
+# En import (no en cli()): `--help` de click corta antes del callback y la consola
+# Windows cp1252 rompe los caracteres no-ASCII del texto de ayuda.
+for _s in (sys.stdout, sys.stderr):
+    if hasattr(_s, "reconfigure"):
+        try:
+            _s.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
 VERSION = "0.2.0"
 
 _ENV_VAR_MAP = {
