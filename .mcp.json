@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "leo-code": {
+      "command": "python",
+      "args": ["-m", "leo_code.server.mcp_server"],
+      "env": { "LEO_REPO": ".", "PYTHONUTF8": "1" }
+    }
+  }
+}

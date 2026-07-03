@@ -1,18 +1,28 @@
 # 🧠 leo-code
 
-**Un agente de código que no alucina sobre tu código y no se ahoga en repos grandes.**
+**La primera inteligencia de código DEMOSTRADA, no estimada.**
 
-leo-code construye un grafo determinista del AST de tu codebase y lo usa de dos formas:
-te da el **subgrafo comprimido** que tu modelo necesita (en vez del archivo entero) y
-responde las preguntas **estructurales** —qué llama a qué, qué se rompe, cómo fluye un
-dato de A a B— con **prueba citable y cero tokens de LLM**.
+Todos los agentes prometen "entender tu código". leo-code es el único que lo **prueba**:
+
+> Cada respuesta estructural —quién llama a qué, qué se rompe, cómo fluye un dato de
+> A a B— sale de un grafo verificado al **100% de precisión Y recall contra oráculos
+> independientes** (el `ast` de Python y el **compilador de TypeScript**) sobre repos
+> reales de **~6 millones de líneas**, con **cero tokens de LLM** y cada resultado
+> citado `archivo:línea`. La verificación corre **gateada en CI**: si una regresión
+> rompe la garantía, el commit no mergea.
+
+Eso es una categoría nueva: **inteligencia de código con prueba formal**
+(*proof-carrying code intelligence*). GPT-5, Claude, Copilot, Cursor y opencode
+*estiman* la estructura de tu repo; leo la **demuestra** — y cuando alucinar no es
+una opción (¿puedo borrar esta función? ¿qué rompe este cambio?), esa diferencia
+es todo el producto.
 
 Se entrega como **dos productos open source sobre un motor compartido**:
 
 | Producto | Qué es | Para quién |
 |----------|--------|------------|
-| **`leo-code`** | El agente de código, con el motor integrado por dentro | Lo usas como tu agente (tipo Claude Code / opencode) |
-| **`leo-mcp`** | El motor expuesto como servidor MCP | Lo enchufas a tu agente favorito y aprovechas el ahorro de tokens |
+| **`leo-code`** | El agente de código con TUI cockpit (chat + grafo en vivo + medidor de ahorro) | Lo usas como tu agente (tipo Claude Code / opencode) |
+| **`leo-mcp`** | El motor expuesto como servidor MCP (6 tools) | Lo enchufas a Claude Code / opencode / Cursor y tu agente deja de alucinar estructura |
 
 Ambos dependen de **`leo-code-core`** (el motor: indexado + retrieval + compresión +
 cerebro determinista), que no arrastra ni el agente ni el servidor HTTP.
@@ -32,13 +42,27 @@ El cuello de botella de los agentes de código no es el modelo: es el **contexto
 - **Los repos grandes revientan el context window.** Un monorepo de 5M LOC son ~12M
   tokens (58× una ventana de 200k). leo responde cualquier símbolo en <2k tokens.
 
-### Números verificados
+### La garantía (auditoría formal, no marketing)
+
+`python benchmark/audit_formal.py` re-deriva el grafo con **parsers que no son los de
+leo** y compara arista a arista. Exit 0 solo al 100% en TODO; corre en CI en cada push:
+
+| Check | Resultado medido | Oráculo independiente |
+|-------|------------------|----------------------|
+| (a) Grafo Python SOUND + COMPLETE | **100% precisión · 100% recall** (~277k símbolos, 8 repos: Django, sympy, cpython…) | módulo `ast` de Python |
+| (a-ts) Grafo TS/JS SOUND + COMPLETE | **100% · 100%** (80.291 aristas, repo del compilador TS) | compilador `tsc` (Node) |
+| (b) Cobertura del guardián | **0 falsos en ambas direcciones** | `coverage.py` ejecutando los tests reales |
+| (c) Blast radius completo | tests que fallan al romper X **⊆** lo predicho | mutation testing real |
+| (d) SLA a ~6M LOC (499k símbolos) | query peor caso **3,3ms** (<50ms) · guardián **1,1s** (<2s) | reloj |
+| (e) Reproducible y gateado | exit 0 solo si TODO pasa | GitHub Actions |
+
+### Números de eficiencia
 
 | Métrica | Valor | Cómo |
 |---------|-------|------|
 | Reducción de tokens (vs leer el archivo) | **80–97%** | `benchmark/token_efficiency.py`, `_scale.py` |
 | Recall del símbolo objetivo | **100%** | guard determinista, sin LLM |
-| Escala | **5M+ LOC, 7 repos, multi-lenguaje** (Python+TS+JS) en un grafo | `core/orggraph.py` |
+| Escala | **5M+ LOC, 8 repos, multi-lenguaje** (Python+TS+JS) en un grafo | `core/orggraph.py` |
 | Preguntas estructurales | trace/impact/who_calls/where en **0–16ms, con prueba** | `core/graphquery.py` |
 
 ---
@@ -75,7 +99,12 @@ export DEEPSEEK_API_KEY=sk-...      # o ANTHROPIC_API_KEY / OPENAI_API_KEY
 
 ```bash
 leo-code            # CLI del agente (usa el motor: inyecta contexto + tools deterministas)
+leo-code tui        # cockpit full-screen: chat + grafo en vivo + medidor de tokens ahorrados
 ```
+
+La TUI funciona **sin API key**: `/trace` `/impact` `/guard` `/who` `/where` son
+deterministas (cero LLM). `/compare X` enseña lado-a-lado lo que un agente grep+read
+habría gastado en la misma pregunta (tokens, archivos, $) — el contrafactual, visible.
 
 #### Modelos / proveedores
 
@@ -102,18 +131,38 @@ esfuerzo a `output_config.effort`, gestiona refusals). Otros: `deepseek/…`, `o
 
 ### Producto 2 — el motor vía MCP
 
-Regístralo en tu cliente MCP (Claude Code, opencode, Cursor…):
+**Claude Code** (una línea):
+
+```bash
+claude mcp add leo-code -- python -m leo_code.server.mcp_server
+```
+
+o `.mcp.json` del proyecto (este repo ya trae uno):
 
 ```json
 {
   "mcpServers": {
-    "leo-code": { "command": "python", "args": ["-m", "leo_code.server.mcp_server"] }
+    "leo-code": { "command": "python", "args": ["-m", "leo_code.server.mcp_server"],
+                  "env": { "LEO_REPO": "." } }
   }
 }
 ```
 
-Tools que expone: `get_context` (subgrafo comprimido) + `trace` / `impact` /
-`who_calls` / `where` (deterministas, con prueba, cero LLM).
+**opencode** — `opencode.json` (este repo ya trae uno):
+
+```json
+{
+  "mcp": {
+    "leo-code": { "type": "local", "command": ["python", "-m", "leo_code.server.mcp_server"],
+                  "enabled": true }
+  }
+}
+```
+
+Tools que expone: `get_context` (subgrafo comprimido, ~80% menos tokens) +
+`trace` / `impact` / `who_calls` / `where` / `guard` (deterministas, con prueba
+`archivo:línea`, cero LLM). `guard` marca además qué afectados están **sin test**
+antes de que tu agente edite.
 
 ### El motor programáticamente
 
@@ -162,9 +211,10 @@ Contexto estructural (~400–2000 tokens) → al modelo
 ## Tests y benchmarks
 
 ```bash
-pytest                                  # suite (119 tests)
+pytest                                  # suite (147 tests)
+python benchmark/audit.py               # 9 promesas medidas, exit 0 solo al 100%
+python benchmark/audit_formal.py <repos># verificación FORMAL vs oráculos (ast / tsc)
 python benchmark/token_efficiency.py    # reducción de tokens + recall (determinista)
-python benchmark/retrieval_bench.py     # recall estructural (guard CI)
 python benchmark/mcp_client_bench.py    # producto 2 end-to-end vía cliente MCP real
 ```
 

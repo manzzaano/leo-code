@@ -23,9 +23,11 @@ Arranque:  leo-code tui   (o: python -m leo_code.rag.cli.tui)
 from __future__ import annotations
 
 import os
+import time
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.suggester import SuggestFromList
 from textual.widgets import Header, Footer, Input, Static, Markdown
 from textual import work
 
@@ -33,12 +35,46 @@ _HELP = (
     "**Comandos** (deterministas, cero LLM):\n"
     "- `/trace A B` — camino de llamadas A→B, con prueba\n"
     "- `/impact X` — qué se rompe si cambias X\n"
+    "- `/guard X` — radio de explosión + qué afectados están SIN test (antes de editar)\n"
     "- `/who X` — quién llama a X · `/callees X` — a qué llama X\n"
     "- `/where X` — dónde se define X\n"
     "- `/compare X` — lado-a-lado: leo vs grep+read (tokens, archivos, $)\n"
     "- `/help` · `/clear` · `/quit`\n\n"
-    "Cualquier otro texto → chat con el agente."
+    "Cualquier otro texto → chat con el agente. ↑/↓ recuperan el historial."
 )
+
+_SLASH = ["/trace ", "/impact ", "/guard ", "/who ", "/callees ", "/where ",
+          "/compare ", "/help", "/clear", "/quit"]
+
+
+class PromptInput(Input):
+    """Input con historial ↑/↓ (como una shell) y autocompletado de comandos."""
+
+    def __init__(self, **kw):
+        super().__init__(suggester=SuggestFromList(_SLASH, case_sensitive=False), **kw)
+        self.history: list[str] = []
+        self._hist_i: int | None = None  # None = escribiendo nuevo
+
+    def remember(self, text: str) -> None:
+        if text and (not self.history or self.history[-1] != text):
+            self.history.append(text)
+        self._hist_i = None
+
+    def _on_key(self, event) -> None:
+        if event.key == "up" and self.history:
+            self._hist_i = len(self.history) - 1 if self._hist_i is None else max(0, self._hist_i - 1)
+            self.value = self.history[self._hist_i]
+            self.cursor_position = len(self.value)
+            event.stop(); event.prevent_default()
+        elif event.key == "down" and self._hist_i is not None:
+            self._hist_i += 1
+            if self._hist_i >= len(self.history):
+                self._hist_i = None
+                self.value = ""
+            else:
+                self.value = self.history[self._hist_i]
+            self.cursor_position = len(self.value)
+            event.stop(); event.prevent_default()
 
 
 def _bar(pct: float, width: int = 12) -> str:
@@ -61,6 +97,7 @@ class LeoTUI(App):
     #graph { color: $text-muted; height: 1fr; }
     .user { color: $accent; text-style: bold; padding: 1 0 0 0; }
     .leo  { padding: 0 0 1 0; }
+    .tool { color: $text-muted; }
     #prompt { border: round $primary; }
     #meter { height: 1; color: $text-muted; padding: 0 1; }
     """
@@ -88,7 +125,7 @@ class LeoTUI(App):
             with Vertical(id="sidebar"):
                 yield Static(self._kcrag_text("indexando…"), id="kcrag")
                 yield Static("grafo determinista\n(usa /trace /impact /who /where)", id="graph")
-        yield Input(placeholder="› pregunta, o /help …", id="prompt")
+        yield PromptInput(placeholder="› pregunta, o /help …", id="prompt")
         yield Static(self._meter_text(), id="meter")
         yield Footer()
 
@@ -127,12 +164,17 @@ class LeoTUI(App):
 
     def _say(self, text: str, cls: str = "leo") -> Markdown | Static:
         chat = self.query_one("#chat", VerticalScroll)
-        w = Markdown(text) if cls == "leo" else Static(text, classes="user")
+        w = Markdown(text) if cls == "leo" else Static(text, classes=cls)
         if cls == "leo":
             w.add_class("leo")
         chat.mount(w)
         chat.scroll_end(animate=False)
         return w
+
+    def _relz(self, text: str) -> str:
+        """Todas las rutas del texto relativas al repo (citas legibles)."""
+        pref = self.repo.replace("\\", "/").rstrip("/") + "/"
+        return text.replace("\\", "/").replace(pref, "")
 
     # ---- índice estructural (cerebro determinista, sin LLM) ----
     @work(thread=True, exclusive=True)
@@ -157,6 +199,8 @@ class LeoTUI(App):
         event.input.clear()
         if not text:
             return
+        if isinstance(event.input, PromptInput):
+            event.input.remember(text)
         if text.startswith("/"):
             self._slash(text)
         else:
@@ -178,6 +222,18 @@ class LeoTUI(App):
         if cmd == "compare" and args:
             self._say(f"› comparando con grep+read para **{args[0]}**…")
             self._compare(args[0]); return
+        if cmd == "guard" and args:
+            # Radio de explosión + cobertura ANTES de editar: el semáforo de riesgo.
+            from leo_code.core.guardian import Guardian
+            try:
+                rep = Guardian(self._tools._capsules).review(args[0])
+            except Exception as e:
+                self._say(f"_error: {e}_"); return
+            txt = self._relz(rep.render())
+            self._say(f"**/guard {args[0]}** — determinista, cero LLM:\n```\n{txt}\n```")
+            self.query_one("#graph", Static).update(
+                f"[b]guard · radio de explosión[/b]\n" + "\n".join(txt.splitlines()[:14]))
+            return
         try:
             if cmd == "trace" and len(args) >= 2:
                 proof = gq.trace(args[0], args[1])
@@ -263,6 +319,7 @@ class LeoTUI(App):
             self._agent = AgentLoop(tools=self._tools or ToolRegistry(), max_iterations=12)
         bubble = self._say("…")
         buf = ""
+        tline, tname, targs, t0 = None, "", "", 0.0
         try:
             async for ev in self._agent.stream_run(query, repo_path=self.repo, model=self.model):
                 t = ev.get("type")
@@ -276,8 +333,27 @@ class LeoTUI(App):
                     bubble.update(buf)
                     self.query_one("#chat", VerticalScroll).scroll_end(animate=False)
                 elif t == "tool_start":
+                    # línea de tool en el chat (viva): se completa con ms y tamaño al acabar
+                    tname, targs, t0 = ev.get("name", ""), str(ev.get("args", ""))[:60], time.time()
+                    tline = self._say(f"  ▸ {tname}({targs}) …", cls="tool")
+                    if tname == "replace_in_file":
+                        # el parche visible ANTES de aplicarse (como un mini code-review)
+                        a = ev.get("args", {}) or {}
+                        diff = "\n".join(
+                            [f"--- {a.get('file_path', '')}"]
+                            + [f"- {l}" for l in str(a.get("old_string", "")).splitlines()]
+                            + [f"+ {l}" for l in str(a.get("new_string", "")).splitlines()])
+                        self._say(f"```diff\n{diff[:1500]}\n```")
                     self.query_one("#graph", Static).update(
-                        f"[b]grafo · tool[/b]\n▸ {ev.get('name')}({str(ev.get('args',''))[:40]})")
+                        f"[b]grafo · tool[/b]\n▸ {tname}({targs[:40]})")
+                elif t == "tool_result":
+                    out = ev.get("output", "") or ""
+                    if tline is not None:
+                        tline.update(f"  ▸ {tname}({targs}) · {time.time()-t0:.1f}s · {len(out):,} chars")
+                        tline = None
+                    head = self._relz(out).splitlines()[:8]
+                    self.query_one("#graph", Static).update(
+                        f"[b]{tname}[/b]\n" + "\n".join(head))
                 elif t == "done":
                     bubble.update(buf or ev.get("respuesta", "") or "_(sin respuesta)_")
         except Exception as e:
