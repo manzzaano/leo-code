@@ -6,6 +6,7 @@ Uso: python benchmark/run_real.py [--tasks t1,t2] [--systems leo,oc,no] [--batch
 import asyncio
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -14,6 +15,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from benchmark.judge import judge, score_summary
+
+
+def parse_leo_tokens(stderr: str, response: str) -> int:
+    """Coste real (input+output) que leo_runner emite como [LEO_TOKENS=N] por stderr.
+
+    Fallback len//4 (solo salida) si el marcador no llegó (crash/timeout del runner).
+    """
+    m = re.search(r"\[LEO_TOKENS=(\d+)\]", stderr or "")
+    return int(m.group(1)) if m else len(response) // 4
 
 MODEL = "deepseek/deepseek-chat"  # V3 - fiable con tool calling en streaming
 RUNNER = str(Path(__file__).parent / "leo_runner.py")
@@ -36,7 +46,8 @@ def run_leo_subprocess(query: str, repo_path: str) -> dict:
         # Remove indexer log lines
         response_lines = [l for l in lines if not l.startswith("[indexer]") and "Tipos:" not in l and "capsulas" not in l and "archivos" not in l]
         response = "\n".join(response_lines).strip() or (r.stderr or "").strip()
-        return {"system": "LEO", "response": response[:4000], "tokens": len(response) // 4,
+        return {"system": "LEO", "response": response[:4000],
+                "tokens": parse_leo_tokens(r.stderr, response),
                 "duration_ms": int((time.time() - t0) * 1000)}
     except subprocess.TimeoutExpired:
         return {"system": "LEO", "response": "[Timeout]", "tokens": 0, "duration_ms": 300000}
@@ -60,6 +71,8 @@ def run_oc_subprocess(query: str, repo_path: str) -> dict:
         import re as _re
         out = _re.sub(r'\x1b\[[0-9;]*m', '', out)
         response = (out + "\n" + err).strip()
+        # opencode CLI no expone usage real: len//4 es estimación de SALIDA solamente
+        # (subestima a OC; la comparación de tokens vs LEO real es conservadora).
         return {"system": "OC", "response": response[:4000], "tokens": len(response) // 4,
                 "duration_ms": int((time.time() - t0) * 1000)}
     except subprocess.TimeoutExpired:

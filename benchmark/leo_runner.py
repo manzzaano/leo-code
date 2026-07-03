@@ -35,6 +35,9 @@ async def main():
         if len(resp) < 100:
             import sys as _sys
             _sys.stderr.write(f"[LEO_RESULT_LEN={len(resp)}] keys={list(result.keys())}\n")
+        # Coste REAL (input+output de resp.usage) por stderr: stdout es solo la
+        # respuesta. Sin esto el benchmark estimaba len(resp)//4 (solo salida).
+        sys.stderr.write(f"[LEO_TOKENS={result.get('total_tokens', 0)}]\n")
         print(resp)
     except Exception as e:
         print(f"[ERROR: {e}]")
