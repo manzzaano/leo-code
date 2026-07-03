@@ -199,10 +199,13 @@ def compute_context(repo: str, query: str, task_type_in: str = "auto",
     }
     vs = _get_vector_store(repo)
 
-    from leo_code.rag.classifier import classify_task, get_budget
+    from leo_code.rag.classifier import classify_task, TOKEN_BUDGET
     from leo_code.rag.compressor import compress
     task_type = classify_task(query) if task_type_in == "auto" else task_type_in
-    budget = get_budget(query) if budget_tokens_in <= 0 else budget_tokens_in
+    # Presupuesto por el task_type EFECTIVO (forzado incluido). get_budget() reclasifica
+    # la query por su cuenta: con task_type forzado a code_query y query corta en inglés
+    # daba no_code → presupuesto 0 → contexto VACÍO al cliente MCP.
+    budget = budget_tokens_in if budget_tokens_in > 0 else TOKEN_BUDGET.get(task_type, 1500)
 
     # no_code: devolver documentos relevantes a la query (keyword match en contenido)
     if task_type == "no_code":

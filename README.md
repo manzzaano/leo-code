@@ -84,11 +84,34 @@ desde el botón hasta la columna de DB a través de varios servicios.
 
 ## Instalación
 
-```bash
-git clone https://github.com/manzzaano/leo-code.git
-cd leo-code
-pip install -e .
+**macOS / Linux** (una línea, como opencode):
 
+```bash
+curl -fsSL https://raw.githubusercontent.com/manzzaano/leo-code/main/install.sh | bash
+```
+
+**Windows**:
+
+```powershell
+powershell -c "irm https://raw.githubusercontent.com/manzzaano/leo-code/main/install.ps1 | iex"
+```
+
+O directo con tu gestor de tools:
+
+```bash
+uv tool install leo-code       # o: pipx install leo-code
+```
+
+Deja tres ejecutables en el PATH: `leo-code` (agente + TUI), `leo-code-mcp-stdio`
+(servidor MCP) y `leo-code-mcp` (servidor HTTP).
+
+Para desarrollo:
+
+```bash
+git clone https://github.com/manzzaano/leo-code.git && cd leo-code && pip install -e .
+```
+
+```bash
 # Variables de entorno según proveedor del agente
 export DEEPSEEK_API_KEY=sk-...      # o ANTHROPIC_API_KEY / OPENAI_API_KEY
 ```
