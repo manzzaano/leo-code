@@ -13,6 +13,10 @@ import zipfile
 import glob
 from pathlib import Path
 
+# Windows: consola/redirección usa cp1252 y no codifica ✅/❌ → crash. UTF-8 siempre.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 ROOT = Path(__file__).parent.parent

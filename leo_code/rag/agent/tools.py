@@ -450,9 +450,21 @@ class ToolRegistry:
 
     # ---- Tools estructurales (sobre el indice de capsules + grafo de llamadas) ----
 
-    def _rel(self, c) -> str:
-        fp = getattr(c, "file_path", "") or ""
-        return f"{Path(fp).name}:{getattr(c, 'start_line', 0)}"
+    def _rel(self, c, repo_path: str = "") -> str:
+        # Ruta RELATIVA al repo (no basename): el agente puede pasarla tal cual a
+        # read_file. Con basename hacía read_file("loop.py") → No such file.
+        fp = (getattr(c, "file_path", "") or "").replace("\\", "/")
+        if repo_path:
+            pref = str(Path(repo_path).resolve()).replace("\\", "/").rstrip("/") + "/"
+            if fp.startswith(pref):
+                fp = fp[len(pref):]
+        return f"{fp}:{getattr(c, 'start_line', 0)}"
+
+    @staticmethod
+    def _relativize(text: str, repo_path: str) -> str:
+        """Citas del grafo relativas al repo: menos tokens y rutas usables."""
+        pref = str(Path(repo_path).resolve()).replace("\\", "/").rstrip("/") + "/"
+        return text.replace("\\", "/").replace(pref, "")
 
     def find_symbol(self, args: dict, repo_path: str) -> str:
         pat = (args.get("pattern") or args.get("name") or args.get("query") or "").lower()
@@ -470,7 +482,7 @@ class ToolRegistry:
         hits = (exact + partial)[:20]
         if not hits:
             return f"[Sin simbolos que coincidan con '{pat}'. Prueba search_code.]"
-        return "\n".join(f"{c.name} ({c.type}) {self._rel(c)} — {c.signature or ''}".rstrip(" —") for c in hits)
+        return "\n".join(f"{c.name} ({c.type}) {self._rel(c, repo_path)} — {c.signature or ''}".rstrip(" —") for c in hits)
 
     def _lookup(self, name: str):
         caps = self._by_name.get(name)
@@ -485,7 +497,7 @@ class ToolRegistry:
         c = self._lookup(name)
         if not c:
             return f"[Simbolo '{name}' no encontrado. Usa find_symbol.]"
-        parts = [f"# {c.name} ({c.type}) — {self._rel(c)}"]
+        parts = [f"# {c.name} ({c.type}) — {self._rel(c, repo_path)}"]
         if c.signature:
             parts.append(c.signature)
         if c.docstring:
@@ -508,7 +520,7 @@ class ToolRegistry:
             return f"[Sin simbolos de tipo '{kind}'. Tipos disponibles: {', '.join(kinds)}]"
         hits.sort(key=lambda c: (c.file_path or "", c.start_line))
         lines = [f"{len(hits)} simbolos de tipo '{kind}':"]
-        lines += [f"{c.name} {self._rel(c)}" for c in hits[:60]]
+        lines += [f"{c.name} {self._rel(c, repo_path)}" for c in hits[:60]]
         if len(hits) > 60:
             lines.append(f"... (+{len(hits) - 60} mas)")
         return "\n".join(lines)
@@ -518,30 +530,30 @@ class ToolRegistry:
     def who_calls(self, args: dict, repo_path: str) -> str:
         if not self._gq:
             return "[Indice no disponible.]"
-        return self._gq.who_calls(args.get("name") or args.get("symbol") or "", limit=20).render()
+        return self._relativize(self._gq.who_calls(args.get("name") or args.get("symbol") or "", limit=20).render(), repo_path)
 
     def callees(self, args: dict, repo_path: str) -> str:
         if not self._gq:
             return "[Indice no disponible.]"
-        return self._gq.callees(args.get("name") or args.get("symbol") or "", limit=20).render()
+        return self._relativize(self._gq.callees(args.get("name") or args.get("symbol") or "", limit=20).render(), repo_path)
 
     def impact(self, args: dict, repo_path: str) -> str:
         if not self._gq:
             return "[Indice no disponible.]"
-        return self._gq.impact(args.get("name") or args.get("symbol") or "", limit=30).render()
+        return self._relativize(self._gq.impact(args.get("name") or args.get("symbol") or "", limit=30).render(), repo_path)
 
     def trace(self, args: dict, repo_path: str) -> str:
         """Camino de llamadas src→dst (como fluye de A a B), cruza archivos/repos/
         lenguajes, cada salto citado. Determinista, con prueba."""
         if not self._gq:
             return "[Indice no disponible.]"
-        return self._gq.trace(args.get("src") or "", args.get("dst") or "").render()
+        return self._relativize(self._gq.trace(args.get("src") or "", args.get("dst") or "").render(), repo_path)
 
     def where(self, args: dict, repo_path: str) -> str:
         """Donde se define un simbolo (todas las definiciones), citado archivo:linea."""
         if not self._gq:
             return "[Indice no disponible.]"
-        return self._gq.where(args.get("name") or args.get("symbol") or "").render()
+        return self._relativize(self._gq.where(args.get("name") or args.get("symbol") or "").render(), repo_path)
 
 
 def _verify_py(path: Path) -> str:
