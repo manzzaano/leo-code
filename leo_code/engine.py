@@ -77,17 +77,25 @@ def _get_indexer():
     return _indexer
 
 
+_vs_lock = threading.Lock()
+
+
 def _get_vector_store(repo_path: str):
+    # Doble check con lock: dos threads (warmup MCP + primera tool) creaban DOS
+    # clientes qdrant sobre el mismo storage → el segundo se queda bloqueado para
+    # siempre en el file lock de qdrant-local (get_context colgado >3 min).
     if repo_path not in _vector_stores:
-        from leo_code.rag.vector_store import VectorStore
-        # Hash ESTABLE (no hash() salteado por proceso): mismo repo → misma colección
-        # en disco entre reinicios → los embeddings se reusan en vez de re-embeber
-        # las ~1400 cápsulas en cada arranque del server/MCP.
-        stable = hashlib.md5(repo_path.encode("utf-8")).hexdigest()[:8]
-        _vector_stores[repo_path] = VectorStore(
-            collection_name=f"leo_mcp_{stable}",
-            path="./cache/qdrant_leo",
-        )
+        with _vs_lock:
+            if repo_path not in _vector_stores:
+                from leo_code.rag.vector_store import VectorStore
+                # Hash ESTABLE (no hash() salteado por proceso): mismo repo → misma colección
+                # en disco entre reinicios → los embeddings se reusan en vez de re-embeber
+                # las ~1400 cápsulas en cada arranque del server/MCP.
+                stable = hashlib.md5(repo_path.encode("utf-8")).hexdigest()[:8]
+                _vector_stores[repo_path] = VectorStore(
+                    collection_name=f"leo_mcp_{stable}",
+                    path="./cache/qdrant_leo",
+                )
     return _vector_stores[repo_path]
 
 

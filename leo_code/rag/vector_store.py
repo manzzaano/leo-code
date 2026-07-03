@@ -26,8 +26,33 @@ class VectorStore:
     def client(self):
         if self._client is None:
             from qdrant_client import QdrantClient
-            self._client = QdrantClient(path=self.path)
+            if self._storage_locked():
+                # Otro proceso leo (otro MCP/CLI/test sobre el mismo repo) tiene el
+                # storage: qdrant-local se quedaría BLOQUEADO para siempre en su file
+                # lock. Degradamos a memoria (re-embebe, pero funciona) en vez de colgar.
+                import sys
+                print(f"[vector_store] {self.path} en uso por otro proceso leo; "
+                      "usando indice semantico en memoria.", file=sys.stderr)
+                self._client = QdrantClient(location=":memory:")
+            else:
+                self._client = QdrantClient(path=self.path)
         return self._client
+
+    def _storage_locked(self) -> bool:
+        """True si el .lock de qdrant-local está cogido por OTRO proceso (chequeo
+        no bloqueante). ponytail: hay una ventana de carrera entre chequear y crear
+        el cliente; suficiente para el caso real (procesos concurrentes de larga vida)."""
+        lock_path = os.path.join(self.path, ".lock")
+        if not os.path.exists(lock_path):
+            return False
+        try:
+            import portalocker
+            with open(lock_path, "a") as f:
+                portalocker.lock(f, portalocker.LOCK_EX | portalocker.LOCK_NB)
+                portalocker.unlock(f)
+            return False
+        except Exception:
+            return True
 
     @property
     def collection(self):

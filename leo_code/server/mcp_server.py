@@ -233,9 +233,13 @@ def _warmup(repo: str):
     get_context que llegue se sincroniza solo.
     """
     try:
-        import torch  # noqa: F401  (solo el import; la carga del modelo va detrás)
+        # Solo los IMPORTS (no la carga del modelo): la cadena torch/sentence_transformers
+        # debe importarse entera en el hilo principal — dos threads compitiendo por su
+        # primer import se deadlockean en el import lock en Windows.
+        import torch  # noqa: F401
+        import sentence_transformers  # noqa: F401
     except Exception as e:
-        print(f"[leo-mcp] import torch fallo: {e}", file=sys.stderr)
+        print(f"[leo-mcp] import encoder fallo: {e}", file=sys.stderr)
 
     def _bg():
         try:
@@ -255,6 +259,9 @@ async def main():
     # print() ruidoso va a stderr y no contamina los mensajes JSON-RPC.
     protocol_stdout = anyio.wrap_file(TextIOWrapper(sys.stdout.buffer, encoding="utf-8"))
     sys.stdout = sys.stderr
+    if os.getenv("LEO_DEBUG_DUMP"):  # diagnóstico: volcar stacks periódicamente a stderr
+        import faulthandler
+        faulthandler.dump_traceback_later(60, repeat=True, file=sys.stderr)
     _warmup(os.path.abspath(os.getenv("LEO_REPO", ".")))
     async with stdio_server(stdout=protocol_stdout) as (read, write):
         await server.run(read, write, server.create_initialization_options())
