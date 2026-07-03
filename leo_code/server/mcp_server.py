@@ -170,21 +170,29 @@ async def list_tools() -> list[types.Tool]:
     return [_TOOL] + _GRAPH_TOOLS
 
 
+def _relativize(text: str, repo: str) -> str:
+    """Citas con ruta relativa al repo: menos tokens y legible para el cliente MCP."""
+    pref = repo.replace("\\", "/").rstrip("/") + "/"
+    return text.replace("\\", "/").replace(pref, "")
+
+
 def _run_graph_tool(name: str, args: dict) -> str:
     repo = os.path.abspath(args.get("repo_path") or ".")
     gq = _graphquery(repo)
     if name == "trace":
-        return gq.trace(args["src"], args["dst"]).render()
-    if name == "impact":
-        return gq.impact(args["symbol"]).render()
-    if name == "who_calls":
-        return gq.who_calls(args["symbol"]).render()
-    if name == "where":
-        return gq.where(args["symbol"]).render()
-    if name == "guard":
+        out = gq.trace(args["src"], args["dst"]).render()
+    elif name == "impact":
+        out = gq.impact(args["symbol"]).render()
+    elif name == "who_calls":
+        out = gq.who_calls(args["symbol"]).render()
+    elif name == "where":
+        out = gq.where(args["symbol"]).render()
+    elif name == "guard":
         # Guardian sobre las MISMAS cápsulas (con boundary ya cosido por _graphquery).
-        return Guardian(_get_indexer().get_capsules()).review(args["symbol"]).render()
-    raise ValueError(f"Tool de grafo desconocida: {name}")
+        out = Guardian(_get_indexer().get_capsules()).review(args["symbol"]).render()
+    else:
+        raise ValueError(f"Tool de grafo desconocida: {name}")
+    return _relativize(out, repo)
 
 
 @server.call_tool()
@@ -213,7 +221,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
     result = await asyncio.to_thread(_work)
     header = (f"[leo-code KC-RAG | task={result['task_type']} | ~{result['tokens']} tok "
               f"| {result['capsules_total']} capsulas indexadas]\n\n")
-    return [types.TextContent(type="text", text=header + result["context"])]
+    return [types.TextContent(type="text", text=_relativize(header + result["context"], repo))]
 
 
 def _warmup(repo: str):
