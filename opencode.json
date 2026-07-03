@@ -1,0 +1,11 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "leo-code": {
+      "type": "local",
+      "command": ["python", "-m", "leo_code.server.mcp_server"],
+      "enabled": true,
+      "environment": { "LEO_REPO": ".", "PYTHONUTF8": "1" }
+    }
+  }
+}

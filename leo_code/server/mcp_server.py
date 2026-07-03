@@ -226,18 +226,26 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
 
 def _warmup(repo: str):
     """Arranque sin bloquear el handshake MCP. Lo ÚNICO que debe ir en el hilo
-    principal es cargar el encoder (torch deadlockea si se importa primero en un
-    worker thread en Windows). El índice estructural (~30s en repos de 500k LOC) y
-    el embedding van en background; el primer get_context que llegue se sincroniza.
+    principal es el IMPORT de torch (deadlockea si se importa por primera vez en un
+    worker thread en Windows); la carga del modelo (~10s+, o minutos con descarga HF
+    fría) va a background — antes bloqueaba el handshake y Claude Code puede matar
+    el server por timeout. Las tools de grafo no necesitan encoder; el primer
+    get_context que llegue se sincroniza solo.
     """
     try:
-        _get_vector_store(repo).search("warmup")  # carga el encoder (~7s) en hilo principal
+        import torch  # noqa: F401  (solo el import; la carga del modelo va detrás)
     except Exception as e:
-        print(f"[leo-mcp] warmup encoder fallo: {e}", file=sys.stderr)
-    threading.Thread(
-        target=lambda: (_ensure_structural(repo), _embed_bg(repo)),
-        daemon=True, name="warmup-bg",
-    ).start()
+        print(f"[leo-mcp] import torch fallo: {e}", file=sys.stderr)
+
+    def _bg():
+        try:
+            _get_vector_store(repo).search("warmup")  # carga el encoder/modelo
+        except Exception as e:
+            print(f"[leo-mcp] warmup encoder fallo: {e}", file=sys.stderr)
+        _ensure_structural(repo)
+        _embed_bg(repo)
+
+    threading.Thread(target=_bg, daemon=True, name="warmup-bg").start()
 
 
 async def main():
