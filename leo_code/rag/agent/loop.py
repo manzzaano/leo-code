@@ -374,214 +374,219 @@ class AgentLoop:
         plugin_manager: PluginManager instancia para plugins.
         skill_manager: SkillManager instancia para auto-skills.
         """
-        t0 = time.time()
-        self.interrupt = False
+        try:
+            t0 = time.time()
+            self.interrupt = False
 
-        t_index_ms = 0
-        t_classify_ms = 0
-        t_search_ms = 0
-        t_compress_ms = 0
-        t_llm_ms = 0
+            t_index_ms = 0
+            t_classify_ms = 0
+            t_search_ms = 0
+            t_compress_ms = 0
+            t_llm_ms = 0
 
-        if self.llm is None:
-            self.llm = self._init_llm(model)
-        repo_path = os.path.abspath(repo_path)
+            if self.llm is None:
+                self.llm = self._init_llm(model)
+            repo_path = os.path.abspath(repo_path)
 
-        # Session history
-        session = None
-        if session_id:
-            from leo_code.session import SessionManager
-            sm = SessionManager()
-            session = sm.get_session(session_id)
+            # Session history
+            session = None
+            if session_id:
+                from leo_code.session import SessionManager
+                sm = SessionManager()
+                session = sm.get_session(session_id)
+                if session:
+                    repo_path = session.repo_path
+
+            messages = [{"role": "system", "content": self._system_prompt()}]
             if session:
-                repo_path = session.repo_path
+                messages.extend(sm.get_history(session_id, limit=40))
+            elif history:
+                messages.extend(history)
 
-        messages = [{"role": "system", "content": self._system_prompt()}]
-        if session:
-            messages.extend(sm.get_history(session_id, limit=40))
-        elif history:
-            messages.extend(history)
+            # Build user message con texto + imágenes como content array
+            user_content = _build_user_content(query, images or [], repo_path)
+            messages.append({"role": "user", "content": user_content})
 
-        # Build user message con texto + imágenes como content array
-        user_content = _build_user_content(query, images or [], repo_path)
-        messages.append({"role": "user", "content": user_content})
+            # KC-RAG context
+            context = ""
+            task_type = "code_query"
+            breadth = False
+            if use_kc_rag:
+                from leo_code.rag.classifier import needs_code_context, classify_task
+                t_c0 = time.perf_counter()
+                task_type = classify_task(query)
+                t_classify_ms = (time.perf_counter() - t_c0) * 1000
+                breadth = _is_breadth(query, task_type)
+                if not breadth and os.getenv("LEO_VERBOSITY", "1") != "0":
+                    messages.append({"role": "system", "content": _VERBOSITY_BLOCK.strip()})
+                if task_type in _YAGNI_TASKS:
+                    messages.append({"role": "system", "content": _YAGNI_DIRECTIVE})
+                if needs_code_context(query) or task_type in ("code_edit", "code_query", "refactor", "debug"):
+                    context, timings = self._build_context(query, repo_path, task_type)
+                    t_index_ms = timings.get("t_index_ms", 0)
+                    t_search_ms = timings.get("t_search_ms", 0)
+                    t_compress_ms = timings.get("t_compress_ms", 0)
+                    if context:
+                        yield {"type": "context", "task_type": task_type, "tokens": len(context) // 2}
 
-        # KC-RAG context
-        context = ""
-        task_type = "code_query"
-        breadth = False
-        if use_kc_rag:
-            from leo_code.rag.classifier import needs_code_context, classify_task
-            t_c0 = time.perf_counter()
-            task_type = classify_task(query)
-            t_classify_ms = (time.perf_counter() - t_c0) * 1000
-            breadth = _is_breadth(query, task_type)
-            if not breadth and os.getenv("LEO_VERBOSITY", "1") != "0":
-                messages.append({"role": "system", "content": _VERBOSITY_BLOCK.strip()})
-            if task_type in _YAGNI_TASKS:
-                messages.append({"role": "system", "content": _YAGNI_DIRECTIVE})
-            if needs_code_context(query) or task_type in ("code_edit", "code_query", "refactor", "debug"):
-                context, timings = self._build_context(query, repo_path, task_type)
-                t_index_ms = timings.get("t_index_ms", 0)
-                t_search_ms = timings.get("t_search_ms", 0)
-                t_compress_ms = timings.get("t_compress_ms", 0)
-                if context:
-                    yield {"type": "context", "task_type": task_type, "tokens": len(context) // 2}
+            if context:
+                messages.insert(1, {"role": "system", "content": f"Contexto del codigo:\n{context}"})
 
-        if context:
-            messages.insert(1, {"role": "system", "content": f"Contexto del codigo:\n{context}"})
+            # Plugin context injection
+            if plugin_manager:
+                plugins_ctx = plugin_manager.pre_context(query, [])
+                if plugins_ctx:
+                    messages.insert(1, {"role": "system", "content": f"Contexto de plugins:\n{plugins_ctx}"})
+                plugin_info = plugin_manager.info()
+                if plugin_info:
+                    yield {"type": "plugins", "plugins": [{"name": p.name, "type": p.type, "running": p.running, "tool_count": getattr(p, 'tool_count', 0)} for p in plugin_info]}
 
-        # Plugin context injection
-        if plugin_manager:
-            plugins_ctx = plugin_manager.pre_context(query, [])
-            if plugins_ctx:
-                messages.insert(1, {"role": "system", "content": f"Contexto de plugins:\n{plugins_ctx}"})
-            plugin_info = plugin_manager.info()
-            if plugin_info:
-                yield {"type": "plugins", "plugins": [{"name": p.name, "type": p.type, "running": p.running, "tool_count": getattr(p, 'tool_count', 0)} for p in plugin_info]}
+            # Auto-skills activation
+            active_skills = []
+            if skill_manager:
+                skill_manager.load_skills(repo_path)
+                active_skills = skill_manager.match(query, task_type=task_type, file_context=[])
+                if active_skills:
+                    skill_manager.inject(active_skills, messages)
+                    yield {"type": "skills", "skills": [{"name": s.name, "source": s.source, "priority": s.priority} for s in active_skills]}
 
-        # Auto-skills activation
-        active_skills = []
-        if skill_manager:
-            skill_manager.load_skills(repo_path)
-            active_skills = skill_manager.match(query, task_type=task_type, file_context=[])
-            if active_skills:
-                skill_manager.inject(active_skills, messages)
-                yield {"type": "skills", "skills": [{"name": s.name, "source": s.source, "priority": s.priority} for s in active_skills]}
+            tool_defs = self.tools.get_openai_definitions()
+            total_tokens = 0
+            self._tool_call_count = 0
+            self._recent_calls.clear()   # anti-loop por query (no arrastrar entre turnos de chat)
+            all_text = ""
+            llm_iterations = 0
+            next_effort: Optional[str] = None  # effort routing (Headroom)
 
-        tool_defs = self.tools.get_openai_definitions()
-        total_tokens = 0
-        self._tool_call_count = 0
-        self._recent_calls.clear()   # anti-loop por query (no arrastrar entre turnos de chat)
-        all_text = ""
-        llm_iterations = 0
-        next_effort: Optional[str] = None  # effort routing (Headroom)
-
-        for iteration in range(self.max_iterations):
-            if self.interrupt:
-                duration_ms = int((time.time() - t0) * 1000)
-                get_metrics().record_query(total_tokens, duration_ms,
-                                          t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms)
-                yield {"type": "done", "respuesta": "[Interrumpido]", "iterations": iteration,
-                       "total_tokens": total_tokens, "duration_ms": duration_ms}
-                return
-
-            # Compactar historial si crece demasiado
-            messages = _compact_messages(messages, keep_last=6)
-
-            # Stream tokens
-            text = ""
-            tool_calls: list[dict] = []
-            reasoning = ""   # reasoning_content del turno (thinking models: hay que devolverlo)
-            t_llm0 = time.perf_counter()
-            # Últimas 2 iteraciones: sin tools → el modelo DEBE sintetizar respuesta con lo
-            # que ya recopiló (evita agotar iteraciones explorando sin responder nunca).
-            active_tools = None if iteration >= self.max_iterations - 2 else tool_defs
-            async for chunk in self.llm.stream(messages, active_tools, effort=next_effort):
+            for iteration in range(self.max_iterations):
                 if self.interrupt:
-                    break
-                if isinstance(chunk, str):
-                    text += chunk
-                    all_text += chunk
-                    yield {"type": "token", "text": chunk}
-                elif isinstance(chunk, dict) and chunk.get("type") == "tool_call":
-                    tool_calls.append(chunk)
-                elif isinstance(chunk, dict) and chunk.get("type") == "reasoning":
-                    reasoning = chunk.get("content", "")
-            t_llm_ms += (time.perf_counter() - t_llm0) * 1000
-            llm_iterations += 1
+                    duration_ms = int((time.time() - t0) * 1000)
+                    get_metrics().record_query(total_tokens, duration_ms,
+                                              t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms)
+                    yield {"type": "done", "respuesta": "[Interrumpido]", "iterations": iteration,
+                           "total_tokens": total_tokens, "duration_ms": duration_ms}
+                    return
 
-            if self.interrupt:
-                duration_ms = int((time.time() - t0) * 1000)
-                get_metrics().record_query(total_tokens, duration_ms,
-                                          t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms)
-                yield {"type": "done", "respuesta": text or "[Interrumpido]", "iterations": iteration + 1,
-                       "total_tokens": total_tokens, "duration_ms": duration_ms}
-                return
+                # Compactar historial si crece demasiado
+                messages = _compact_messages(messages, keep_last=6)
 
-            if not tool_calls:
-                total_tokens += len(text) // 4
-                if session_id:
-                    self._persist_turn(session_id, query, text, model, total_tokens)
-                # Save to conversation history
-                if self._conversation_history and context:
-                    self._conversation_history.save_conversation(query, context, total_tokens, iteration + 1)
-                duration_ms = int((time.time() - t0) * 1000)
-                get_metrics().record_query(total_tokens, duration_ms,
-                                          t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms)
-                log.info(f"stream_run completed | task_type={task_type} | "
-                        f"index={t_index_ms:.0f}ms classify={t_classify_ms:.0f}ms search={t_search_ms:.0f}ms "
-                        f"compress={t_compress_ms:.0f}ms llm={t_llm_ms:.0f}ms × {llm_iterations} iter | "
-                        f"tokens={total_tokens} total_ms={duration_ms}")
-                yield {"type": "done", "respuesta": text, "iterations": iteration + 1,
-                       "total_tokens": total_tokens, "duration_ms": duration_ms}
-                return
+                # Stream tokens
+                text = ""
+                tool_calls: list[dict] = []
+                reasoning = ""   # reasoning_content del turno (thinking models: hay que devolverlo)
+                t_llm0 = time.perf_counter()
+                # Últimas 2 iteraciones: sin tools → el modelo DEBE sintetizar respuesta con lo
+                # que ya recopiló (evita agotar iteraciones explorando sin responder nunca).
+                active_tools = None if iteration >= self.max_iterations - 2 else tool_defs
+                async for chunk in self.llm.stream(messages, active_tools, effort=next_effort):
+                    if self.interrupt:
+                        break
+                    if isinstance(chunk, str):
+                        text += chunk
+                        all_text += chunk
+                        yield {"type": "token", "text": chunk}
+                    elif isinstance(chunk, dict) and chunk.get("type") == "tool_call":
+                        tool_calls.append(chunk)
+                    elif isinstance(chunk, dict) and chunk.get("type") == "reasoning":
+                        reasoning = chunk.get("content", "")
+                t_llm_ms += (time.perf_counter() - t_llm0) * 1000
+                llm_iterations += 1
 
-            # Execute tools.
-            # UN solo mensaje `assistant` con TODOS los tool_calls (spec OpenAI: tool_calls
-            # paralelos + un mensaje `tool` por cada uno), args en JSON (no repr Python), y
-            # reasoning_content reinyectado si el modelo lo exige (DeepSeek V4 thinking).
-            any_error = False
-            ran_tool = False
-            for i, tc in enumerate(tool_calls):
-                tc["_id"] = tc.get("id") or f"call_{iteration}_{i}"
-            messages.append(_assistant_tool_msg(text, tool_calls, reasoning))
+                if self.interrupt:
+                    duration_ms = int((time.time() - t0) * 1000)
+                    get_metrics().record_query(total_tokens, duration_ms,
+                                              t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms)
+                    yield {"type": "done", "respuesta": text or "[Interrumpido]", "iterations": iteration + 1,
+                           "total_tokens": total_tokens, "duration_ms": duration_ms}
+                    return
 
-            for tc in tool_calls:
-                args = tc.get("args", {})
-                tc_id = tc["_id"]
+                if not tool_calls:
+                    total_tokens += len(text) // 4
+                    if session_id:
+                        self._persist_turn(session_id, query, text, model, total_tokens)
+                    # Save to conversation history
+                    if self._conversation_history and context:
+                        self._conversation_history.save_conversation(query, context, total_tokens, iteration + 1)
+                    duration_ms = int((time.time() - t0) * 1000)
+                    get_metrics().record_query(total_tokens, duration_ms,
+                                              t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms)
+                    log.info(f"stream_run completed | task_type={task_type} | "
+                            f"index={t_index_ms:.0f}ms classify={t_classify_ms:.0f}ms search={t_search_ms:.0f}ms "
+                            f"compress={t_compress_ms:.0f}ms llm={t_llm_ms:.0f}ms × {llm_iterations} iter | "
+                            f"tokens={total_tokens} total_ms={duration_ms}")
+                    yield {"type": "done", "respuesta": text, "iterations": iteration + 1,
+                           "total_tokens": total_tokens, "duration_ms": duration_ms}
+                    return
 
-                # Permission check
-                if self.perms:
-                    allowed, reason = self.perms.check(tc["name"], args)
-                    if not allowed:
-                        any_error = True
+                # Execute tools.
+                # UN solo mensaje `assistant` con TODOS los tool_calls (spec OpenAI: tool_calls
+                # paralelos + un mensaje `tool` por cada uno), args en JSON (no repr Python), y
+                # reasoning_content reinyectado si el modelo lo exige (DeepSeek V4 thinking).
+                any_error = False
+                ran_tool = False
+                for i, tc in enumerate(tool_calls):
+                    tc["_id"] = tc.get("id") or f"call_{iteration}_{i}"
+                messages.append(_assistant_tool_msg(text, tool_calls, reasoning))
+
+                for tc in tool_calls:
+                    args = tc.get("args", {})
+                    tc_id = tc["_id"]
+
+                    # Permission check
+                    if self.perms:
+                        allowed, reason = self.perms.check(tc["name"], args)
+                        if not allowed:
+                            any_error = True
+                            yield {"type": "tool_start", "name": tc["name"], "args": args}
+                            yield {"type": "tool_result", "name": tc["name"], "output": f"[Bloqueado: {reason}]"}
+                            messages.append({"role": "tool", "tool_call_id": tc_id, "content": f"[Bloqueado: {reason}]"})
+                            continue
+
+                    # Loop detection: solo la MISMA tool con args IDÉNTICOS repetida ≥3×.
+                    call_key = _loop_key(tc["name"], args)
+                    self._recent_calls[call_key] = self._recent_calls.get(call_key, 0) + 1
+                    if self._recent_calls[call_key] >= _LOOP_BLOCK_THRESHOLD:
+                        msg = f"[Llamada idéntica a {tc['name']} repetida {self._recent_calls[call_key]}× — cambia de estrategia o de argumentos]"
                         yield {"type": "tool_start", "name": tc["name"], "args": args}
-                        yield {"type": "tool_result", "name": tc["name"], "output": f"[Bloqueado: {reason}]"}
-                        messages.append({"role": "tool", "tool_call_id": tc_id, "content": f"[Bloqueado: {reason}]"})
+                        yield {"type": "tool_result", "name": tc["name"], "output": msg}
+                        messages.append({"role": "tool", "tool_call_id": tc_id, "content": msg})
                         continue
+                    self._tool_call_count += 1
 
-                # Loop detection: solo la MISMA tool con args IDÉNTICOS repetida ≥3×.
-                call_key = _loop_key(tc["name"], args)
-                self._recent_calls[call_key] = self._recent_calls.get(call_key, 0) + 1
-                if self._recent_calls[call_key] >= _LOOP_BLOCK_THRESHOLD:
-                    msg = f"[Llamada idéntica a {tc['name']} repetida {self._recent_calls[call_key]}× — cambia de estrategia o de argumentos]"
                     yield {"type": "tool_start", "name": tc["name"], "args": args}
-                    yield {"type": "tool_result", "name": tc["name"], "output": msg}
-                    messages.append({"role": "tool", "tool_call_id": tc_id, "content": msg})
-                    continue
-                self._tool_call_count += 1
+                    result = self.tools.execute(tc["name"], args, repo_path)
+                    ran_tool = True
+                    if _looks_like_error(result):
+                        any_error = True
+                    # Trim resultes largos
+                    if len(result) > 4000:
+                        ref = self.tools.store_full(result)
+                        result = result[:4000] + f"\n[truncado {len(result)} chars — usa retrieve_full('{ref}') UNA vez para el resto; NO inventes otras refs]"
+                    yield {"type": "tool_result", "name": tc["name"], "output": result}
+                    messages.append({"role": "tool", "tool_call_id": tc_id, "content": result[:1000]})
+                    total_tokens += len(result) // 4
 
-                yield {"type": "tool_start", "name": tc["name"], "args": args}
-                result = self.tools.execute(tc["name"], args, repo_path)
-                ran_tool = True
-                if _looks_like_error(result):
-                    any_error = True
-                # Trim resultes largos
-                if len(result) > 4000:
-                    ref = self.tools.store_full(result)
-                    result = result[:4000] + f"\n[truncado {len(result)} chars — usa retrieve_full('{ref}') UNA vez para el resto; NO inventes otras refs]"
-                yield {"type": "tool_result", "name": tc["name"], "output": result}
-                messages.append({"role": "tool", "tool_call_id": tc_id, "content": result[:1000]})
-                total_tokens += len(result) // 4
+                # Routing: continuación tras tools OK → bajo esfuerzo; tras error → completo.
+                next_effort = "low" if (ran_tool and not any_error and not breadth and os.getenv("LEO_EFFORT", "1") != "0") else None
 
-            # Routing: continuación tras tools OK → bajo esfuerzo; tras error → completo.
-            next_effort = "low" if (ran_tool and not any_error and not breadth and os.getenv("LEO_EFFORT", "1") != "0") else None
+                # After tools, prompt to finish
+                if tool_calls and iteration >= 8:
+                    messages.append({"role": "system", "content": "URGENTE: Da tu respuesta final AHORA. No pidas mas herramientas."})
 
-            # After tools, prompt to finish
-            if tool_calls and iteration >= 8:
-                messages.append({"role": "system", "content": "URGENTE: Da tu respuesta final AHORA. No pidas mas herramientas."})
+                text = ""
 
-            text = ""
+            # Fallback: si no terminó con respuesta, usa texto acumulado
+            fallback_resp = all_text if all_text else f"[No se pudo completar en {self.max_iterations} iteraciones. {self._tool_call_count} tool calls ejecutadas.]"
+            duration_ms = int((time.time() - t0) * 1000)
+            get_metrics().record_query(total_tokens, duration_ms,
+                                      t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms)
+            log.warning(f"stream_run max_iterations | iterations={self.max_iterations} tokens={total_tokens} ms={duration_ms}")
+            yield {"type": "done", "respuesta": fallback_resp, "iterations": self.max_iterations,
+                   "total_tokens": total_tokens, "duration_ms": duration_ms}
 
-        # Fallback: si no terminó con respuesta, usa texto acumulado
-        fallback_resp = all_text if all_text else f"[No se pudo completar en {self.max_iterations} iteraciones. {self._tool_call_count} tool calls ejecutadas.]"
-        duration_ms = int((time.time() - t0) * 1000)
-        get_metrics().record_query(total_tokens, duration_ms,
-                                  t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms)
-        log.warning(f"stream_run max_iterations | iterations={self.max_iterations} tokens={total_tokens} ms={duration_ms}")
-        yield {"type": "done", "respuesta": fallback_resp, "iterations": self.max_iterations,
-               "total_tokens": total_tokens, "duration_ms": duration_ms}
+        except Exception as e:
+            log.exception(f"stream_run error: {e}")
+            yield {"type": "error", "message": str(e)}
 
     def _init_llm(self, model: str):
         from leo_code.rag.llm import get_provider

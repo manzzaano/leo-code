@@ -6,6 +6,7 @@ Comandos:
     leo-code index .                          # Indexar repo
 """
 
+import logging
 import os
 import sys
 import signal
@@ -14,6 +15,8 @@ import click
 from pathlib import Path
 
 from leo_code.logging_config import setup_logging
+
+log = logging.getLogger("leo.cli")
 
 # En import (no en cli()): `--help` de click corta antes del callback y la consola
 # Windows cp1252 rompe los caracteres no-ASCII del texto de ayuda.
@@ -290,7 +293,11 @@ def ask(query: str, model: str, repo: str, no_rag: bool, image: tuple[str]):
             if event.get("type") == "done":
                 break
 
-    asyncio.run(run())
+    try:
+        asyncio.run(run())
+    except Exception as e:
+        log.exception(f"ask command error: {e}")
+        console.print(f"[red]Error: {e}[/red]")
 
 
 @cli.command()
@@ -454,7 +461,11 @@ def chat(model: str, repo: str, image: tuple[str]):
                 if _cancel.cancelled:
                     agent.interrupt = True
 
-        asyncio.run(stream_chat())
+        try:
+            asyncio.run(stream_chat())
+        except Exception as e:
+            log.exception(f"stream_chat error: {e}")
+            console.print(f"[red]Error: {e}[/red]")
         status.idle()
 
 
