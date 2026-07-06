@@ -33,6 +33,8 @@ nul
 
 # OpenCode config (local dev tool)
 .leo-code/
+# Except .gitignore inside .leo-code (controla qué ignorar dentro)
+!.leo-code/.gitignore
 
 # Sidecar cache
 sidecar/cache/
