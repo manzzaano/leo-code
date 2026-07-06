@@ -13,6 +13,8 @@ import asyncio
 import click
 from pathlib import Path
 
+from leo_code.logging_config import setup_logging
+
 # En import (no en cli()): `--help` de click corta antes del callback y la consola
 # Windows cp1252 rompe los caracteres no-ASCII del texto de ayuda.
 for _s in (sys.stdout, sys.stderr):
@@ -120,6 +122,7 @@ def cli():
     Model-agnostic (12 providers). 28 lenguajes. 15x menos tokens.
     """
     _load_dotenv()
+    setup_logging()
     try:
         sys.stdout.reconfigure(encoding='utf-8')
     except Exception:

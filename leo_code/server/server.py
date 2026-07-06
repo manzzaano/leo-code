@@ -31,6 +31,7 @@ from pydantic import BaseModel
 import uvicorn
 
 from leo_code.core.metrics import get_metrics, MetricsSnapshot
+from leo_code.logging_config import setup_logging
 
 # El MOTOR vive en leo_code/engine.py (sin FastAPI). server.py es solo el wrapper
 # HTTP: importa el motor en vez de duplicarlo (fuente única de verdad).
@@ -380,6 +381,7 @@ def main():
     parser.add_argument("--host", default="0.0.0.0", help="Host (default 0.0.0.0)")
     parser.add_argument("--plugins", default="", help="Path a leo-code.json con configuración de plugins")
     args = parser.parse_args()
+    setup_logging()
 
     if args.plugins:
         from leo_code.plugins import PluginManager

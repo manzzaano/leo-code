@@ -23,6 +23,7 @@ un cliente real las pida; YAGNI hasta entonces.
 """
 
 import asyncio
+import logging
 import os
 import sys
 import threading
@@ -38,6 +39,9 @@ from leo_code.engine import (
     _get_indexer, _get_vector_store, _repo_caps, _load_index_from_disk,
 )
 from leo_code.core.graphquery import GraphQuery
+from leo_code.logging_config import setup_logging
+
+log = logging.getLogger("leo.mcp")
 from leo_code.core.boundary import link_http_edges
 from leo_code.core.guardian import Guardian
 
@@ -95,6 +99,7 @@ def _embed_bg(repo: str):
                 vs.add(_repo_caps(_get_indexer(), repo))
         except Exception as e:
             print(f"[leo-mcp] embed bg fallo: {e}", file=sys.stderr)
+            log.warning(f"embed bg fallo: {e}")
 
     threading.Thread(target=_do, daemon=True, name=f"embed:{repo[-20:]}").start()
 
@@ -246,12 +251,14 @@ def _warmup(repo: str):
         import sentence_transformers  # noqa: F401
     except Exception as e:
         print(f"[leo-mcp] import encoder fallo: {e}", file=sys.stderr)
+        log.warning(f"import encoder fallo: {e}")
 
     def _bg():
         try:
             _get_vector_store(repo).search("warmup")  # carga el encoder/modelo
         except Exception as e:
             print(f"[leo-mcp] warmup encoder fallo: {e}", file=sys.stderr)
+            log.warning(f"warmup encoder fallo: {e}")
         _ensure_structural(repo)
         _embed_bg(repo)
 
@@ -259,6 +266,7 @@ def _warmup(repo: str):
 
 
 async def main():
+    setup_logging(os.path.abspath(os.getenv("LEO_REPO", ".")))
     # El canal MCP usa stdout. Pero el indexer y otras libs imprimen a stdout con
     # print() (en este y otros threads) y eso corromperia el protocolo. Capturamos
     # el stdout REAL para el protocolo y redirigimos sys.stdout a stderr: cualquier

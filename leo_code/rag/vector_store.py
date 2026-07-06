@@ -1,7 +1,10 @@
 """VectorStore: Qdrant local con búsqueda HNSW sobre embeddings de cápsulas."""
 
+import logging
 import os
 from leo_code.core.parser import Capsule
+
+log = logging.getLogger("leo")
 
 
 class VectorStore:
@@ -33,6 +36,7 @@ class VectorStore:
                 import sys
                 print(f"[vector_store] {self.path} en uso por otro proceso leo; "
                       "usando indice semantico en memoria.", file=sys.stderr)
+                log.warning(f"{self.path} en uso por otro proceso leo; usando indice semantico en memoria.")
                 self._client = QdrantClient(location=":memory:")
             else:
                 self._client = QdrantClient(path=self.path)
