@@ -258,13 +258,17 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
 
 
 def _detect_python(c: Capsule, content: str, content_lower: str, decorators: str, hereda: str, decos: str) -> bool:
-    """Detecta frameworks Python. Retorna True si debe saltar fastapi check."""
-    if "web.Application(" in content:
-        c.properties["framework"] = "aiohttp"
+    """Detecta frameworks Python."""
+    if c.type in ("function", "async_function"):
+        if "@shared_task" in content or "@app.task" in content or "shared_task" in decos or "app.task" in decos:
+            c.type = "task"
+            c.properties["framework"] = "celery"
+
     if "@routes.get" in content or "@routes.post" in content or "routes.get" in decos or "routes.post" in decos:
         c.type = "endpoint"
         c.properties["framework"] = "aiohttp"
-        return True
+    elif "web.Application(" in content:
+        c.properties["framework"] = "aiohttp"
     elif any(d in decos for d in ("router.get(", "router.post(", "router.put(", "router.delete(", "router.patch(", ".get(", ".post(")):
         if c.type in ("function", "async_function"):
             c.type = "endpoint"
@@ -272,15 +276,23 @@ def _detect_python(c: Capsule, content: str, content_lower: str, decorators: str
     elif any(s in decos for s in (".route(", "app.route", "bp.route")):
         c.type = "endpoint"
         c.properties["framework"] = "flask"
-    elif c.type == "class" and "BaseModel" in hereda:
-        c.type = "model"
-        c.properties["framework"] = "pydantic"
-    elif c.type == "class" and ("Model)" in hereda or "models.Model" in hereda):
-        c.type = "model"
-        c.properties["framework"] = "django"
-    elif c.type == "class" and "db.Model" in hereda:
-        c.type = "model"
-        c.properties["framework"] = "sqlalchemy"
+    elif c.type == "class":
+        if "BaseModel" in hereda:
+            c.type = "model"
+            c.properties["framework"] = "pydantic"
+        elif "Model)" in hereda or "models.Model" in hereda:
+            c.type = "model"
+            c.properties["framework"] = "django"
+        elif "db.Model" in hereda:
+            c.type = "model"
+            c.properties["framework"] = "sqlalchemy"
+        elif "SQLModel" in hereda or ("table=True" in content and "SQLModel" in content):
+            c.type = "model"
+            c.properties["framework"] = "sqlmodel"
+
+    if c.type == "class" and ("@strawberry.type" in content or "strawberry.type" in decos or "strawberry.Schema" in content):
+        c.type = "schema"
+        c.properties["framework"] = "strawberry"
     return False
 
 
@@ -495,31 +507,6 @@ def _detect_grpc(c: Capsule, content: str, filepath: str) -> None:
         c.properties["framework"] = "grpc"
 
 
-def _detect_python_extra(c: Capsule, content: str, content_lower: str = "", decorators: str = "", hereda: str = "", decos: str = "") -> bool:
-    """Detecta frameworks Python adicionales: Celery, aiohttp, SQLModel, Strawberry."""
-    if c.type in ("function", "async_function"):
-        if "@shared_task" in content or "@app.task" in content or "shared_task" in decos or "app.task" in decos:
-            c.type = "task"
-            c.properties["framework"] = "celery"
-
-    if "web.Application(" in content:
-        c.properties["framework"] = "aiohttp"
-    if "@routes.get" in decorators or "@routes.post" in decorators:
-        c.type = "endpoint"
-        c.properties["framework"] = "aiohttp"
-
-    if c.type == "class":
-        if "SQLModel" in hereda or ("table=True" in content and "SQLModel" in content):
-            c.type = "model"
-            c.properties["framework"] = "sqlmodel"
-
-    if "@strawberry.type" in content or "strawberry.type" in decos or "strawberry.Schema" in content:
-        if c.type == "class":
-            c.type = "schema"
-        c.properties["framework"] = "strawberry"
-    return False
-
-
 def _detect_middleware(c: Capsule, content: str = "", content_lower: str = "", decorators: str = "", hereda: str = "", decos: str = "") -> None:
     content_lower = content_lower or (c.content or "").lower()
     lang = c.language
@@ -531,109 +518,51 @@ def _detect_middleware(c: Capsule, content: str = "", content_lower: str = "", d
             c.properties.setdefault("framework", "express" if lang == "javascript" else "fastapi")
 
 
-def _dispatch_python(c: Capsule) -> None:
+_DETECT_ROUTINES: dict[str, list[Callable]] = {
+    "python": [_detect_python],
+    "javascript": [_detect_remix, _detect_nuxt, _detect_svelte, _detect_angular, _detect_vue, _detect_jsts],
+    "typescript": [_detect_remix, _detect_nuxt, _detect_svelte, _detect_angular, _detect_vue, _detect_jsts],
+    "java": [_detect_java_kotlin],
+    "kotlin": [_detect_java_kotlin],
+    "php": [_detect_php],
+    "csharp": [_detect_csharp],
+    "ruby": [_detect_ruby],
+    "go": [_detect_go],
+    "rust": [_detect_rust],
+    "elixir": [_detect_elixir],
+}
+
+
+def _prepare_context(c: Capsule):
     content = c.content or ""
-    content_lower = content.lower()
-    decorators = c.properties.get("decorators", "")
-    hereda = c.properties.get("hereda_de", "")
-    decos = decorators.lower()
-    _detect_python(c, content, content_lower, decorators, hereda, decos)
-    _detect_python_extra(c, content, content_lower, decorators, hereda, decos)
-    _detect_middleware(c, content, content_lower, decorators, hereda, decos)
-    _detect_graphql(c, content, c.language)
-    _detect_grpc(c, content, (c.file_path or "").lower())
+    return dict(
+        content=content,
+        content_lower=content.lower(),
+        decorators=c.properties.get("decorators", ""),
+        hereda=c.properties.get("hereda_de", ""),
+        decos=c.properties.get("decorators", "").lower(),
+    )
 
 
-def _dispatch_jsts(c: Capsule) -> None:
-    content = c.content or ""
-    content_lower = content.lower()
-    decorators = c.properties.get("decorators", "")
-    hereda = c.properties.get("hereda_de", "")
-    decos = decorators.lower()
-    _detect_jsts(c, content, content_lower, decorators, hereda, decos)
-    _detect_vue(c, content, content_lower, decorators, hereda, decos)
-    _detect_angular(c, content, content_lower, decorators, hereda, decos)
-    _detect_svelte(c, content, content_lower, decorators, hereda, decos)
-    _detect_nuxt(c, content, content_lower, decorators, hereda, decos)
-    _detect_remix(c, content, content_lower, decorators, hereda, decos)
-    _detect_middleware(c, content, content_lower, decorators, hereda, decos)
-    _detect_graphql(c, content, c.language)
-    _detect_grpc(c, content, (c.file_path or "").lower())
-
-
-def _dispatch_java_kotlin(c: Capsule) -> None:
-    content = c.content or ""
-    content_lower = content.lower()
-    decorators = c.properties.get("decorators", "")
-    hereda = c.properties.get("hereda_de", "")
-    decos = decorators.lower()
-    _detect_java_kotlin(c, content, content_lower, decorators, hereda, decos)
-    _detect_graphql(c, content, c.language)
-    _detect_grpc(c, content, (c.file_path or "").lower())
-
-
-def _dispatch_php(c: Capsule) -> None:
-    _detect_php(c, c.content or "")
-    _detect_graphql(c, c.content or "", c.language)
-    _detect_grpc(c, c.content or "", (c.file_path or "").lower())
-
-
-def _dispatch_csharp(c: Capsule) -> None:
-    content = c.content or ""
-    content_lower = content.lower()
-    decorators = c.properties.get("decorators", "")
-    hereda = c.properties.get("hereda_de", "")
-    decos = decorators.lower()
-    _detect_csharp(c, content, content_lower, decorators, hereda, decos)
-    _detect_graphql(c, content, c.language)
-    _detect_grpc(c, content, (c.file_path or "").lower())
-
-
-def _dispatch_ruby(c: Capsule) -> None:
-    _detect_ruby(c, c.content or "")
-    _detect_graphql(c, c.content or "", c.language)
-    _detect_grpc(c, c.content or "", (c.file_path or "").lower())
-
-
-def _dispatch_go(c: Capsule) -> None:
-    _detect_go(c, c.content or "")
-    _detect_graphql(c, c.content or "", c.language)
-    _detect_grpc(c, c.content or "", (c.file_path or "").lower())
-
-
-def _dispatch_rust(c: Capsule) -> None:
-    _detect_rust(c, c.content or "")
-    _detect_graphql(c, c.content or "", c.language)
-    _detect_grpc(c, c.content or "", (c.file_path or "").lower())
-
-
-def _dispatch_elixir(c: Capsule) -> None:
-    _detect_elixir(c, c.content or "")
-    _detect_graphql(c, c.content or "", c.language)
-    _detect_grpc(c, c.content or "", (c.file_path or "").lower())
+def _run_detect_pipeline(c: Capsule) -> None:
+    ctx = _prepare_context(c)
+    for step in _DETECT_ROUTINES.get(c.language, ()):
+        step(c, **ctx)
+    _detect_middleware(c, **ctx)
+    _detect_graphql(c, ctx["content"], c.language)
+    _detect_grpc(c, ctx["content"], (c.file_path or "").lower())
 
 
 _LANG_DISPATCH: dict[str, Callable[[Capsule], None]] = {
-    "python": _dispatch_python,
-    "javascript": _dispatch_jsts,
-    "typescript": _dispatch_jsts,
-    "java": _dispatch_java_kotlin,
-    "kotlin": _dispatch_java_kotlin,
-    "php": _dispatch_php,
-    "csharp": _dispatch_csharp,
-    "ruby": _dispatch_ruby,
-    "go": _dispatch_go,
-    "rust": _dispatch_rust,
-    "elixir": _dispatch_elixir,
+    lang: _run_detect_pipeline for lang in _DETECT_ROUTINES
 }
 
 
 def detect_frameworks(capsules: list[Capsule]) -> list[Capsule]:
     for c in capsules:
-        dispatch = _LANG_DISPATCH.get(c.language)
-        if dispatch is not None:
-            dispatch(c)
-
+        step = _LANG_DISPATCH.get(c.language)
+        if step is not None:
+            step(c)
     return capsules
 
 
@@ -815,144 +744,6 @@ def extract_image_capsule(path: str) -> list[Capsule]:
         content=f"data:{mime};base64,{b64}",
         properties={"mime": mime, "size_bytes": len(content), "width": 0, "height": 0},
     )]
-
-    tree = parser.parse(content.encode())
-    root = tree.root_node
-    capsules = []
-    module_name = Path(file_path).name
-
-    def _range(node) -> tuple[int, int]:
-        return node.start_point[0] + 1, node.end_point[0] + 1
-
-    def _text(node) -> str:
-        return content[node.start_byte:node.end_byte]
-
-    def _find_calls(node) -> list[str]:
-        calls = []
-        for child in node.children:
-            if child.type == "call":
-                func = child.child_by_field_name("function")
-                if func and func.type == "identifier":
-                    calls.append(_text(func))
-            calls.extend(_find_calls(child))
-        return calls
-
-    def _find_imports(node) -> list[str]:
-        imports = []
-        if node.type in ("import_statement", "import_from_statement"):
-            for child in node.children:
-                if child.type in ("dotted_name", "aliased_import"):
-                    imports.append(_text(child).split(" as ")[0])
-                elif child.type == "import_prefix":
-                    pass
-            if node.type == "import_from_statement":
-                mod = node.child_by_field_name("module_name")
-                if mod:
-                    imports.append(_text(mod))
-        for child in node.children:
-            imports.extend(_find_imports(child))
-        return imports
-
-    for node in root.children:
-        if not node.is_named:
-            continue
-
-        start, end = _range(node)
-
-        if node.type == "function_definition":
-            name_node = node.child_by_field_name("name")
-            params_node = node.child_by_field_name("parameters")
-            return_node = node.child_by_field_name("return_type")
-            body = node.child_by_field_name("body")
-            name = _text(name_node) if name_node else "unknown"
-            params = _text(params_node) if params_node else "()"
-            ret_type = _text(return_node) if return_node else "None"
-            sig = f"def {name}{params}"
-            if return_node:
-                sig += f" -> {ret_type}"
-            doc = None
-            if body:
-                for child in body.children:
-                    if child.type == "expression_statement":
-                        expr = child.children[0] if child.children else None
-                        if expr and expr.type == "string":
-                            doc = _text(expr).strip("\"'").split("\n")[0].strip()
-            calls = _find_calls(node) if body else []
-            capsules.append(Capsule(
-                id=_make_id(file_path, start, sig),
-                type="function", name=name, file_path=file_path,
-                start_line=start, end_line=end,
-                language=language, signature=sig,
-                content=_text(node), docstring=doc, calls=calls,
-                properties={
-                    "parametros": params.strip("()"),
-                    "tipo_retorno": ret_type,
-                    "lineas": end - start + 1,
-                    "module": module_name,
-                },
-            ))
-
-        elif node.type == "class_definition":
-            name_node = node.child_by_field_name("name")
-            body = node.child_by_field_name("body")
-            name = _text(name_node) if name_node else "unknown"
-            sig = f"class {name}"
-            doc = None
-            methods = []
-            calls = []
-            if body:
-                for child in body.children:
-                    if child.type == "function_definition":
-                        mname = _text(child.child_by_field_name("name"))
-                        methods.append(mname)
-                for child in body.children:
-                    if child.type == "expression_statement":
-                        expr = child.children[0] if child.children else None
-                        if expr and expr.type == "string" and not doc:
-                            doc = _text(expr).strip("\"'").split("\n")[0].strip()
-                calls = _find_calls(body)
-            capsules.append(Capsule(
-                id=_make_id(file_path, start, sig),
-                type="class", name=name, file_path=file_path,
-                start_line=start, end_line=end,
-                language=language, signature=sig,
-                content=_text(node), docstring=doc, calls=calls,
-                properties={
-                    "metodos": ", ".join(methods),
-                    "lineas": end - start + 1,
-                    "module": module_name,
-                },
-            ))
-
-        elif node.type in ("import_statement", "import_from_statement"):
-            import_names = _find_imports(node)
-            for imp_name in import_names:
-                capsules.append(Capsule(
-                    id=_make_id(file_path, start, f"import {imp_name}"),
-                    type="module", name=imp_name, file_path=file_path,
-                    start_line=start, end_line=end,
-                    language=language, signature=f"import {imp_name}",
-                    content=_text(node), imports=[imp_name],
-                ))
-
-        elif node.type == "expression_statement":
-            for child in node.children:
-                if child.type == "assignment":
-                    lhs = child.child_by_field_name("left")
-                    if lhs and lhs.type == "identifier":
-                        name = _text(lhs)
-                        rct = _text(child.child_by_field_name("right")) if child.child_by_field_name("right") else "..."
-                        ctype = "constant" if name.isupper() else "variable"
-                        capsules.append(Capsule(
-                            id=_make_id(file_path, start, f"{ctype} {name}"),
-                            type=ctype, name=name, file_path=file_path,
-                            start_line=start, end_line=end,
-                            language=language, signature=f"{name} = {rct[:30]}",
-                            content=_text(node).split("\n")[0],
-                            properties={"module": module_name},
-                        ))
-
-    return capsules
 
 
 def build_call_graph(capsules: list[Capsule]) -> None:
