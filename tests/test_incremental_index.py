@@ -72,3 +72,37 @@ def test_sync_reresolves_call_graph(tmp_path):
     caller_ids = [c.id for c in idx.get_capsules().values() if c.name == "caller"]
     # tras el sync, helper ya no debe estar llamado por caller (called_by re-resuelto)
     assert not any(cid in helper.called_by for cid in caller_ids)
+
+
+def test_ttl_forces_sync_even_without_newer_mtime(tmp_path, monkeypatch):
+    """LEO_CACHE_TTL fuerza staleness aunque ningun mtime cambio (cubre eliminaciones/
+    renombrados, que _is_cache_stale no detecta por si sola vía el walk de mtimes).
+    Usa os.utime() en vez de un TTL=0 al borde — evita flakiness por resolucion de
+    mtime del filesystem."""
+    import os as _os
+    from leo_code.rag.agent.loop import AgentLoop
+    monkeypatch.setenv("LEO_CACHE_TTL", "3600")
+
+    (tmp_path / "a.py").write_text("def foo():\n    return 1\n", encoding="utf-8")
+    agent = AgentLoop()
+    agent._ensure_indexed(str(tmp_path))
+    cache_path = tmp_path / ".leo-code" / "kc_index.json.gz"
+    assert cache_path.exists()
+
+    # Retrasa el mtime del cache 2h atras — mas viejo que el TTL de 1h, sin
+    # depender de que pase tiempo real durante el test.
+    two_hours_ago = time.time() - 7200
+    _os.utime(cache_path, (two_hours_ago, two_hours_ago))
+
+    assert agent._is_cache_stale(cache_path, str(tmp_path)) is True
+
+
+def test_ttl_default_no_fuerza_stale_si_esta_fresco(tmp_path):
+    from leo_code.rag.agent.loop import AgentLoop
+
+    (tmp_path / "a.py").write_text("def foo():\n    return 1\n", encoding="utf-8")
+    agent = AgentLoop()
+    agent._ensure_indexed(str(tmp_path))
+    cache_path = tmp_path / ".leo-code" / "kc_index.json.gz"
+
+    assert agent._is_cache_stale(cache_path, str(tmp_path)) is False
