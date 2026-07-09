@@ -15,6 +15,12 @@ try:
 except Exception:
     pass
 
+# Storage Qdrant propio y efimero por subproceso: el lock de qdrant-local es a nivel
+# de DIRECTORIO (no de coleccion) — sin esto, corridas paralelas del benchmark
+# (--batch N) se pisan y degradan a indice en memoria. Ver vector_store.py.
+import tempfile
+os.environ["LEO_QDRANT_PATH"] = tempfile.mkdtemp(prefix="leo_qdrant_bench_")
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from leo_code.rag.agent.loop import AgentLoop
