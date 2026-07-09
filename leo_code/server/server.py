@@ -144,7 +144,7 @@ async def get_context(req: ContextRequest, request: Request):
             cached = get_cached_result(cache_key)
             if cached:
                 get_metrics().record_cache_hit()
-                get_metrics().record_query(0, int((time.time() - t_start) * 1000))
+                get_metrics().record_query(0, int((time.time() - t_start) * 1000), repo_path=repo)
                 return ContextResponse(**cached)
         except Exception:
             pass
@@ -152,7 +152,7 @@ async def get_context(req: ContextRequest, request: Request):
 
         result = compute_context(repo, req.query, req.task_type, req.budget_tokens)
         _cache_context_result(cache_key, result)
-        get_metrics().record_query(result["tokens"], int((time.time() - t_start) * 1000))
+        get_metrics().record_query(result["tokens"], int((time.time() - t_start) * 1000), repo_path=repo)
         return ContextResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -273,35 +273,32 @@ async def benchmark():
     """Métricas históricas del benchmark: queries, tokens, task_types, top tareas."""
     snap = get_metrics().snapshot()
     tasks_map: dict[str, str] = {}
-    results_dir = Path("benchmark/results_final")
+    summary_path = Path("benchmark/results_real/summary.json")
+    tasks_json_path = Path("benchmark/tasks.json")
     results_tasks: list[dict] = []
     dist: dict[str, int] = {}
 
     try:
-        tasks_path = Path("benchmark/tasks.json")
-        if tasks_path.exists():
-            tasks_raw = json.loads(tasks_path.read_text(encoding="utf-8"))
+        if tasks_json_path.exists():
+            tasks_raw = json.loads(tasks_json_path.read_text(encoding="utf-8"))
             tasks_map = {t["id"]: t["type"] for t in tasks_raw}
 
-        if results_dir.exists():
-            for f in results_dir.glob("*.json"):
-                if f.name == "summary.json":
-                    continue
-                data = json.loads(f.read_text(encoding="utf-8"))
-                items = data if isinstance(data, list) else [data]
-                for item in items:
-                    tid = item.get("task_id", "")
-                    ttype = tasks_map.get(tid, "unknown")
-                    dist[ttype] = dist.get(ttype, 0) + 1
-                    results_tasks.append({
-                        "task_id": tid,
-                        "type": ttype,
-                        "model": item.get("model", ""),
-                        "mode": item.get("mode", ""),
-                        "score": item.get("score", 0),
-                        "tokens": item.get("tokens", 0),
-                        "duration_s": item.get("duration_s", 0),
-                    })
+        if summary_path.exists():
+            entries = json.loads(summary_path.read_text(encoding="utf-8"))
+            entries = entries if isinstance(entries, list) else [entries]
+            for item in entries:
+                tid = item.get("task_id", "")
+                ttype = tasks_map.get(tid, "unknown")
+                dist[ttype] = dist.get(ttype, 0) + 1
+                results_tasks.append({
+                    "task_id": tid,
+                    "type": ttype,
+                    "model": item.get("system", ""),
+                    "mode": item.get("mode", ""),
+                    "score": item.get("score_total", 0),
+                    "tokens": item.get("tokens", 0),
+                    "duration_s": round(item.get("duration_ms", 0) / 1000, 1),
+                })
     except Exception:
         pass
 

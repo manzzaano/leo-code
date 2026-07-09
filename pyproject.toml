@@ -84,6 +84,7 @@ all = [
 leo-code = "leo_code.rag.cli.app:cli"
 leo-code-mcp = "leo_code.server.server:main"
 leo-code-mcp-stdio = "leo_code.server.mcp_server:run_stdio"
+leo-code-meter = "leo_code.meter.main:main"
 
 [tool.setuptools.packages.find]
 include = ["leo_code*"]
