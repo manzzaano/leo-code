@@ -8,6 +8,7 @@ Endpoints:
   POST /preindex            — Pre-indexar sin consultar (background)
   GET  /stats               — Estadísticas del índice
   GET  /metrics             — Métricas de uso (tokens ahorrados, latencia, etc.)
+  GET  /metrics/prometheus  — Métricas en formato Prometheus (text exposition)
   GET  /benchmark           — Métricas históricas del benchmark
   GET  /sessions            — Listar sesiones guardadas
 
@@ -27,6 +28,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 import uvicorn
 
@@ -266,6 +268,13 @@ async def metrics():
         "repos_indexed": snap.repos_indexed,
         "uptime_seconds": int(snap.uptime_seconds),
     }
+
+
+@app.get("/metrics/prometheus")
+async def metrics_prometheus():
+    """Métricas en formato Prometheus text exposition (scrapeable por Prometheus/Grafana)."""
+    snap = get_metrics().snapshot()
+    return PlainTextResponse(snap.to_prometheus(), media_type="text/plain; version=0.0.4; charset=utf-8")
 
 
 @app.get("/benchmark", response_model=BenchmarkResponse)
