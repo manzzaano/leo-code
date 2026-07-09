@@ -251,88 +251,73 @@ def _build_signature(language: str, ptype: str, name: str, params: str) -> str:
     return f"{kw} {name}({params_fmt})"
 
 
+_BRACE_BRACKET_RE = re.compile(r"[{}]")
+
+
 def _find_block_end(lines: list[str], start_lineno: int, language: str) -> int:
     if start_lineno < 1 or start_lineno > len(lines):
         return min(start_lineno + 10, len(lines))
 
-    MAX_BLOCK = 200
-    _openers = {"do", "if", "unless", "case", "while", "until", "for", "begin", "def", "class", "module"}
     brace_langs = {"javascript", "typescript", "go", "rust", "java", "c", "cpp", "csharp",
                    "php", "swift", "kotlin", "scala", "dart", "objectivec", "perl", "shell"}
 
     if language in brace_langs:
-        block = "\n".join(lines[start_lineno - 1:start_lineno - 1 + MAX_BLOCK])
-        depth = 0
-        pos = 0
-        while True:
-            open_pos = block.find("{", pos)
-            close_pos = block.find("}", pos)
-            if close_pos == -1:
-                return min(start_lineno + 20, len(lines))
-            if open_pos != -1 and open_pos < close_pos:
-                depth += 1
-                pos = open_pos + 1
-            else:
-                depth -= 1
-                if depth == 0:
-                    return start_lineno + block[:close_pos].count("\n")
-                pos = close_pos + 1
-        return min(start_lineno + 20, len(lines))
+        return _find_block_end_brace(lines, start_lineno, len(lines))
 
     if language in ("ruby", "lua", "elixir", "julia"):
-        base_indent = len(lines[start_lineno - 1]) - len(lines[start_lineno - 1].lstrip())
-        block = "\n".join(lines[start_lineno - 1:start_lineno - 1 + MAX_BLOCK])
-        depth = 0
-        pos = 0
-        while True:
-            end_pos = block.find("\nend", pos)
-            if pos == 0 and block.startswith("end", pos):
-                end_pos = 0
-            if end_pos == -1:
-                return min(start_lineno + 30, len(lines))
-            after = end_pos + 4
-            if after < len(block) and block[after].isalnum():
-                pos = after
-                continue
-            line_start = block.rfind("\n", 0, end_pos) + 1 if end_pos > 0 else 0
-            raw_line = block[line_start:end_pos + 4] if end_pos > 0 else "end"
-            stripped = raw_line.strip()
-            indent = len(raw_line) - len(raw_line.lstrip())
-            if stripped == "end":
-                if depth == 0:
-                    if indent <= base_indent:
-                        return start_lineno + block[:end_pos].count("\n")
-                else:
-                    depth -= 1
-            elif not stripped.startswith("end"):
-                first = stripped.split(None, 1)[0]
-                if first in _openers:
-                    depth += 1
-            pos = end_pos + 4
-        return min(start_lineno + 30, len(lines))
+        return _find_block_end_keyword(lines, start_lineno, len(lines))
 
     if language == "sql":
-        text = "\n".join(lines[start_lineno - 1 : min(len(lines), start_lineno - 1 + MAX_BLOCK)])
-        upper = text.upper()
-        depth = 0
-        pos = 0
-        while True:
-            begin = upper.find("BEGIN", pos)
-            end = upper.find("END", pos)
-            if begin == -1 and end == -1:
-                return min(start_lineno + 30, len(lines))
-            next_pos = min(begin, end) if begin != -1 and end != -1 else (begin if begin != -1 else end)
-            token = "BEGIN" if next_pos == begin else "END"
-            line_s = upper.rfind("\n", 0, next_pos) + 1
-            line_e = upper.index("\n", next_pos + 1) if "\n" in upper[next_pos + 1:] else len(upper)
-            line = upper[line_s:line_e].strip()
-            if not re.match(r'^[^{}]*$', line):
-                depth += 1 if token == "BEGIN" else -1
-                if depth == 0:
-                    return start_lineno + upper[:next_pos].count("\n") + (1 if "BEGIN" in line else 0)
-            pos = next_pos + 1
+        return _find_block_end_sql(lines, start_lineno, len(lines))
 
     return min(start_lineno + 10, len(lines))
+
+
+def _find_block_end_brace(lines: list[str], start: int, total: int) -> int:
+    max_scan = min(start - 1 + 200, total)
+    depth = 1
+    for lineno in range(start + 1, max_scan + 1):
+        line = lines[lineno - 1]
+        opens = line.count("{")
+        closes = line.count("}")
+        if opens == 0 and closes == 0:
+            continue
+        depth += opens - closes
+        if depth <= 0:
+            return lineno
+    return min(start + 20, total)
+
+
+def _find_block_end_keyword(lines: list[str], start: int, total: int) -> int:
+    base_indent = len(lines[start - 1]) - len(lines[start - 1].lstrip())
+    max_scan = min(start - 1 + 200, total)
+    for lineno in range(start + 1, max_scan + 1):
+        line = lines[lineno - 1]
+        if "end" not in line:
+            continue
+        stripped = line.lstrip()
+        if not stripped:
+            continue
+        indent = len(line) - len(stripped)
+        if indent >= base_indent and stripped == "end":
+            return lineno
+    return min(start + 30, total)
+
+
+_SQL_BEGIN_RE = re.compile(r"\bBEGIN\b", re.IGNORECASE)
+# "END IF/LOOP/WHILE/CASE" cierra esos bloques, no un BEGIN — no cuenta.
+_SQL_END_RE = re.compile(r"\bEND\b(?!\s*(IF|LOOP|WHILE|CASE)\b)", re.IGNORECASE)
+
+
+def _find_block_end_sql(lines: list[str], start: int, total: int) -> int:
+    max_scan = min(start - 1 + 200, total)
+    depth = 1
+    for lineno in range(start + 1, max_scan + 1):
+        line = lines[lineno - 1]
+        depth += len(_SQL_BEGIN_RE.findall(line)) - len(_SQL_END_RE.findall(line))
+        if depth <= 0:
+            return lineno
+    return min(start + 30, total)
 
 
 def _find_calls_in_block(content: str, language: str) -> list[str]:
