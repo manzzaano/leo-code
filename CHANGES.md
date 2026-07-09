@@ -157,8 +157,56 @@ de KC-RAG en si — candidatos a investigar:
   referencia otro simbolo, traer tambien su cuerpo completo) en vez de depender de que el
   agente lo pida despues con una tool — asi `rag_direct()` podria cubrir mas casos sin
   escalar al loop de tools.
-- Revisar por que BM25 (`leo_code/rag/bm25.py`) nunca se activa (ver seccion "sesion 2"
-  arriba, sigue sin confirmarse si sigue siendo cierto) — fusionar dense+sparse podria mejorar
-  recall en tasks de precision como `debug`/`optimize`.
+- ~~Revisar por que BM25 nunca se activa~~ — **confirmado esta sesion (ver abajo): SI esta
+  activo**, la nota de "sesion 2" quedo desactualizada.
 
 Esto es un proyecto de retrieval, no un fix de una linea — no se empezo esta sesion.
+
+---
+
+## Sesión 2026-07-09 (cont.): backlog de docs/OPTIMIZATION_REPORT.md
+
+Revisados los 4 items pendientes de "Próximos Pasos" del informe de 2026-06-11.
+
+### 1. Refactor del compressor a OOP — descartado (YAGNI)
+`CompressConfig` + `COMPRESS_STRATEGIES` ya logran el objetivo de mantenibilidad;
+un rewrite a clases no arregla bug ni duplicación real, solo agrega boilerplate.
+El gap real era cobertura de tests (6 de 13 `task_type` sin tests) — cerrado en
+`tests/test_compressor.py`.
+
+### 2. Fix: guard muerto en VectorStore + storage aislado para benchmarks paralelos
+**Archivo:** `leo_code/rag/vector_store.py:17`, `leo_code/engine.py`,
+`benchmark/leo_runner.py`, `benchmark/leo_rag_runner.py`, `benchmark/leo_smart_runner.py`
+
+El guard `"_" not in collection_name` nunca disparaba con el collection_name real
+de producción (`leo_mcp_{hash}`, siempre tiene `_`) — corregido. Pero eso solo no
+alcanzaba: el lock de qdrant-local es a nivel de **directorio de storage**, no de
+colección — namespacing de colección nunca lo iba a arreglar. Los 3 runners de
+benchmark ahora usan `LEO_QDRANT_PATH` (env var leída por `engine.py`, default
+`./cache/qdrant_leo`) apuntando a un directorio temporal propio por subproceso,
+eliminando la contención real en corridas `--batch N`. Para uso multi-proceso real
+(2 IDEs concurrentes con `leo-code-mcp` sobre el mismo repo) se documenta el
+comportamiento actual (single-writer + fallback a memoria) como limitación
+conocida — un modo servidor Qdrant real es una decisión de arquitectura mayor,
+fuera de alcance.
+
+De paso, confirmado que **BM25 sí está activo** (`engine.py`, fusión RRF con
+Qdrant dentro de `compute_context`) — la nota de "sesión 2" que lo marcaba como
+posible código muerto estaba desactualizada.
+
+### 3. TTL de cache para detectar eliminaciones
+**Archivo:** `leo_code/rag/agent/loop.py`
+
+`_is_cache_stale` solo detectaba mtime más nuevo — una eliminación/renombrado sin
+otro archivo tocado nunca disparaba `Indexer.sync()` (que sí calcula `deleted`
+correctamente), quedando desincronizado indefinidamente. Nuevo `LEO_CACHE_TTL`
+(env var, default 3600s) fuerza un sync periódico independiente del mtime-walk.
+Hash-tracking de contenido se descartó — no arregla este gap específico, solo el
+TTL lo hace.
+
+### 4. Endpoint Prometheus
+**Archivo:** `leo_code/core/metrics.py`, `leo_code/server/server.py`
+
+Nuevo `GET /metrics/prometheus` (formato text exposition, hand-rolled, sin
+dependencia `prometheus_client` — 16 campos simples no la justifican). CloudWatch
+queda fuera de alcance — requiere credenciales/infra AWS, decisión del usuario.
