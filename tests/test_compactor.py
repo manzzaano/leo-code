@@ -1,27 +1,28 @@
-"""Tests: compactor — compactación de historial de sesión."""
-
 from leo_code.session.compactor import compact_history
 
 
-def _message(role: str, content: str) -> dict:
-    return {"role": role, "content": content}
+def _msg(text: str) -> dict:
+    return {"role": "user", "content": text}
 
 
-def test_compact_empty_history():
-    result = compact_history([])
-    assert result == []
+def _msgs(n: int) -> list[dict]:
+    return [_msg(f"mensaje numero {i}") for i in range(n)]
 
 
-def test_compact_under_threshold():
-    messages = [_message("user", f"mensaje {i}") for i in range(10)]
-    result = compact_history(messages)
-    assert result == messages
+class TestCompactHistory:
+    def test_vacio(self):
+        assert compact_history([]) == []
 
+    def test_10_mensajes_sin_compactar(self):
+        msgs = _msgs(10)
+        result = compact_history(msgs, max_messages=30)
+        assert result is msgs
 
-def test_compact_above_threshold():
-    messages = [_message("user", f"mensaje {i}") for i in range(50)]
-    result = compact_history(messages)
-    assert len(result) < 50
-    assert result[0]["role"] == "system"
-    assert "Resumen" in result[0]["content"]
-    assert result[-1] == messages[-1]
+    def test_50_mensajes_se_compacta(self):
+        msgs = _msgs(50)
+        result = compact_history(msgs, max_messages=30)
+        assert result is not msgs
+        assert len(result) < 30
+        assert result[0]["role"] == "system"
+        assert "[Resumen de conversacion anterior]" in result[0]["content"]
+        assert "Mensajes omitidos" in result[0]["content"]
