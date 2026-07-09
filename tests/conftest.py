@@ -5,6 +5,15 @@ import pytest
 from pathlib import Path
 
 
+@pytest.fixture(autouse=True)
+def _isolate_usage_log(tmp_path, monkeypatch):
+    """record_query() escribe a ~/.leo-code/usage.jsonl (global, real) — sin esto,
+    cualquier test que ejercite record_query (directo o via AgentLoop) ensucia el
+    log real del usuario con entradas de test."""
+    import leo_code.core.metrics as metrics
+    monkeypatch.setattr(metrics, "USAGE_LOG_PATH", tmp_path / "usage.jsonl")
+
+
 @pytest.fixture
 def mini_repo_path():
     """Path to mini repo fixture directory."""

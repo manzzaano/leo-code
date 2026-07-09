@@ -4,10 +4,29 @@ Trackea: queries totales, tokens ahorrados vs baseline, latencia, cache hits.
 Endpoint /metrics en el sidecar.
 """
 
+import json
 import os
 import time
 import threading
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+# Log global append-only, analogo a los .jsonl de sesion de Claude Code
+# (~/.claude/projects/**/*.jsonl) pero para leo-code: una linea por query
+# completada, across TODOS los repos/procesos. Alimenta leo_code/meter/.
+USAGE_LOG_PATH = Path.home() / ".leo-code" / "usage.jsonl"
+
+
+def _append_usage_log(entry: dict) -> None:
+    """Best-effort: nunca debe romper una query real por un fallo de disco/permisos."""
+    try:
+        USAGE_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(USAGE_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
 
 
 # Baseline = tokens que un agente sin leo (Claude Code/opencode) consumiría leyendo
@@ -59,7 +78,7 @@ class MetricsTracker:
     def record_query(self, tokens: int, latency_ms: int,
                      t_index_ms: float = 0, t_classify_ms: float = 0,
                      t_search_ms: float = 0, t_compress_ms: float = 0,
-                     t_llm_ms: float = 0):
+                     t_llm_ms: float = 0, repo_path: str = "", model: str = ""):
         with self._lock:
             self._queries += 1
             self._tokens_used += tokens
@@ -71,6 +90,13 @@ class MetricsTracker:
             self._phase_timings["t_search_ms"].append(t_search_ms)
             self._phase_timings["t_compress_ms"].append(t_compress_ms)
             self._phase_timings["t_llm_ms"].append(t_llm_ms)
+        _append_usage_log({
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "repo_path": repo_path,
+            "model": model,
+            "tokens": tokens,
+            "latency_ms": latency_ms,
+        })
 
     def record_cache_hit(self):
         with self._lock:
