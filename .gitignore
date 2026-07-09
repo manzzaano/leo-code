@@ -60,3 +60,5 @@ packaging/*/*.egg-info/
 .coverage
 cov.json
 _no_docstring_*.txt
+benchmark/.oc_empty_config/
+opencode.json.bench_bak

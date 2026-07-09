@@ -110,3 +110,55 @@ Ejecutando: `python benchmark/run_config.py --all-models`
 Verificar en `benchmark/results_final/summary.json` y `benchmark/REPORT_FINAL.md`.
 
 Correr también: `python benchmark/compare_results.py` para delta pre/post.
+
+---
+
+## Sesión 2026-07-08/09: medición real vs opencode + techo de KC-RAG de un solo pase
+
+**Contexto:** el claim de README ("15x menos tokens") nunca se habia medido de forma justa.
+`benchmark/run_real.py` media opencode por `len(response)//4` (solo texto de salida, ignoraba
+su propio costo de tool-calling interno) y opencode corria con el MCP de leo-code +
+codegraph/pencil (config global del usuario) habilitados sin que nadie lo notara. Corregido:
+opencode ahora se mide con `--format json` (tokens reales de cada `step_finish`) y corre con
+`XDG_CONFIG_HOME` aislado + `opencode.json` del repo renombrado un instante (ver
+`run_oc_subprocess` en `benchmark/run_real.py`).
+
+Con medicion justa, 3 corridas reales (n=15, `deepseek/deepseek-chat`, serial `--batch 1`):
+
+| modo LEO | tok/task | calidad (judge) | vs opencode vanilla |
+|---|---|---|---|
+| `run()` — agente completo, loop de tools | ~59,000 | 7.3-7.6 | opencode: 72K-192K tok, 6.6-8.5 calidad (opencode mismo es ruidoso entre corridas) |
+| `rag_direct()` — un solo pase, sin tools | ~2,500-3,900 | **4.2-4.9** ⚠️ | 93% menos tokens, pero falla en tasks que exigen precision/amplitud |
+| `run_smart()` — hibrido con self-check | ~46,000-55,000 | **7.2** (con gate) | 55-70% menos tokens, calidad practicamente empatada |
+
+**`rag_direct()` no existia en el codigo** pese a estar documentado en este archivo y en
+`docs/BENCHMARK_PLAN.md` (linea 38, "LEO-RAG") — se reimplemento desde cero en
+`leo_code/rag/agent/loop.py` junto con `run_smart()` (fallback automatico a `run()` si
+`_is_breadth()`, la task necesita editar archivos, o el propio modelo se autoevalua
+"CONTEXT_INSUFFICIENT" — ver `_rag_system_prompt()`).
+
+### Techo real: ~55-70%, no ~90%
+
+Se probo bajar el gate de calidad (heuristico de longitud → autoevaluacion del modelo) y
+mejoro la calidad (6.3 → 7.2) sin mover mucho el % de tokens. El techo no es de tuning de
+heuristico: es que un solo pase de contexto comprimido (top-K por relevancia) genuinamente
+NO alcanza para:
+- Tasks de precision (`debug`, `optimize`): necesitan el cuerpo EXACTO y completo de la
+  funcion objetivo, no un resumen top-K que puede omitirla o truncarla.
+- Tasks de amplitud (`cadena completa`, `traza`, listas exhaustivas across muchos simbolos):
+  requieren mas de lo que un presupuesto de tokens fijo puede traer en un solo pase.
+
+### Siguiente paso (no iniciado esta sesion, decision del usuario)
+
+Para cerrar la brecha de verdad sin sacrificar calidad hay que mejorar el retrieval/compresion
+de KC-RAG en si — candidatos a investigar:
+- Presupuesto de contexto adaptativo segun complejidad de la query (no fijo por task_type).
+- Multi-hop dentro de UNA sola llamada de construccion de contexto (ej. si el top-1 resultado
+  referencia otro simbolo, traer tambien su cuerpo completo) en vez de depender de que el
+  agente lo pida despues con una tool — asi `rag_direct()` podria cubrir mas casos sin
+  escalar al loop de tools.
+- Revisar por que BM25 (`leo_code/rag/bm25.py`) nunca se activa (ver seccion "sesion 2"
+  arriba, sigue sin confirmarse si sigue siendo cierto) — fusionar dense+sparse podria mejorar
+  recall en tasks de precision como `debug`/`optimize`.
+
+Esto es un proyecto de retrieval, no un fix de una linea — no se empezo esta sesion.

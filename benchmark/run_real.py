@@ -27,6 +27,8 @@ def parse_leo_tokens(stderr: str, response: str) -> int:
 
 MODEL = "deepseek/deepseek-chat"  # V3 - fiable con tool calling en streaming
 RUNNER = str(Path(__file__).parent / "leo_runner.py")
+RAG_RUNNER = str(Path(__file__).parent / "leo_rag_runner.py")
+SMART_RUNNER = str(Path(__file__).parent / "leo_smart_runner.py")
 RESULTS_DIR = Path("benchmark/results_real")
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 BATCH_SIZE = 3
@@ -55,25 +57,101 @@ def run_leo_subprocess(query: str, repo_path: str) -> dict:
         return {"system": "LEO", "response": f"[Error: {e}]", "tokens": 0, "duration_ms": 0}
 
 
-def run_oc_subprocess(query: str, repo_path: str) -> dict:
+def run_leo_rag_subprocess(query: str, repo_path: str) -> dict:
+    """rag_direct(): UNA llamada con contexto KC-RAG, sin loop de tools. Solo apto
+    para tasks de solo-lectura (no edita archivos)."""
     t0 = time.time()
     try:
         env = {**os.environ, "DEEPSEEK_API_KEY": os.getenv("DEEPSEEK_API_KEY", ""), "PYTHONIOENCODING": "utf-8"}
+        r = subprocess.run(
+            [sys.executable, RAG_RUNNER, query, repo_path, MODEL],
+            capture_output=True, text=True, timeout=300, env=env, encoding="utf-8", errors="replace",
+        )
+        stdout = (r.stdout or "").strip()
+        lines = stdout.split("\n")
+        response_lines = [l for l in lines if not l.startswith("[indexer]") and "Tipos:" not in l and "capsulas" not in l and "archivos" not in l]
+        response = "\n".join(response_lines).strip() or (r.stderr or "").strip()
+        return {"system": "RAG", "response": response[:4000],
+                "tokens": parse_leo_tokens(r.stderr, response),
+                "duration_ms": int((time.time() - t0) * 1000)}
+    except subprocess.TimeoutExpired:
+        return {"system": "RAG", "response": "[Timeout]", "tokens": 0, "duration_ms": 300000}
+    except Exception as e:
+        return {"system": "RAG", "response": f"[Error: {e}]", "tokens": 0, "duration_ms": 0}
+
+
+def run_leo_smart_subprocess(query: str, repo_path: str) -> dict:
+    """run_smart(): rag_direct() primero, escala a run() si hace falta (breadth/edit/
+    respuesta insuficiente)."""
+    t0 = time.time()
+    try:
+        env = {**os.environ, "DEEPSEEK_API_KEY": os.getenv("DEEPSEEK_API_KEY", ""), "PYTHONIOENCODING": "utf-8"}
+        r = subprocess.run(
+            [sys.executable, SMART_RUNNER, query, repo_path, MODEL],
+            capture_output=True, text=True, timeout=300, env=env, encoding="utf-8", errors="replace",
+        )
+        stdout = (r.stdout or "").strip()
+        lines = stdout.split("\n")
+        response_lines = [l for l in lines if not l.startswith("[indexer]") and "Tipos:" not in l and "capsulas" not in l and "archivos" not in l]
+        response = "\n".join(response_lines).strip() or (r.stderr or "").strip()
+        return {"system": "SMART", "response": response[:4000],
+                "tokens": parse_leo_tokens(r.stderr, response),
+                "escalated": "[ESCALATED=True]" in (r.stderr or ""),
+                "duration_ms": int((time.time() - t0) * 1000)}
+    except subprocess.TimeoutExpired:
+        return {"system": "SMART", "response": "[Timeout]", "tokens": 0, "duration_ms": 300000}
+    except Exception as e:
+        return {"system": "SMART", "response": f"[Error: {e}]", "tokens": 0, "duration_ms": 0}
+
+
+def run_oc_subprocess(query: str, repo_path: str) -> dict:
+    """Corre opencode vanilla — SIN MCP (ni el leo-code local ni codegraph/pencil
+    globales del usuario). --pure NO desactiva MCP (solo plugins), asi que:
+    - XDG_CONFIG_HOME apunta a un dir vacio -> ignora ~/.config/opencode/opencode.json
+      (que registra codegraph + pencil como MCP servers globales).
+    - opencode.json del repo (registra el MCP de leo-code) se renombra un instante.
+    Requiere --batch 1 (serial): el rename no es seguro con OC corriendo en paralelo."""
+    t0 = time.time()
+    repo = Path(repo_path)
+    local_cfg = repo / "opencode.json"
+    local_cfg_bak = repo / "opencode.json.bench_bak"
+    renamed = False
+    try:
+        if local_cfg.exists():
+            local_cfg.rename(local_cfg_bak)
+            renamed = True
+
+        empty_xdg = Path("benchmark/.oc_empty_config")
+        empty_xdg.mkdir(parents=True, exist_ok=True)
+        env = {**os.environ, "DEEPSEEK_API_KEY": os.getenv("DEEPSEEK_API_KEY", ""),
+               "PYTHONIOENCODING": "utf-8", "XDG_CONFIG_HOME": str(empty_xdg.resolve())}
         import shutil
         oc_bin = shutil.which("opencode") or "opencode"  # Windows: resuelve opencode.cmd
         r = subprocess.run(
-            [oc_bin, "run", query, "-m", "deepseek/deepseek-chat"],
+            [oc_bin, "run", query, "-m", "deepseek/deepseek-chat", "--format", "json"],
             capture_output=True, text=True, timeout=180, cwd=repo_path, env=env, encoding="utf-8", errors="replace",
         )
-        # Keep all output, just strip ANSI codes
-        out = r.stdout or ""
-        err = r.stderr or ""
-        import re as _re
-        out = _re.sub(r'\x1b\[[0-9;]*m', '', out)
-        response = (out + "\n" + err).strip()
-        # opencode CLI no expone usage real: len//4 es estimación de SALIDA solamente
-        # (subestima a OC; la comparación de tokens vs LEO real es conservadora).
-        return {"system": "OC", "response": response[:4000], "tokens": len(response) // 4,
+        # --format json emite un evento por linea; "step_finish" trae tokens reales
+        # (input+output+cache) por cada llamada al LLM que opencode hizo internamente.
+        # len(response)//4 solo media el texto final visible y subestimaba MUCHO el
+        # costo real de exploracion con tools (no expuesto de otra forma).
+        text_parts = []
+        real_tokens = 0
+        for line in (r.stdout or "").splitlines():
+            line = line.strip()
+            if not line.startswith("{"):
+                continue
+            try:
+                evt = json.loads(line)
+            except Exception:
+                continue
+            part = evt.get("part", {}) or {}
+            if evt.get("type") == "text" and part.get("type") == "text":
+                text_parts.append(part.get("text", ""))
+            elif evt.get("type") == "step_finish":
+                real_tokens += (part.get("tokens", {}) or {}).get("total", 0)
+        response = "\n".join(text_parts).strip() or (r.stderr or "").strip()
+        return {"system": "OC", "response": response[:4000], "tokens": real_tokens,
                 "duration_ms": int((time.time() - t0) * 1000)}
     except subprocess.TimeoutExpired:
         return {"system": "OC", "response": "[Timeout]", "tokens": 0, "duration_ms": 180000}
@@ -81,6 +159,9 @@ def run_oc_subprocess(query: str, repo_path: str) -> dict:
         return {"system": "OC", "response": "[opencode not installed]", "tokens": 0, "duration_ms": 0}
     except Exception as e:
         return {"system": "OC", "response": f"[Error: {e}]", "tokens": 0, "duration_ms": 0}
+    finally:
+        if renamed and local_cfg_bak.exists():
+            local_cfg_bak.rename(local_cfg)
 
 
 async def run_no_direct_async(query: str) -> dict:
@@ -103,18 +184,23 @@ async def run_batch(tasks: list[dict], repo_path: str, systems: list[str]) -> li
         try:
             if sys_name == "LEO":
                 r = await asyncio.to_thread(run_leo_subprocess, task["query"], repo_path)
+            elif sys_name == "RAG":
+                r = await asyncio.to_thread(run_leo_rag_subprocess, task["query"], repo_path)
+            elif sys_name == "SMART":
+                r = await asyncio.to_thread(run_leo_smart_subprocess, task["query"], repo_path)
             elif sys_name == "OC":
                 r = await asyncio.to_thread(run_oc_subprocess, task["query"], repo_path)
             else:
                 r = await run_no_direct_async(task["query"])
             r["task_id"] = tid
-            print(f"      tok={r.get('tokens',0)} time={r.get('duration_ms',0)}ms")
+            esc = " escalated" if r.get("escalated") else ""
+            print(f"      tok={r.get('tokens',0)} time={r.get('duration_ms',0)}ms{esc}")
             return r
         except Exception as e:
             print(f"      ERR: {e}")
             return {"system": sys_name, "task_id": tid, "response": f"[{e}]", "tokens": 0, "duration_ms": 0}
 
-    coros = [run_one(task, s) for task in tasks for s in systems if s in ("LEO", "OC", "NO")]
+    coros = [run_one(task, s) for task in tasks for s in systems if s in ("LEO", "RAG", "SMART", "OC", "NO")]
     return await asyncio.gather(*coros)
 
 
@@ -143,7 +229,7 @@ def print_summary(results: list[dict]):
     by_sys = {}
     for r in results:
         by_sys.setdefault(r["system"], []).append(r)
-    for s in ["LEO", "OC", "NO"]:
+    for s in ["LEO", "RAG", "SMART", "OC", "NO"]:
         valid = [r for r in by_sys.get(s, []) if r.get("response")]
         if not valid:
             continue
