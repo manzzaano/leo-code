@@ -26,6 +26,12 @@ def _looks_like_error(result: str) -> bool:
     return any(m in low for m in _ERROR_MARKERS)
 
 
+def _cache_ttl_seconds() -> int:
+    """Leido en el momento de uso (no constante congelada al importar) para que
+    LEO_CACHE_TTL sea testeable con monkeypatch.setenv sin importlib.reload."""
+    return int(os.environ.get("LEO_CACHE_TTL", "3600"))  # 1h: dev tool local, no urgente
+
+
 # YAGNI behavioral skill (Ponytail): solo en tareas de escribir/editar código.
 _YAGNI_DIRECTIVE = (
     "For this code writing/editing task apply minimalism (YAGNI): "
@@ -774,9 +780,15 @@ class AgentLoop:
         self._indexed_repos.add(repo_path)
 
     def _is_cache_stale(self, cache_path: Path, repo_path: str) -> bool:
-        """Checks if cache is older than the newest file in repo."""
+        """Checks if cache is older than the newest file in repo, OR older than
+        LEO_CACHE_TTL seconds. Una eliminacion/renombrado sin ningun otro archivo
+        tocado nunca bumpea un mtime — el TTL fuerza un sync periodico que lo detecta
+        (Indexer.sync() SI calcula deleted correctamente, solo faltaba dispararlo)."""
         try:
             cache_time = cache_path.stat().st_mtime
+            if time.time() - cache_time > _cache_ttl_seconds():
+                log.debug(f"Cache stale: TTL excedido ({_cache_ttl_seconds()}s)")
+                return True
             for root, dirs, files in os.walk(repo_path):
                 # Skip vendor/cache dirs
                 dirs[:] = [d for d in dirs if d not in {"__pycache__", ".git", "node_modules", ".venv", "venv"}]
