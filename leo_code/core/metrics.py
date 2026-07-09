@@ -55,6 +55,35 @@ class MetricsSnapshot:
     t_compress_ms: float = 0
     t_llm_ms: float = 0
 
+    def to_prometheus(self) -> str:
+        """Prometheus text exposition format — sin dependencia prometheus_client,
+        16 campos numéricos simples no la justifican."""
+        fields = [
+            ("queries_total", "counter", self.queries_total),
+            ("tokens_saved", "counter", self.tokens_saved),
+            ("tokens_used", "counter", self.tokens_used),
+            ("cache_hits", "counter", self.cache_hits),
+            ("cache_misses", "counter", self.cache_misses),
+            ("avg_latency_ms", "gauge", self.avg_latency_ms),
+            ("p50_latency_ms", "gauge", self.p50_latency_ms),
+            ("p99_latency_ms", "gauge", self.p99_latency_ms),
+            ("capsules_indexed", "gauge", self.capsules_indexed),
+            ("repos_indexed", "gauge", self.repos_indexed),
+            ("uptime_seconds", "counter", self.uptime_seconds),
+            ("t_index_ms", "gauge", self.t_index_ms),
+            ("t_classify_ms", "gauge", self.t_classify_ms),
+            ("t_search_ms", "gauge", self.t_search_ms),
+            ("t_compress_ms", "gauge", self.t_compress_ms),
+            ("t_llm_ms", "gauge", self.t_llm_ms),
+        ]
+        lines = []
+        for name, mtype, value in fields:
+            metric = f"leo_code_{name}"
+            lines.append(f"# HELP {metric} {name.replace('_', ' ')}")
+            lines.append(f"# TYPE {metric} {mtype}")
+            lines.append(f"{metric} {value}")
+        return "\n".join(lines) + "\n"
+
 
 class MetricsTracker:
     def __init__(self):
