@@ -13,8 +13,10 @@ class VectorStore:
     def __init__(self, collection_name: str = "kc_code_capsules",
                  path: str = "./cache/qdrant", dim: int = 384,
                  use_process_id: bool = True):
-        # Use process ID for concurrent access (tests/benchmark)
-        if use_process_id and "_" not in collection_name:
+        # Use process ID for concurrent access (tests/benchmark). El nombre base
+        # puede tener "_" (ej. "leo_mcp_{hash}" en produccion) — eso no debe decidir
+        # si se aplica el sufijo de PID, son cosas independientes.
+        if use_process_id:
             pid = os.getpid()
             self.collection_name = f"{collection_name}_{pid}"
         else:
@@ -33,6 +35,15 @@ class VectorStore:
                 # Otro proceso leo (otro MCP/CLI/test sobre el mismo repo) tiene el
                 # storage: qdrant-local se quedaría BLOQUEADO para siempre en su file
                 # lock. Degradamos a memoria (re-embebe, pero funciona) en vez de colgar.
+                #
+                # ponytail: el lock es a nivel de DIRECTORIO (self.path), no de
+                # coleccion — el collection_name (con o sin PID) NUNCA puede evitar
+                # esta contencion entre procesos que comparten el mismo storage dir.
+                # Multi-proceso real (2 IDEs con leo-code-mcp sobre el mismo repo):
+                # comportamiento soportado es single-writer + degradacion a memoria,
+                # sin cola de espera ni modo servidor Qdrant real (decision de
+                # arquitectura mayor, fuera de alcance). Ver LEO_QDRANT_PATH en
+                # engine.py para dar a un proceso su propio storage aislado.
                 import sys
                 print(f"[vector_store] {self.path} en uso por otro proceso leo; "
                       "usando indice semantico en memoria.", file=sys.stderr)

@@ -94,7 +94,7 @@ def _get_vector_store(repo_path: str):
                 stable = hashlib.md5(repo_path.encode("utf-8")).hexdigest()[:8]
                 _vector_stores[repo_path] = VectorStore(
                     collection_name=f"leo_mcp_{stable}",
-                    path="./cache/qdrant_leo",
+                    path=os.environ.get("LEO_QDRANT_PATH", "./cache/qdrant_leo"),
                 )
     return _vector_stores[repo_path]
 
