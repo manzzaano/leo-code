@@ -144,19 +144,19 @@ class GoalRunner:
     async def _plan(self, goal_text: str, repo_path: str, model: str,
                     plugin_manager, skill_manager, max_steps: int = 12) -> list[str]:
         """LLM descompone el goal en pasos concretos."""
-        query = f"""Descompón esta tarea en pasos concretos y ordenados. Responde SOLO con una lista numerada, un paso por línea. Sé específico: menciona archivos, funciones, herramientas a usar.
+        query = f"""Break this task down into concrete, ordered steps. Respond ONLY with a numbered list, one step per line. Be specific: mention files, functions, tools to use.
 
-Tarea: {goal_text}
+Task: {goal_text}
 
-Formato:
-1. Leer archivo X para entender Y
-2. Modificar Z en archivo W
-3. Ejecutar tests para verificar
+Format:
+1. Read file X to understand Y
+2. Modify Z in file W
+3. Run tests to verify
 ...
 """
         try:
             messages = [
-                {"role": "system", "content": "Eres un planificador de tareas de programacion. Responde solo con pasos numerados."},
+                {"role": "system", "content": "You are a programming task planner. Respond only with numbered steps."},
                 {"role": "user", "content": query},
             ]
             resp = await self.llm.generate(messages, tools=[], temperature=0.1)
@@ -177,7 +177,7 @@ Formato:
         """Ejecuta un paso con KC-RAG + LLM + tools."""
         t0 = time.time()
         try:
-            query = f"Completa este paso del plan: {step.description}"
+            query = f"Complete this plan step: {step.description}"
             messages = [
                 {"role": "system", "content": self.agent._system_prompt()},
                 {"role": "user", "content": query},
@@ -191,7 +191,7 @@ Formato:
                 ctx, _ = self.agent._build_context(query, repo_path, tt)
                 if ctx:
                     context = ctx
-                    messages.insert(1, {"role": "system", "content": f"Contexto:\n{context}"})
+                    messages.insert(1, {"role": "system", "content": f"Context:\n{context}"})
             except Exception:
                 pass
 
@@ -226,15 +226,15 @@ Formato:
                       model: str) -> list[str]:
         """Si un paso falló, pide al LLM pasos alternativos."""
         try:
-            query = f"""El paso "{failed_step.description}" falló.
-Tarea original: {goal.description}
-Pasos completados: {[s.description for s in goal.steps if s.status == 'done']}
-Pasos restantes: {[s.description for s in goal.steps[goal.current_step+1:]]}
+            query = f"""Step "{failed_step.description}" failed.
+Original task: {goal.description}
+Completed steps: {[s.description for s in goal.steps if s.status == 'done']}
+Remaining steps: {[s.description for s in goal.steps[goal.current_step+1:]]}
 
-Sugiere 1-3 pasos alternativos o adicionales para completar la tarea.
-Responde solo con pasos numerados, uno por línea."""
+Suggest 1-3 alternative or additional steps to complete the task.
+Respond only with numbered steps, one per line."""
             messages = [
-                {"role": "system", "content": "Eres un planificador. Pasos concretos, una línea cada uno."},
+                {"role": "system", "content": "You are a planner. Concrete steps, one line each."},
                 {"role": "user", "content": query},
             ]
             resp = await self.llm.generate(messages, tools=[], temperature=0.2)
@@ -251,16 +251,16 @@ Responde solo con pasos numerados, uno por línea."""
         try:
             steps_done = [s.description for s in goal.steps if s.status == "done"]
             steps_failed = [s.description for s in goal.steps if s.status == "failed"]
-            query = f"""Tarea: {goal_text}
-Pasos completados ({len(steps_done)}): {', '.join(steps_done[:8])}
-{('Pasos fallidos: ' + ', '.join(steps_failed)) if steps_failed else ''}
+            query = f"""Task: {goal_text}
+Completed steps ({len(steps_done)}): {', '.join(steps_done[:8])}
+{('Failed steps: ' + ', '.join(steps_failed)) if steps_failed else ''}
 
-¿Se completó la tarea? Responde con:
-- "DONE" si la tarea está completa
-- "PARTIAL: <lo que falta>" si está parcialmente completa
-- "FAILED: <razon>" si no se pudo completar"""
+Was the task completed? Respond with:
+- "DONE" if the task is complete
+- "PARTIAL: <what's missing>" if partially complete
+- "FAILED: <reason>" if it could not be completed"""
             messages = [
-                {"role": "system", "content": "Evalua si una tarea de programacion esta completa. Responde DONE, PARTIAL, o FAILED con explicacion breve."},
+                {"role": "system", "content": "Evaluate whether a programming task is complete. Respond DONE, PARTIAL, or FAILED with a brief explanation."},
                 {"role": "user", "content": query},
             ]
             resp = await self.llm.generate(messages, tools=[], temperature=0.1)
