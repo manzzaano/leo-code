@@ -28,19 +28,29 @@ def _looks_like_error(result: str) -> bool:
 
 # YAGNI behavioral skill (Ponytail): solo en tareas de escribir/editar código.
 _YAGNI_DIRECTIVE = (
-    "Para esta tarea de escribir/editar codigo aplica minimalismo (YAGNI): "
-    "primero reutiliza lo que ya existe en el repo; usa stdlib o una dependencia ya "
-    "instalada antes de anadir una nueva; el codigo mas simple que funciona gana. "
-    "No anadas abstracciones, configuracion ni andamiaje no pedidos. Cambios minimos."
+    "For this code writing/editing task apply minimalism (YAGNI): "
+    "first reuse what already exists in the repo; use stdlib or an already "
+    "installed dependency before adding a new one; the simplest code that works wins. "
+    "Don't add unrequested abstractions, configuration, or scaffolding. Minimal changes."
 )
 _YAGNI_TASKS = ("code_gen", "code_edit", "refactor")
 
+# run_smart(): task_types que necesitan escribir archivos -> nunca aptos para rag_direct
+# (sin tools no hay como editar). Y frases que delatan que el contexto comprimido de
+# rag_direct no alcanzo -> escalar al agente completo en vez de devolver una respuesta pobre.
+_NEEDS_EDIT_TASKS = ("code_edit", "code_gen", "refactor", "test_gen")
+_INSUFFICIENT_MARKERS = (
+    "no existe", "no encontr", "no tengo suficiente", "no esta claro", "no está claro",
+    "no pude determinar", "falta informacion", "falta información", "no hay informacion",
+    "no hay información", "no hay suficiente", "no queda claro",
+)
+
 _VERBOSITY_BLOCK = """
 
-Estilo de respuesta (ahorra tokens de salida):
-- Ve al grano. Nada de preambulo ('Claro', 'Por supuesto', 'Voy a...') ni de recapitular lo que ya se dijo.
-- No repitas el codigo del contexto si no aporta; referencia simbolo y archivo:linea.
-- Responde lo justo: conclusiones primero, sin relleno. Fragmentos OK si quedan claros."""
+Response style (saves output tokens):
+- Get to the point. No preamble ('Sure', 'Of course', 'I'm going to...') and no recapping what was already said.
+- Don't repeat context code if it adds nothing; reference symbol and file:line instead.
+- Answer just enough: conclusions first, no filler. Fragments OK if clear."""
 
 # Tasks de AMPLITUD (review/arquitectura/onboarding): necesitan respuesta extensa.
 # El benchmark N=3 mostró que verbosity steering + effort cap les HACEN DAÑO
@@ -174,7 +184,7 @@ class AgentLoop:
             if self.interrupt:
                 duration_ms = int((time.time() - t0) * 1000)
                 get_metrics().record_query(total_tokens, duration_ms,
-                                          t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms)
+                                          t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms, repo_path=repo_path, model=model)
                 return {"respuesta": "[Interrumpido]", "total_tokens": total_tokens,
                         "iterations": iteration, "duration_ms": duration_ms}
 
@@ -218,7 +228,7 @@ class AgentLoop:
                         pass
                 duration_ms = int((time.time() - t0) * 1000)
                 get_metrics().record_query(total_tokens, duration_ms,
-                                          t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms)
+                                          t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms, repo_path=repo_path, model=model)
                 log.info(f"query completed | task_type={task_type if use_kc_rag else 'none'} | "
                         f"index={t_index_ms:.0f}ms classify={t_classify_ms:.0f}ms search={t_search_ms:.0f}ms "
                         f"compress={t_compress_ms:.0f}ms llm={t_llm_ms:.0f}ms × {llm_iterations} iter | "
@@ -278,7 +288,6 @@ class AgentLoop:
                     ref = self.tools.store_full(result)
                     result = result[:4000] + f"\n[truncado {len(result)} chars — usa retrieve_full('{ref}') UNA vez para el resto; NO inventes otras refs]"
                 messages.append({"role": "tool", "tool_call_id": tc_data["id"], "content": result[:1000]})
-                total_tokens += len(result) // 4
 
             # Routing: continuación tras tools OK → bajo esfuerzo; tras error → completo.
             next_effort = "low" if (ran_tool and not any_error and not breadth and os.getenv("LEO_EFFORT", "1") != "0") else None
@@ -286,29 +295,124 @@ class AgentLoop:
             # SÍNTESIS: tras suficientes iteraciones, fuerza una respuesta final
             # consolidada sin tools (evita devolver texto parcial tipo "(using tools)").
             if iteration >= 8:
-                final = await self._finalize(messages, query)
+                final, finalize_tokens = await self._finalize(messages, query)
+                total_tokens += finalize_tokens
                 answer = final or all_text or "[Sin respuesta]"
                 if session_id:
                     self._persist_turn(session_id, query, answer, model, total_tokens)
                 duration_ms = int((time.time() - t0) * 1000)
                 get_metrics().record_query(total_tokens, duration_ms,
-                                          t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms)
+                                          t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms, repo_path=repo_path, model=model)
                 log.info(f"query finalized at iter {iteration} | tokens={total_tokens} ms={duration_ms}")
                 return {"respuesta": answer, "total_tokens": total_tokens,
                         "iterations": iteration + 1,
                         "duration_ms": duration_ms}
 
-        final = await self._finalize(messages, query)
+        final, finalize_tokens = await self._finalize(messages, query)
+        total_tokens += finalize_tokens
         duration_ms = int((time.time() - t0) * 1000)
         get_metrics().record_query(total_tokens, duration_ms,
-                                  t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms)
+                                  t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms, repo_path=repo_path, model=model)
         log.warning(f"query max_iterations reached | iterations={self.max_iterations} tokens={total_tokens} ms={duration_ms}")
         return {"respuesta": final or all_text or f"[No completado en {self.max_iterations} iteraciones.]",
                 "total_tokens": total_tokens, "iterations": self.max_iterations,
                 "duration_ms": duration_ms}
 
-    async def _finalize(self, messages: list[dict], query: str = "") -> str:
-        """Una llamada final SIN tools para consolidar la respuesta, anclada a la pregunta original."""
+    async def rag_direct(self, query: str, repo_path: str = ".",
+                          model: str = "deepseek/deepseek-v4-flash",
+                          session_id: str | None = None) -> dict:
+        """Modo directo: UNA llamada al LLM con el contexto KC-RAG ya inyectado, SIN tools.
+        Para queries de solo lectura (code_query, review, onboard, audit, debug-explicacion...).
+        NO sirve para tasks que necesiten escribir archivos (code_edit/code_gen/refactor/test_gen) —
+        esas requieren el loop de tools de run()."""
+        t0 = time.time()
+        if self.llm is None:
+            self.llm = self._init_llm(model)
+        repo_path = os.path.abspath(repo_path)
+
+        from leo_code.rag.classifier import classify_task
+        task_type = classify_task(query)
+        breadth = _is_breadth(query, task_type)
+        context, timings = self._build_context(query, repo_path, task_type)
+
+        messages = [{"role": "system", "content": self._rag_system_prompt()}]
+        if context:
+            messages.insert(1, {"role": "system", "content": f"Contexto del codigo:\n{context}"})
+        if not breadth and os.getenv("LEO_VERBOSITY", "1") != "0":
+            messages.append({"role": "system", "content": _VERBOSITY_BLOCK.strip()})
+        messages.append({"role": "user", "content": query})
+
+        resp = await self.llm.generate(messages, [], temperature=0.2)
+        total_tokens = resp.usage.input_tokens + resp.usage.output_tokens
+        duration_ms = int((time.time() - t0) * 1000)
+
+        # Self-check: primera linea declara si el contexto alcanzo (ver _rag_system_prompt).
+        # Se quita de la respuesta final — es senal interna para run_smart, no para el usuario.
+        text = resp.text or ""
+        lines = text.split("\n", 1)
+        first = lines[0].strip().upper() if lines else ""
+        context_ok = True
+        if first == "CONTEXT_INSUFFICIENT":
+            context_ok = False
+            text = lines[1].lstrip("\n") if len(lines) > 1 else ""
+        elif first == "CONTEXT_OK":
+            text = lines[1].lstrip("\n") if len(lines) > 1 else ""
+
+        if session_id:
+            self._persist_turn(session_id, query, text, model, total_tokens)
+        get_metrics().record_query(total_tokens, duration_ms,
+                                  timings.get("t_index_ms", 0), 0, timings.get("t_search_ms", 0),
+                                  timings.get("t_compress_ms", 0), 0,
+                                  repo_path=repo_path, model=model)
+        log.info(f"rag_direct completed | task_type={task_type} | tokens={total_tokens} ms={duration_ms} "
+                f"context_ok={context_ok}")
+        return {"respuesta": text, "total_tokens": total_tokens, "context_ok": context_ok,
+                "iterations": 1, "duration_ms": duration_ms}
+
+    async def run_smart(self, query: str, repo_path: str = ".",
+                         model: str = "deepseek/deepseek-v4-flash",
+                         use_kc_rag: bool = True, history: list[dict] | None = None,
+                         session_id: str | None = None) -> dict:
+        """Intenta rag_direct() (barato, ~1 llamada) primero; escala a run() (agente+tools,
+        caro) SOLO si:
+        - la task necesita escribir archivos (code_edit/code_gen/refactor/test_gen), o
+        - la query es de amplitud (_is_breadth) — sabemos de antemano que necesita explorar, o
+        - la respuesta de rag_direct es corta o admite que le falto informacion.
+        Medido: rag_direct solo, ~93% menos tokens que agente completo, pero calidad cae en
+        tasks que de verdad necesitan explorar (ver benchmark). Este hibrido evita pagar el
+        costo del agente en queries simples sin sacrificar calidad en las que si lo necesitan."""
+        if not use_kc_rag:
+            return await self.run(query, repo_path, model, use_kc_rag, history, session_id)
+
+        from leo_code.rag.classifier import classify_task
+        task_type = classify_task(query)
+        breadth = _is_breadth(query, task_type)
+        needs_edit = task_type in _NEEDS_EDIT_TASKS
+
+        if breadth or needs_edit:
+            return await self.run(query, repo_path, model, use_kc_rag, history, session_id)
+
+        result = await self.rag_direct(query, repo_path, model, session_id)
+        answer = (result.get("respuesta") or "").strip()
+        low = answer.lower()
+        # Señal primaria: el propio modelo se autoevalua (context_ok, ver _rag_system_prompt).
+        # Longitud/frases quedan como red de seguridad si el modelo no respeta el self-check.
+        insufficient = (not result.get("context_ok", True)) or len(answer) < 400 or \
+            any(m in low for m in _INSUFFICIENT_MARKERS)
+        if not insufficient:
+            result["escalated_from_rag"] = False
+            return result
+
+        log.info(f"run_smart escalating rag_direct->run | rag_tokens={result.get('total_tokens')} "
+                f"answer_len={len(answer)}")
+        escalated = await self.run(query, repo_path, model, use_kc_rag, history, session_id)
+        escalated["total_tokens"] = escalated.get("total_tokens", 0) + result.get("total_tokens", 0)
+        escalated["escalated_from_rag"] = True
+        return escalated
+
+    async def _finalize(self, messages: list[dict], query: str = "") -> tuple[str, int]:
+        """Una llamada final SIN tools para consolidar la respuesta, anclada a la pregunta original.
+        Devuelve (texto, tokens_de_esta_llamada) — el caller debe sumar los tokens a su total."""
         try:
             instr = (
                 "YA NO HAY MAS HERRAMIENTAS DISPONIBLES. No intentes llamar a ninguna ni "
@@ -318,10 +422,10 @@ class AgentLoop:
             )
             msgs = messages + [{"role": "user", "content": instr}]
             resp = await self.llm.generate(msgs, [], temperature=0.3)
-            return resp.text or ""
+            return resp.text or "", resp.usage.input_tokens + resp.usage.output_tokens
         except Exception as e:
             log.debug(f"finalize fallo: {e}")
-            return ""
+            return "", 0
 
     def _persist_turn(self, session_id: str, query: str, answer: str, model: str, tokens: int):
         try:
@@ -462,7 +566,7 @@ class AgentLoop:
                 if self.interrupt:
                     duration_ms = int((time.time() - t0) * 1000)
                     get_metrics().record_query(total_tokens, duration_ms,
-                                              t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms)
+                                              t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms, repo_path=repo_path, model=model)
                     yield {"type": "done", "respuesta": "[Interrumpido]", "iterations": iteration,
                            "total_tokens": total_tokens, "duration_ms": duration_ms}
                     return
@@ -495,7 +599,7 @@ class AgentLoop:
                 if self.interrupt:
                     duration_ms = int((time.time() - t0) * 1000)
                     get_metrics().record_query(total_tokens, duration_ms,
-                                              t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms)
+                                              t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms, repo_path=repo_path, model=model)
                     yield {"type": "done", "respuesta": text or "[Interrumpido]", "iterations": iteration + 1,
                            "total_tokens": total_tokens, "duration_ms": duration_ms}
                     return
@@ -509,7 +613,7 @@ class AgentLoop:
                         self._conversation_history.save_conversation(query, context, total_tokens, iteration + 1)
                     duration_ms = int((time.time() - t0) * 1000)
                     get_metrics().record_query(total_tokens, duration_ms,
-                                              t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms)
+                                              t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms, repo_path=repo_path, model=model)
                     log.info(f"stream_run completed | task_type={task_type} | "
                             f"index={t_index_ms:.0f}ms classify={t_classify_ms:.0f}ms search={t_search_ms:.0f}ms "
                             f"compress={t_compress_ms:.0f}ms llm={t_llm_ms:.0f}ms × {llm_iterations} iter | "
@@ -564,7 +668,6 @@ class AgentLoop:
                         result = result[:4000] + f"\n[truncado {len(result)} chars — usa retrieve_full('{ref}') UNA vez para el resto; NO inventes otras refs]"
                     yield {"type": "tool_result", "name": tc["name"], "output": result}
                     messages.append({"role": "tool", "tool_call_id": tc_id, "content": result[:1000]})
-                    total_tokens += len(result) // 4
 
                 # Routing: continuación tras tools OK → bajo esfuerzo; tras error → completo.
                 next_effort = "low" if (ran_tool and not any_error and not breadth and os.getenv("LEO_EFFORT", "1") != "0") else None
@@ -579,7 +682,7 @@ class AgentLoop:
             fallback_resp = all_text if all_text else f"[No se pudo completar en {self.max_iterations} iteraciones. {self._tool_call_count} tool calls ejecutadas.]"
             duration_ms = int((time.time() - t0) * 1000)
             get_metrics().record_query(total_tokens, duration_ms,
-                                      t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms)
+                                      t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms, repo_path=repo_path, model=model)
             log.warning(f"stream_run max_iterations | iterations={self.max_iterations} tokens={total_tokens} ms={duration_ms}")
             yield {"type": "done", "respuesta": fallback_resp, "iterations": self.max_iterations,
                    "total_tokens": total_tokens, "duration_ms": duration_ms}
@@ -596,9 +699,14 @@ class AgentLoop:
             provider_name, model_name = "openai", model
 
         if provider_name in ("deepseek", "openai"):
+            api_key = os.getenv("DEEPSEEK_API_KEY", os.getenv("OPENAI_API_KEY", ""))
+            if not api_key:
+                raise ValueError(
+                    "Missing LLM API key. Set DEEPSEEK_API_KEY or OPENAI_API_KEY environment variable."
+                )
             base_url = "https://api.deepseek.com" if provider_name == "deepseek" or "deepseek" in model else "https://api.openai.com/v1"
             return get_provider("openai",
-                api_key=os.getenv("DEEPSEEK_API_KEY", os.getenv("OPENAI_API_KEY", "")),
+                api_key=api_key,
                 base_url=base_url,
                 model=model_name)
         return get_provider(provider_name, model=model_name)
@@ -611,6 +719,9 @@ class AgentLoop:
 
         Devuelve (contexto_comprimido, timings) — contrato con run()/goal.py.
         """
+        if self._conversation_history is None:
+            self._conversation_history = ConversationHistory(repo_path)
+
         from leo_code import engine
         timings = {"t_index_ms": 0, "t_search_ms": 0, "t_compress_ms": 0}
         try:
@@ -681,33 +792,52 @@ class AgentLoop:
             log.debug(f"Cache staleness check failed: {e}")
             return True
 
+    def _rag_system_prompt(self) -> str:
+        """Prompt para rag_direct(): SIN mencion de tools (no hay ninguna disponible en
+        esta llamada). Usar _system_prompt() aqui hace que el modelo alucine sintaxis de
+        tool-call en texto plano (ej. "<read_file><path>...") en vez de responder."""
+        return """You are an expert programming assistant answering a question about a local repository.
+You have NO tools available in this turn — you cannot read files, search, or execute anything.
+A "Contexto del codigo:" system message below contains everything that was retrieved for you (KC-RAG). It is your ONLY source of information.
+Answer the user's question directly and completely using ONLY that context. Do NOT write pseudo tool-calls, XML tags, or announce actions you cannot perform.
+If the provided context is insufficient to fully answer, say explicitly what is missing instead of guessing or inventing code.
+
+Self-check (mandatory, first line of your response, before anything else): if the context fully
+and confidently covers everything needed to answer completely, write exactly "CONTEXT_OK" as the
+first line. If it does NOT (missing a needed file/symbol, or the question asks you to enumerate/
+verify something the context only partially shows), write exactly "CONTEXT_INSUFFICIENT" as the
+first line instead. Then continue with your best answer on the following lines either way."""
+
     def _system_prompt(self) -> str:
-        base = """Eres un asistente de programacion experto. Trabajas DENTRO de un repositorio local YA accesible en la ruta actual.
-NUNCA pidas al usuario la ruta del proyecto, que lo clone, ni asumas que no tienes acceso: SIEMPRE usa las herramientas directamente sobre el repo.
-No recibes contexto del codigo de antemano: lo recuperas TU MISMO con las herramientas, pidiendo solo lo minimo necesario.
-Si dices que vas a hacer algo (editar, leer, ejecutar), HAZLO en el mismo turno con la herramienta correspondiente — no lo anuncies y pares.
+        base = """You are an expert programming assistant. You work INSIDE a local repository ALREADY accessible at the current path.
+NEVER ask the user for the project path, to clone it, or assume you don't have access: ALWAYS use the tools directly on the repo.
+If a "Contexto del codigo:" system message is present, it was ALREADY retrieved for you (KC-RAG) — READ IT FIRST and answer from it directly.
+Only call tools for what that context does NOT cover, or to verify/expand a specific detail. Do NOT re-explore from scratch what's already given.
+If no such context message is present, retrieve what you need YOURSELF with the tools, requesting only the minimum necessary.
+If you say you're going to do something (edit, read, execute), DO IT in the same turn with the corresponding tool — don't announce it and stop.
 
-Herramientas estructurales (PREFIERELAS — devuelven simbolos exactos, no archivos enteros):
-- find_symbol: localiza funciones/clases/metodos por nombre. EMPIEZA SIEMPRE por aqui.
-- read_symbol: lee el cuerpo de UNA funcion/clase (firma+docstring+codigo). Usalo en vez de read_file para ver una funcion.
-- who_calls / callees: quien llama a un simbolo / a quien llama (grafo de dependencias).
-- impact: que se romperia si cambias un simbolo (callers transitivos).
-- list_by_kind: lista TODOS los simbolos de un tipo (endpoint, class, method, function...). Para preguntas agregadas ('cuantos endpoints hay').
-- search_code: grep de texto cuando no sabes el nombre exacto (devuelve file:line).
+Structural tools (PREFER THEM — they return exact symbols, not whole files):
+- find_symbol: locates functions/classes/methods by name. ALWAYS START here.
+- read_symbol: reads the body of ONE function/class (signature+docstring+code). Use it instead of read_file to view a function.
+- who_calls / callees: who calls a symbol / what it calls (dependency graph).
+- impact: what would break if you change a symbol (transitive callers).
+- list_by_kind: lists ALL symbols of a type (endpoint, class, method, function...). For aggregate questions ('how many endpoints are there').
+- search_code: text grep when you don't know the exact name (returns file:line).
 
-Herramientas de archivo/edicion:
-- read_file: solo para archivos pequenos o un rango (start_line/end_line). Archivos grandes se capan.
-- write_file / replace_in_file: editar (replace_in_file para cambios pequenos, old_string exacto y unico).
+File/edit tools:
+- read_file: only for small files or a range (start_line/end_line). Large files get capped.
+- write_file / replace_in_file: edit (replace_in_file for small changes, old_string exact and unique).
 - list_files, execute_command, run_tests, git_diff.
 
-Reglas:
-- Para entender/explicar codigo: find_symbol -> read_symbol -> who_calls/callees. NO leas archivos enteros.
-- NO modifiques un simbolo sin leerlo antes (read_symbol o read_file con rango).
-- Usa run_tests para verificar. Cambios minimos y precisos.
-- Cuando tengas la informacion suficiente, DA LA RESPUESTA FINAL completa. No pidas mas herramientas de las necesarias.
-- Si no sabes algo, dilo. No inventes.
-- Para execute_command en Windows: usa comandos PowerShell o python.
-- Si recibes imagenes, analizalas visualmente: colores, layout, tipografia, jerarquia."""
+Rules:
+- Provided "Contexto del codigo:" first, tools second. Only explore what's missing from it.
+- To understand/explain code: find_symbol -> read_symbol -> who_calls/callees. Do NOT read whole files.
+- Do NOT modify a symbol without reading it first (read_symbol or read_file with a range).
+- Use run_tests to verify. Minimal and precise changes.
+- Once you have enough information, GIVE THE FINAL COMPLETE ANSWER. Don't call more tools than necessary.
+- If you don't know something, say so. Don't make things up.
+- For execute_command on Windows: use PowerShell or python commands.
+- If you receive images, analyze them visually: colors, layout, typography, hierarchy."""
         # Verbosity steering se inyecta condicionalmente en run()/stream_run()
         # (solo tasks NO-amplitud) — ver _maybe_inject_verbosity.
         return base
