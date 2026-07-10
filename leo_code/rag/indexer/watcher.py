@@ -194,6 +194,7 @@ class Indexer:
 
         # Re-parsear cambiados/nuevos
         reparsed = 0
+        touched_capsules: list[Capsule] = []
         repo = Path(repo_path)
         for p, lang in to_parse.values():
             caps, _, n, _err = self._process_one(p, lang, False, False, repo)
@@ -202,14 +203,18 @@ class Indexer:
                     for c in caps:
                         self._capsules[c.id] = c
                 reparsed += n
+                touched_capsules.extend(caps)
 
         if drop or reparsed:
             self._rebuild_call_graph()
-            if self.vector_store and self._capsules:
-                self.vector_store.add(list(self._capsules.values()))
+            # Solo el delta (capsulas nuevas/re-parseadas), no todo el repo — un
+            # sync que toca 1 archivo no debe re-embeber las ~1400 capsulas del resto.
+            if self.vector_store and touched_capsules:
+                self.vector_store.add(touched_capsules)
 
         stats = {"changed": len(changed), "new": len(new),
-                 "deleted": len(deleted), "reparsed_capsules": reparsed}
+                 "deleted": len(deleted), "reparsed_capsules": reparsed,
+                 "capsules": touched_capsules}
         print(f"[indexer] sync: {len(changed)} cambiados, {len(new)} nuevos, "
               f"{len(deleted)} borrados ({reparsed} cápsulas)")
         return stats

@@ -17,6 +17,22 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from benchmark.judge import judge, score_summary
 
 
+def _prewarm_index(repo_path: str) -> str:
+    """Corre engine._do_index() UNA vez en un subproceso propio, contra un Qdrant
+    FIJO (no temporal), para pagar el costo de parseo+embedding una sola vez por
+    corrida de benchmark en vez de una vez por cada uno de los 15 tasks x N
+    subprocesos paralelos de --batch. Los runners de LEO copian este Qdrant ya
+    poblado a su directorio aislado (ver bench_qdrant.py)."""
+    qdrant_path = str(Path("cache/qdrant_bench_prewarm").resolve())
+    script = f"from leo_code import engine; engine._do_index({os.path.abspath(repo_path)!r})"
+    env = {**os.environ, "LEO_QDRANT_PATH": qdrant_path}
+    t0 = time.time()
+    subprocess.run([sys.executable, "-c", script], env=env, check=True,
+                    cwd=str(Path(__file__).parent.parent))
+    print(f"  Prewarm index: {int((time.time() - t0) * 1000)}ms")
+    return qdrant_path
+
+
 def parse_leo_tokens(stderr: str, response: str) -> int:
     """Coste real (input+output) que leo_runner emite como [LEO_TOKENS=N] por stderr.
 
