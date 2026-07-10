@@ -164,6 +164,50 @@ def run_oc_subprocess(query: str, repo_path: str) -> dict:
             local_cfg_bak.rename(local_cfg)
 
 
+def run_oc_mcp_subprocess(query: str, repo_path: str) -> dict:
+    """opencode CON el MCP de leo-code habilitado (opencode.json del repo intacto),
+    pero SIN helpers globales (codegraph/pencil) — misma XDG_CONFIG_HOME vacia que
+    run_oc_subprocess, solo que aqui NO se renombra opencode.json.
+    Mide: agente generico + motor de leo-code vs LEO nativo (mismo motor, integracion propia)."""
+    t0 = time.time()
+    repo = Path(repo_path)
+    try:
+        empty_xdg = Path("benchmark/.oc_empty_config")
+        empty_xdg.mkdir(parents=True, exist_ok=True)
+        env = {**os.environ, "DEEPSEEK_API_KEY": os.getenv("DEEPSEEK_API_KEY", ""),
+               "PYTHONIOENCODING": "utf-8", "XDG_CONFIG_HOME": str(empty_xdg.resolve())}
+        import shutil
+        oc_bin = shutil.which("opencode") or "opencode"
+        r = subprocess.run(
+            [oc_bin, "run", query, "-m", "deepseek/deepseek-chat", "--format", "json"],
+            capture_output=True, text=True, timeout=180, cwd=repo_path, env=env, encoding="utf-8", errors="replace",
+        )
+        text_parts = []
+        real_tokens = 0
+        for line in (r.stdout or "").splitlines():
+            line = line.strip()
+            if not line.startswith("{"):
+                continue
+            try:
+                evt = json.loads(line)
+            except Exception:
+                continue
+            part = evt.get("part", {}) or {}
+            if evt.get("type") == "text" and part.get("type") == "text":
+                text_parts.append(part.get("text", ""))
+            elif evt.get("type") == "step_finish":
+                real_tokens += (part.get("tokens", {}) or {}).get("total", 0)
+        response = "\n".join(text_parts).strip() or (r.stderr or "").strip()
+        return {"system": "OCMCP", "response": response[:4000], "tokens": real_tokens,
+                "duration_ms": int((time.time() - t0) * 1000)}
+    except subprocess.TimeoutExpired:
+        return {"system": "OCMCP", "response": "[Timeout]", "tokens": 0, "duration_ms": 180000}
+    except FileNotFoundError:
+        return {"system": "OCMCP", "response": "[opencode not installed]", "tokens": 0, "duration_ms": 0}
+    except Exception as e:
+        return {"system": "OCMCP", "response": f"[Error: {e}]", "tokens": 0, "duration_ms": 0}
+
+
 async def run_no_direct_async(query: str) -> dict:
     from leo_code.rag.llm import get_provider
     provider = get_provider("openai",
@@ -190,6 +234,8 @@ async def run_batch(tasks: list[dict], repo_path: str, systems: list[str]) -> li
                 r = await asyncio.to_thread(run_leo_smart_subprocess, task["query"], repo_path)
             elif sys_name == "OC":
                 r = await asyncio.to_thread(run_oc_subprocess, task["query"], repo_path)
+            elif sys_name == "OCMCP":
+                r = await asyncio.to_thread(run_oc_mcp_subprocess, task["query"], repo_path)
             else:
                 r = await run_no_direct_async(task["query"])
             r["task_id"] = tid
@@ -200,7 +246,7 @@ async def run_batch(tasks: list[dict], repo_path: str, systems: list[str]) -> li
             print(f"      ERR: {e}")
             return {"system": sys_name, "task_id": tid, "response": f"[{e}]", "tokens": 0, "duration_ms": 0}
 
-    coros = [run_one(task, s) for task in tasks for s in systems if s in ("LEO", "RAG", "SMART", "OC", "NO")]
+    coros = [run_one(task, s) for task in tasks for s in systems if s in ("LEO", "RAG", "SMART", "OC", "OCMCP", "NO")]
     return await asyncio.gather(*coros)
 
 
@@ -229,7 +275,7 @@ def print_summary(results: list[dict]):
     by_sys = {}
     for r in results:
         by_sys.setdefault(r["system"], []).append(r)
-    for s in ["LEO", "RAG", "SMART", "OC", "NO"]:
+    for s in ["LEO", "RAG", "SMART", "OC", "OCMCP", "NO"]:
         valid = [r for r in by_sys.get(s, []) if r.get("response")]
         if not valid:
             continue
