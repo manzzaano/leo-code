@@ -3,7 +3,6 @@
 Uso: python benchmark/leo_runner.py "query" /path/to/repo [model]
 """
 
-import os
 import sys
 import asyncio
 from pathlib import Path
@@ -18,13 +17,10 @@ try:
 except Exception:
     pass
 
-# Storage Qdrant propio y efimero por subproceso: el lock de qdrant-local es a nivel
-# de DIRECTORIO (no de coleccion) — sin esto, corridas paralelas del benchmark
-# (--batch N) se pisan y degradan a indice en memoria. Ver vector_store.py.
-import tempfile
-os.environ["LEO_QDRANT_PATH"] = tempfile.mkdtemp(prefix="leo_qdrant_bench_")
-
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from benchmark.bench_qdrant import setup_qdrant_path
+setup_qdrant_path()
 
 from leo_code.rag.agent.loop import AgentLoop
 from leo_code.rag.agent.tools import ToolRegistry
@@ -44,6 +40,9 @@ async def main():
         # Coste REAL (input+output de resp.usage) por stderr: stdout es solo la
         # respuesta. Sin esto el benchmark estimaba len(resp)//4 (solo salida).
         sys.stderr.write(f"[LEO_TOKENS={result.get('total_tokens', 0)}]\n")
+        if result.get("timings"):
+            import json as _json
+            sys.stderr.write(f"[LEO_TIMINGS={_json.dumps(result['timings'])}]\n")
         print(resp)
     except Exception as e:
         print(f"[ERROR: {e}]")

@@ -37,6 +37,10 @@ _index_executor = ThreadPoolExecutor(max_workers=1)
 _bm25_stores: dict[str, object] = {}
 
 
+_STALE_LOCK_SECONDS = 120  # ningun build/sync real tarda esto — si el lock ya
+                            # existia mas viejo que esto, es de un proceso muerto.
+
+
 def _acquire_file_lock(timeout: int = 30) -> bool:
     start = time.time()
     while True:
@@ -44,6 +48,12 @@ def _acquire_file_lock(timeout: int = 30) -> bool:
             _LOCK_PATH.mkdir()
             return True
         except FileExistsError:
+            try:
+                if time.time() - _LOCK_PATH.stat().st_mtime > _STALE_LOCK_SECONDS:
+                    _LOCK_PATH.rmdir()  # lock huerfano de un proceso que murio sin liberarlo
+                    continue
+            except OSError:
+                pass
             if time.time() - start > timeout:
                 return False
             time.sleep(0.1)
@@ -95,6 +105,11 @@ def _get_vector_store(repo_path: str):
                 _vector_stores[repo_path] = VectorStore(
                     collection_name=f"leo_mcp_{stable}",
                     path=os.environ.get("LEO_QDRANT_PATH", "./cache/qdrant_leo"),
+                    # El hash estable YA identifica el repo; el aislamiento entre
+                    # procesos concurrentes lo da LEO_QDRANT_PATH (por directorio),
+                    # no un sufijo de PID en el nombre de coleccion — con PID cada
+                    # reinicio/subproceso pierde los embeddings ya calculados.
+                    use_process_id=False,
                 )
     return _vector_stores[repo_path]
 
@@ -119,16 +134,40 @@ async def _ensure_indexed(repo_path: str):
     await loop.run_in_executor(_index_executor, _do_index, repo)
 
 
+def _index_once(repo: str, languages: list[str] | None, verbose: bool) -> int:
+    """Indexa `repo` reusando lo que ya haya en disco/memoria cuando se pueda:
+    - cache en disco fresco + vector store ya poblado -> no hace nada.
+    - cache en disco pero obsoleto -> sync incremental (solo lo cambiado).
+    - sin cache -> build() completo (primera vez).
+    Devuelve el conteo de capsulas del repo tras indexar."""
+    from leo_code.rag.indexer.staleness import is_cache_stale
+    idx = _get_indexer()
+    langs = languages or ["python", "text"]
+    vs = _get_vector_store(repo)
+    already = repo in _indexed_repos and _INDEX_PATH.exists()
+
+    if already and not is_cache_stale(_INDEX_PATH, repo) and vs.count() > 0:
+        return len(_repo_caps(idx, repo))
+
+    if already:
+        stats = idx.sync(repo, since_mtime=_INDEX_PATH.stat().st_mtime, languages=langs)
+        delta = stats.get("capsules") or []
+        if delta:
+            vs.add(delta)
+        return len(_repo_caps(idx, repo))
+
+    count = idx.build(repo, languages=langs, verbose=verbose)
+    vs.add(_repo_caps(idx, repo))
+    return count
+
+
 def _do_index(repo: str, languages: list[str] | None = None, verbose: bool = False) -> int:
     """Ejecuta la indexación (bloqueante). Se llama desde run_in_executor o /index."""
     global _indexed_repos
-    idx = _get_indexer()
     if _acquire_file_lock():
         try:
             _load_index_from_disk()
-            count = idx.build(repo, languages=languages or ["python", "text"], verbose=verbose)
-            vs = _get_vector_store(repo)
-            vs.add(_repo_caps(idx, repo))
+            count = _index_once(repo, languages, verbose)
             _indexed_repos.add(repo)
             _save_index_to_disk()
             _save_indexed_repos()
@@ -136,9 +175,7 @@ def _do_index(repo: str, languages: list[str] | None = None, verbose: bool = Fal
         finally:
             _release_file_lock()
     # Fallback without lock
-    count = idx.build(repo, languages=languages or ["python", "text"], verbose=verbose)
-    vs = _get_vector_store(repo)
-    vs.add(_repo_caps(idx, repo))
+    count = _index_once(repo, languages, verbose)
     with _index_lock:
         _indexed_repos.add(repo)
     return count
