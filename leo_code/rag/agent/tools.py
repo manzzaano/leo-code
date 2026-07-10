@@ -25,6 +25,7 @@ class ToolRegistry:
             "impact": self.impact,
             "trace": self.trace,
             "where": self.where,
+            "guard": self.guard,
             "list_by_kind": self.list_by_kind,
             "retrieve_full": self.retrieve_full,
         }
@@ -233,6 +234,15 @@ class ToolRegistry:
                 "parameters": {
                     "type": "object",
                     "properties": {"name": {"type": "string", "description": "Nombre del simbolo"}},
+                    "required": ["name"],
+                },
+            }},
+            {"type": "function", "function": {
+                "name": "guard",
+                "description": "DETERMINISTA, con PRUEBA, cero LLM. ANTES de editar un simbolo: radio de explosion (que se rompe, transitivo, incluso cross-lenguaje via HTTP) + que afectados tienen test y cuales NO (riesgo). Usalo antes de cambiar codigo.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"name": {"type": "string", "description": "Simbolo que vas a cambiar"}},
                     "required": ["name"],
                 },
             }},
@@ -554,6 +564,18 @@ class ToolRegistry:
         if not self._gq:
             return "[Indice no disponible.]"
         return self._relativize(self._gq.where(args.get("name") or args.get("symbol") or "").render(), repo_path)
+
+    def guard(self, args: dict, repo_path: str) -> str:
+        """Radio de explosión + cobertura de tests ANTES de editar un símbolo.
+        Mismo Guardian que expone el MCP server, sobre las mismas cápsulas."""
+        if not self._capsules:
+            return "[Indice no disponible.]"
+        try:
+            from leo_code.core.guardian import Guardian
+            out = Guardian(self._capsules).review(args.get("name") or args.get("symbol") or "").render()
+            return self._relativize(out, repo_path)
+        except Exception as e:
+            return f"[guard fallo: {e}]"
 
 
 def _verify_py(path: Path) -> str:

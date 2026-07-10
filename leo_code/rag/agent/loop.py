@@ -877,11 +877,14 @@ Only call tools for what that context does NOT cover, or to verify/expand a spec
 If no such context message is present, retrieve what you need YOURSELF with the tools, requesting only the minimum necessary.
 If you say you're going to do something (edit, read, execute), DO IT in the same turn with the corresponding tool — don't announce it and stop.
 
-Structural tools (PREFER THEM — they return exact symbols, not whole files):
+Structural tools (PREFER THEM — deterministic, cited file:line, they return exact symbols, not whole files):
 - find_symbol: locates functions/classes/methods by name. ALWAYS START here.
+- where: where a symbol is DEFINED (all definitions, cited). For 'where is X' — prefer over grep.
 - read_symbol: reads the body of ONE function/class (signature+docstring+code). Use it instead of read_file to view a function.
 - who_calls / callees: who calls a symbol / what it calls (dependency graph).
+- trace: call path from symbol A to symbol B, each hop cited. For 'how does X reach Y' / flow questions — ONE call replaces a whole grep+read chain.
 - impact: what would break if you change a symbol (transitive callers).
+- guard: BEFORE editing a symbol — blast radius + which affected callers have tests and which do NOT. Use it before any code change.
 - list_by_kind: lists ALL symbols of a type (endpoint, class, method, function...). For aggregate questions ('how many endpoints are there').
 - search_code: text grep when you don't know the exact name (returns file:line).
 
@@ -893,7 +896,8 @@ File/edit tools:
 Rules:
 - Provided "Contexto del codigo:" first, tools second. Only explore what's missing from it.
 - To understand/explain code: find_symbol -> read_symbol -> who_calls/callees. Do NOT read whole files.
-- Do NOT modify a symbol without reading it first (read_symbol or read_file with a range).
+- For flow questions ('how does X reach Y', 'trace the path'): trace src->dst FIRST — do not rebuild the path manually with grep/read.
+- Do NOT modify a symbol without reading it first (read_symbol or read_file with a range), and run guard on it BEFORE editing to see what breaks and what lacks tests.
 - Use run_tests to verify. Minimal and precise changes.
 - Once you have enough information, GIVE THE FINAL COMPLETE ANSWER. Don't call more tools than necessary.
 - If you don't know something, say so. Don't make things up.
