@@ -43,6 +43,18 @@ def test_who_calls_and_callees(tmp_path):
     assert "greet" in t.execute("who_calls", {"name": "helper"}, ".")
 
 
+def test_guard_reports_blast_radius_and_coverage(tmp_path):
+    # guard en AgentLoop = mismo Guardian que el MCP server: radio de explosión
+    # + cobertura de tests, determinista. helper es llamado por greet (sin test).
+    t = ToolRegistry(); t.set_index(_index(tmp_path))
+    out = t.execute("guard", {"name": "helper"}, ".")
+    assert "helper" in out
+    assert "greet" in out          # caller afectado listado
+    assert "SIN test" in out       # cobertura reportada
+    # registrado también como definition para el LLM
+    assert any(d["function"]["name"] == "guard" for d in t.get_definitions())
+
+
 def test_list_by_kind(tmp_path):
     t = ToolRegistry(); t.set_index(_index(tmp_path))
     out = t.execute("list_by_kind", {"kind": "method"}, ".")
