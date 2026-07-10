@@ -321,7 +321,16 @@ def compute_context(repo: str, query: str, task_type_in: str = "auto",
     exact = specific_match[:20] + path_match[:5] + name_match[:3]
     exact_ids = {c.id for c in exact}
 
-    top_ids = vs.search(query, top_k=15)
+    # Fast start: cargar el encoder cuesta ~9s por proceso. Con el encoder frío,
+    # esta query sirve solo con las patas estructurales (exact + BM25 + scorer,
+    # instantáneas) y el encoder se calienta en background para las siguientes.
+    # LEO_FAST_START=0 restaura el comportamiento bloqueante (esperar semántica).
+    from leo_code.rag.encoder import Encoder
+    top_ids: list = []
+    if Encoder.is_warm() or os.getenv("LEO_FAST_START", "1") == "0":
+        top_ids = vs.search(query, top_k=15)
+    else:
+        Encoder.warm_bg()
     semantic = [caps[rid] for rid in top_ids if rid in caps and rid not in exact_ids]
 
     # BM25 sparse search — complementa Qdrant para términos exactos
