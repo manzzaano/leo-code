@@ -63,6 +63,24 @@ def test_compress_empty():
     assert result == ""
 
 
+def test_compress_code_edit_flags_similar_names():
+    # _plan/_replan (ratio ~0.83) es el patron real que llevo a alucinar "_plan_step"
+    # en el benchmark (t7_code_edit) — verifica que ahora se marca la ambiguedad.
+    target = _make_capsule("_plan", content="def _plan():\n    return steps()", ctype="function")
+    similar = _make_capsule("_replan", ctype="function")
+    result = compress([target, similar], [target, similar], task_type="code_edit")
+    assert "SIMBOLOS REALES ENCONTRADOS" in result
+    assert "_plan" in result and "_replan" in result
+    assert "def _plan" in result  # cuerpo del target incluido pese a include_body=False
+
+
+def test_compress_code_edit_no_ambiguity_stays_lean():
+    foo = _make_capsule("foo", ctype="function")
+    bar = _make_capsule("bar", ctype="function")
+    result = compress([foo, bar], [foo, bar], task_type="code_edit")
+    assert "SIMBOLOS REALES ENCONTRADOS" not in result
+
+
 def test_compress_onboard():
     ep = _make_capsule("main", ctype="entrypoint", file_path="main.py",
                        content="if __name__ == '__main__'")

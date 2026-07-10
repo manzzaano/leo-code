@@ -26,6 +26,34 @@ def _looks_like_error(result: str) -> bool:
     return any(m in low for m in _ERROR_MARKERS)
 
 
+def _looks_truncated(text: str, finish_reason: str = "") -> bool:
+    """¿La respuesta quedo cortada a media frase? finish_reason=="length" es la
+    señal fiable (el proveedor SI truncó); el resto es heurística textual de
+    respaldo. No penaliza el estilo de fragmento corto que _VERBOSITY_BLOCK
+    fomenta a proposito (ej. "dame el archivo" no debe marcarse truncado)."""
+    if finish_reason == "length":
+        return True
+    t = (text or "").rstrip()
+    if not t:
+        return True
+    if t.count("```") % 2 == 1:                    # fence de codigo sin cerrar
+        return True
+    if t[-1] in (",", ":", ";", "-", "(", "["):     # corte obvio a media frase/lista
+        return True
+    return False
+
+
+def _fallback_summary(messages: list[dict], query: str) -> str:
+    """Ultimo recurso de _finalize(): nunca devolver vacio/cortado en silencio.
+    Resumen deterministico de los tool-results mas recientes, con caveat explicito."""
+    tool_msgs = [m for m in messages if m.get("role") == "tool"][-4:]
+    bullets = [f"- {(m.get('content') or '').strip()[:180]}" for m in tool_msgs
+               if (m.get("content") or "").strip()]
+    body = "\n".join(bullets) or "- No se recopilo informacion suficiente para responder."
+    return (f'No pude sintetizar una respuesta completa a "{query}" dentro del '
+            f'presupuesto disponible. Esto es lo que se investigo:\n{body}')
+
+
 def _cache_ttl_seconds() -> int:
     """Delegado a rag/indexer/staleness.py (compartido con engine.py) — se
     mantiene esta funcion como wrapper para no romper el monkeypatch.setenv
@@ -39,7 +67,10 @@ _YAGNI_DIRECTIVE = (
     "For this code writing/editing task apply minimalism (YAGNI): "
     "first reuse what already exists in the repo; use stdlib or an already "
     "installed dependency before adding a new one; the simplest code that works wins. "
-    "Don't add unrequested abstractions, configuration, or scaffolding. Minimal changes."
+    "Don't add unrequested abstractions, configuration, or scaffolding. Minimal changes. "
+    "Never reference or assume the existence of a function/method/symbol you haven't "
+    "actually seen in the provided context or tool output — verify with find_symbol or "
+    "search_code first if unsure; don't invent plausible-sounding names."
 )
 _YAGNI_TASKS = ("code_gen", "code_edit", "refactor")
 
@@ -424,21 +455,46 @@ class AgentLoop:
         return escalated
 
     async def _finalize(self, messages: list[dict], query: str = "") -> tuple[str, int]:
-        """Una llamada final SIN tools para consolidar la respuesta, anclada a la pregunta original.
-        Devuelve (texto, tokens_de_esta_llamada) — el caller debe sumar los tokens a su total."""
-        try:
-            instr = (
-                "YA NO HAY MAS HERRAMIENTAS DISPONIBLES. No intentes llamar a ninguna ni "
-                "escribas codigo de exploracion. Con TODO lo que ya investigaste, responde "
-                "AHORA de forma completa y autocontenida a la pregunta original del usuario:\n"
-                f"\"{query}\""
-            )
-            msgs = messages + [{"role": "user", "content": instr}]
-            resp = await self.llm.generate(msgs, [], temperature=0.3)
-            return resp.text or "", resp.usage.input_tokens + resp.usage.output_tokens
-        except Exception as e:
-            log.debug(f"finalize fallo: {e}")
-            return "", 0
+        """Una o dos llamadas SIN tools para consolidar la respuesta, ancladas a la
+        pregunta original. Nunca devuelve vacio ni cortado a media frase en silencio:
+        si el primer intento queda truncado (finish_reason=="length" u otra señal),
+        pide continuar; si ambos fallan, cae a un resumen deterministico de lo
+        investigado. Devuelve (texto, tokens_de_esta_llamada) — el caller suma los
+        tokens a su total."""
+        tokens_used = 0
+        text = ""
+        for attempt in range(2):
+            try:
+                if attempt == 0:
+                    instr = (
+                        "YA NO HAY MAS HERRAMIENTAS DISPONIBLES. No intentes llamar a ninguna ni "
+                        "escribas codigo de exploracion. Con TODO lo que ya investigaste, responde "
+                        "AHORA de forma completa y autocontenida a la pregunta original del usuario. "
+                        "Completa pero CONCISA: cubre todos los puntos pedidos sin repetir el codigo "
+                        "ya mostrado ni rellenar con generalidades — cada parrafo debe aportar "
+                        "informacion nueva.\n"
+                        f"\"{query}\""
+                    )
+                    msgs = messages + [{"role": "user", "content": instr}]
+                else:
+                    msgs = messages + [
+                        {"role": "assistant", "content": text},
+                        {"role": "user", "content": "Tu respuesta anterior quedo cortada. Continua "
+                            "EXACTAMENTE donde te quedaste (no repitas lo ya dicho) y cierra con "
+                            "una conclusion breve."},
+                    ]
+                resp = await self.llm.generate(msgs, [], temperature=0.3)
+                tokens_used += resp.usage.input_tokens + resp.usage.output_tokens
+                piece = resp.text or ""
+                text = piece if attempt == 0 else text + piece
+                if not _looks_truncated(text, resp.finish_reason):
+                    return text, tokens_used
+            except Exception as e:
+                log.debug(f"finalize fallo (intento {attempt}): {e}")
+                break
+        if text.strip():
+            return text, tokens_used
+        return _fallback_summary(messages, query), tokens_used
 
     def _persist_turn(self, session_id: str, query: str, answer: str, model: str, tokens: int):
         try:
@@ -691,8 +747,12 @@ class AgentLoop:
 
                 text = ""
 
-            # Fallback: si no terminó con respuesta, usa texto acumulado
-            fallback_resp = all_text if all_text else f"[No se pudo completar en {self.max_iterations} iteraciones. {self._tool_call_count} tool calls ejecutadas.]"
+            # Fallback: si no terminó con respuesta (o quedó cortada), sintetiza con
+            # _finalize() en vez de devolver texto parcial/cortado en silencio.
+            fallback_resp = all_text
+            if not fallback_resp or _looks_truncated(fallback_resp):
+                fallback_resp, finalize_tokens = await self._finalize(messages, query)
+                total_tokens += finalize_tokens
             duration_ms = int((time.time() - t0) * 1000)
             get_metrics().record_query(total_tokens, duration_ms,
                                       t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms, repo_path=repo_path, model=model)
