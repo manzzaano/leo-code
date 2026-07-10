@@ -339,6 +339,9 @@ def main():
     print(f"Benchmark: {len(tasks)} tasks x {len(systems)} systems")
     print(f"Model: {MODEL} | Batches: {len(batches)} x {args.batch}\n")
 
+    if {"LEO", "RAG", "SMART"} & set(systems):
+        os.environ["LEO_QDRANT_PREWARM_PATH"] = _prewarm_index(args.repo)
+
     t0 = time.time()
     all_results = []
     for i, batch in enumerate(batches, 1):
