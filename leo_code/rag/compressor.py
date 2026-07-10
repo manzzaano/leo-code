@@ -15,9 +15,32 @@ Estrategias:
 - no_code: solo cápsulas tipo documento
 """
 
+import difflib
+import re
 from dataclasses import dataclass
 from leo_code.core.parser import Capsule
 from leo_code.core.context import serialize_context
+
+_SIMILAR_NAME_THRESHOLD = 0.6
+_AMBIGUITY_TYPES = {"function", "method", "class"}
+_TRAILING_DIGITS = re.compile(r"\d+$")
+
+
+def _has_similar_names(names: list[str]) -> bool:
+    """Heuristica barata: nombres parecidos entre si (ej. _plan/_replan) son el
+    escenario donde el LLM tiende a inventar un tercer nombre plausible que no
+    existe (ej. _plan_step) en vez de verificar cual es el real. Excluye el caso
+    comun de nombres enumerados (item0/item1/item2...) — distinguibles a simple
+    vista por el sufijo numerico, no es la ambiguedad que nos preocupa."""
+    uniq = [n for n in dict.fromkeys(names) if len(n) >= 4]
+    for i in range(len(uniq)):
+        for j in range(i + 1, len(uniq)):
+            a, b = uniq[i], uniq[j]
+            if _TRAILING_DIGITS.sub("", a) == _TRAILING_DIGITS.sub("", b):
+                continue
+            if difflib.SequenceMatcher(None, a, b).ratio() >= _SIMILAR_NAME_THRESHOLD:
+                return True
+    return False
 
 
 @dataclass
@@ -219,6 +242,25 @@ def _build_nodes_from_config(
 
     if not nodes:
         return ""
+
+    shown = [n for n in nodes if n.get("type") in _AMBIGUITY_TYPES]
+    if len(shown) >= 2 and _has_similar_names([n["name"] for n in shown]):
+        listing = "\n".join(f"- {n['name']} — {n['properties'].get('file_path', '?')}" for n in shown)
+        nodes.append({
+            "id": "__symbols_found__", "name": "__symbols_found__", "type": "section",
+            "properties": {"descripcion":
+                f"SIMBOLOS REALES ENCONTRADOS (unicos validos, no hay otros):\n{listing}\n"
+                "No inventes ni asumas otro nombre parecido. Si necesitas confirmar si "
+                "existe alguno distinto, usa find_symbol o search_code ANTES de afirmar "
+                "algo sobre el."},
+        })
+        if target and not config.include_body and target.content:
+            target_node = next((n for n in nodes if n["id"] == target.id), None)
+            if target_node and "content" not in target_node["properties"]:
+                body = target.content[:1200]
+                if len(target.content) > 1200:
+                    body += "\n# ... [truncado]"
+                target_node["properties"]["content"] = body
 
     context = serialize_context(nodes)
     if config.footer_msg:
