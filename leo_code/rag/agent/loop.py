@@ -143,6 +143,16 @@ class AgentLoop:
         t_search_ms = 0
         t_compress_ms = 0
         t_llm_ms = 0
+        t_tools_ms = 0.0
+        t_finalize_ms = 0.0
+
+        def _timings(total_ms: int) -> dict:
+            """Desglose por fases; 'other' = lo no atribuido (setup, memoria, compactación...)."""
+            attributed = t_index_ms + t_classify_ms + t_search_ms + t_compress_ms + t_llm_ms + t_tools_ms + t_finalize_ms
+            return {"index_ms": round(t_index_ms), "classify_ms": round(t_classify_ms),
+                    "search_ms": round(t_search_ms), "compress_ms": round(t_compress_ms),
+                    "llm_ms": round(t_llm_ms), "tools_ms": round(t_tools_ms),
+                    "finalize_ms": round(t_finalize_ms), "other_ms": round(max(0, total_ms - attributed))}
 
         if self.llm is None:
             self.llm = self._init_llm(model)
@@ -225,7 +235,8 @@ class AgentLoop:
                 get_metrics().record_query(total_tokens, duration_ms,
                                           t_index_ms, t_classify_ms, t_search_ms, t_compress_ms, t_llm_ms, repo_path=repo_path, model=model)
                 return {"respuesta": "[Interrumpido]", "total_tokens": total_tokens,
-                        "iterations": iteration, "duration_ms": duration_ms}
+                        "iterations": iteration, "duration_ms": duration_ms,
+                        "timings": _timings(duration_ms)}
 
             # Compactar historial (keep_last=16 para preservar pares assistant+tool).
             # Tareas de amplitud necesitan mas contexto retenido (ya validado con
@@ -279,7 +290,8 @@ class AgentLoop:
                         f"tokens={total_tokens} total_ms={duration_ms}")
                 return {"respuesta": text, "total_tokens": total_tokens,
                         "iterations": iteration + 1,
-                        "duration_ms": duration_ms}
+                        "duration_ms": duration_ms,
+                        "timings": _timings(duration_ms)}
 
             # Build ONE assistant message with ALL tool_calls
             all_tool_calls = []
@@ -317,7 +329,9 @@ class AgentLoop:
                     continue
                 self._tool_call_count += 1
 
+                t_t0 = time.perf_counter()
                 result = self.tools.execute(tc.name, args, repo_path)
+                t_tools_ms += (time.perf_counter() - t_t0) * 1000
                 ran_tool = True
                 if _looks_like_error(result):
                     any_error = True
@@ -339,7 +353,9 @@ class AgentLoop:
             # SÍNTESIS: tras suficientes iteraciones, fuerza una respuesta final
             # consolidada sin tools (evita devolver texto parcial tipo "(using tools)").
             if iteration >= 8:
+                t_f0 = time.perf_counter()
                 final, finalize_tokens = await self._finalize(messages, query)
+                t_finalize_ms += (time.perf_counter() - t_f0) * 1000
                 total_tokens += finalize_tokens
                 answer = final or all_text or "[Sin respuesta]"
                 if session_id:
@@ -350,9 +366,12 @@ class AgentLoop:
                 log.info(f"query finalized at iter {iteration} | tokens={total_tokens} ms={duration_ms}")
                 return {"respuesta": answer, "total_tokens": total_tokens,
                         "iterations": iteration + 1,
-                        "duration_ms": duration_ms}
+                        "duration_ms": duration_ms,
+                        "timings": _timings(duration_ms)}
 
+        t_f0 = time.perf_counter()
         final, finalize_tokens = await self._finalize(messages, query)
+        t_finalize_ms += (time.perf_counter() - t_f0) * 1000
         total_tokens += finalize_tokens
         duration_ms = int((time.time() - t0) * 1000)
         get_metrics().record_query(total_tokens, duration_ms,
@@ -360,7 +379,8 @@ class AgentLoop:
         log.warning(f"query max_iterations reached | iterations={self.max_iterations} tokens={total_tokens} ms={duration_ms}")
         return {"respuesta": final or all_text or f"[No completado en {self.max_iterations} iteraciones.]",
                 "total_tokens": total_tokens, "iterations": self.max_iterations,
-                "duration_ms": duration_ms}
+                "duration_ms": duration_ms,
+                "timings": _timings(duration_ms)}
 
     async def rag_direct(self, query: str, repo_path: str = ".",
                           model: str = "deepseek/deepseek-v4-flash",
