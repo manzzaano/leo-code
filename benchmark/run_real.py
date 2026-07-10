@@ -320,6 +320,24 @@ def print_summary(results: list[dict]):
     print("=" * 80)
 
 
+def _isolated_worktree(repo: str) -> str:
+    """Copia desechable del repo (git worktree --detach de HEAD): los agentes
+    write-enabled (LEO/OC/OCMCP) editan archivos REALES durante el benchmark —
+    sin esto contaminan el working tree (paso 5+ veces: parser.py, compressor.py,
+    archivos nuevos sin pedir). El worktree se destruye al final, pase lo que pase."""
+    import tempfile
+    wt = Path(tempfile.mkdtemp(prefix="leo_bench_wt_")) / "repo"
+    subprocess.run(["git", "worktree", "add", "--detach", str(wt), "HEAD"],
+                   cwd=repo, check=True, capture_output=True)
+    print(f"  Worktree aislado: {wt}")
+    return str(wt)
+
+
+def _remove_worktree(repo: str, wt: str):
+    subprocess.run(["git", "worktree", "remove", "--force", wt],
+                   cwd=repo, capture_output=True)
+
+
 def main():
     import argparse
     p = argparse.ArgumentParser()
@@ -327,7 +345,24 @@ def main():
     p.add_argument("--systems", default="leo,oc,no")
     p.add_argument("--repo", default=".")
     p.add_argument("--batch", type=int, default=BATCH_SIZE)
+    p.add_argument("--isolate", action="store_true",
+                   help="corre los agentes contra un git worktree desechable de HEAD")
     args = p.parse_args()
+
+    origin_repo = args.repo
+    worktree = None
+    if args.isolate:
+        worktree = _isolated_worktree(origin_repo)
+        args.repo = worktree
+    try:
+        _run_benchmark(args)
+    finally:
+        if worktree:
+            _remove_worktree(origin_repo, worktree)
+            print("  Worktree eliminado — repo original intacto.")
+
+
+def _run_benchmark(args):
 
     tasks = json.loads(Path("benchmark/tasks.json").read_text(encoding="utf-8"))
     if args.tasks:
