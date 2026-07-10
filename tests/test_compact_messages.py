@@ -103,3 +103,39 @@ def test_run_uses_wide_keep_last_for_breadth_task(tmp_path, monkeypatch):
 def test_run_uses_narrow_keep_last_for_normal_task(tmp_path, monkeypatch):
     seen = _run_agent(tmp_path, "que hace la funcion foo", monkeypatch)
     assert seen and seen[0] == 12
+
+
+def test_compact_preserves_original_query_when_context_inserted():
+    # Layout real de run(): [system, contexto_kcrag, ...bloques..., user_query, loop...]
+    # La compactacion debe PIN-ear la pregunta original aunque no este en [:2]
+    # (bug real: t10_audit perdia la pregunta y respondia tangencialmente).
+    from leo_code.rag.agent.loop import _compact_messages
+    msgs = [
+        {"role": "system", "content": "prompt"},
+        {"role": "system", "content": "Contexto del codigo:\n..."},
+        {"role": "system", "content": "verbosity"},
+        {"role": "user", "content": "AUDITA la seguridad de server.py"},
+    ]
+    for i in range(12):
+        msgs.append({"role": "assistant", "content": f"paso {i}",
+                     "tool_calls": [{"id": f"c{i}", "type": "function",
+                                     "function": {"name": "read_file", "arguments": "{}"}}]})
+        msgs.append({"role": "tool", "tool_call_id": f"c{i}", "content": "resultado"})
+    out = _compact_messages(msgs, keep_last=6)
+    user_contents = [m["content"] for m in out if m.get("role") == "user"]
+    assert "AUDITA la seguridad de server.py" in user_contents
+
+
+def test_compact_no_duplicate_query_when_already_in_head():
+    from leo_code.rag.agent.loop import _compact_messages
+    msgs = [
+        {"role": "system", "content": "prompt"},
+        {"role": "user", "content": "pregunta"},
+    ]
+    for i in range(12):
+        msgs.append({"role": "assistant", "content": f"paso {i}",
+                     "tool_calls": [{"id": f"c{i}", "type": "function",
+                                     "function": {"name": "read_file", "arguments": "{}"}}]})
+        msgs.append({"role": "tool", "tool_call_id": f"c{i}", "content": "resultado"})
+    out = _compact_messages(msgs, keep_last=6)
+    assert sum(1 for m in out if m.get("role") == "user") == 1

@@ -920,6 +920,7 @@ Rules:
 - Do NOT modify a symbol without reading it first (read_symbol or read_file with a range), and run guard on it BEFORE editing to see what breaks and what lacks tests.
 - Use run_tests to verify. Minimal and precise changes.
 - Once you have enough information, GIVE THE FINAL COMPLETE ANSWER. Don't call more tools than necessary.
+- If the question references a symbol/function/file that does NOT exist under that exact name, say so in ONE line and then ANSWER THE QUESTION'S INTENT against the closest real equivalent (locate it with find_symbol/search_code). Never end the answer at the name mismatch.
 - If you don't know something, say so. Don't make things up.
 - For execute_command on Windows: use PowerShell or python commands.
 - If you receive images, analyze them visually: colors, layout, typography, hierarchy."""
@@ -995,6 +996,15 @@ def _compact_messages(messages: list[dict], keep_last: int = 6) -> list[dict]:
 
     recent = messages[end_idx:]
     head = messages[:2]
+    # La pregunta original es el PRIMER mensaje user, pero con el contexto KC-RAG
+    # insertado en índice 1 ya no vive en messages[:2]: si cae en la zona
+    # compactada el modelo PIERDE la pregunta y responde tangencialmente a su
+    # propia exploración reciente (visto en t10_audit: auditoría pedida →
+    # mapeo de endpoints respondido). Pin explícito de ese mensaje en el head.
+    fu_idx = next((i for i, m in enumerate(messages[:end_idx])
+                   if m.get("role") == "user"), None)
+    if fu_idx is not None and fu_idx >= 2:
+        head = head + [messages[fu_idx]]
     old_count = end_idx - 2
 
     if old_count > 0:
