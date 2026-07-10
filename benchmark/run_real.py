@@ -64,9 +64,16 @@ def run_leo_subprocess(query: str, repo_path: str) -> dict:
         # Remove indexer log lines
         response_lines = [l for l in lines if not l.startswith("[indexer]") and "Tipos:" not in l and "capsulas" not in l and "archivos" not in l]
         response = "\n".join(response_lines).strip() or (r.stderr or "").strip()
-        return {"system": "LEO", "response": response[:4000],
-                "tokens": parse_leo_tokens(r.stderr, response),
-                "duration_ms": int((time.time() - t0) * 1000)}
+        out = {"system": "LEO", "response": response[:4000],
+               "tokens": parse_leo_tokens(r.stderr, response),
+               "duration_ms": int((time.time() - t0) * 1000)}
+        mt = re.search(r"\[LEO_TIMINGS=(\{.*?\})\]", r.stderr or "")
+        if mt:
+            try:
+                out["timings"] = json.loads(mt.group(1))
+            except Exception:
+                pass
+        return out
     except subprocess.TimeoutExpired:
         return {"system": "LEO", "response": "[Timeout]", "tokens": 0, "duration_ms": 300000}
     except Exception as e:
