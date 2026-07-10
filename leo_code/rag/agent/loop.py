@@ -196,8 +196,13 @@ class AgentLoop:
                 return {"respuesta": "[Interrumpido]", "total_tokens": total_tokens,
                         "iterations": iteration, "duration_ms": duration_ms}
 
-            # Compactar historial (keep_last=16 para preservar pares assistant+tool)
-            messages = _compact_messages(messages, keep_last=16)
+            # Compactar historial (keep_last=16 para preservar pares assistant+tool).
+            # Tareas de amplitud necesitan mas contexto retenido (ya validado con
+            # benchmark N=3, ver _BREADTH_TASKS); el resto se beneficia de compactar
+            # antes — con keep_last=16 el umbral (len>18) casi nunca se dispara en
+            # tareas tipicas de 5-8 iteraciones, y el historial completo se reenvia
+            # sin recortar en cada llamada al LLM.
+            messages = _compact_messages(messages, keep_last=(16 if breadth else 12))
 
             t_llm0 = time.perf_counter()
             resp = await self.llm.generate(messages, tool_defs, temperature=0.2, effort=next_effort)
@@ -579,8 +584,8 @@ class AgentLoop:
                            "total_tokens": total_tokens, "duration_ms": duration_ms}
                     return
 
-                # Compactar historial si crece demasiado
-                messages = _compact_messages(messages, keep_last=6)
+                # Compactar historial si crece demasiado (mismo criterio de amplitud que run())
+                messages = _compact_messages(messages, keep_last=(12 if breadth else 6))
 
                 # Stream tokens
                 text = ""
@@ -909,8 +914,16 @@ def _compact_messages(messages: list[dict], keep_last: int = 6) -> list[dict]:
     old_count = end_idx - 2
 
     if old_count > 0:
+        # Nombres (no resultados) de las tool-calls colapsadas: evita que el modelo
+        # re-explore algo ya cubierto, que costaria mas tokens que esta nota.
+        dropped_calls = [
+            tc.get("function", {}).get("name", "")
+            for m in messages[2:end_idx] if m.get("role") == "assistant"
+            for tc in (m.get("tool_calls") or [])
+        ]
+        note = f" Ya se llamo: {', '.join(dict.fromkeys(n for n in dropped_calls if n))}." if dropped_calls else ""
         # Cache alignment (Headroom): contenido del summary byte-estable (sin el
         # contador volátil) → no invalida el prompt cache en compactaciones repetidas.
-        summary = {"role": "system", "content": "[Historial previo compactado para ahorrar tokens]"}
+        summary = {"role": "system", "content": f"[Historial previo compactado para ahorrar tokens.{note}]"}
         return head + [summary] + recent
     return messages
