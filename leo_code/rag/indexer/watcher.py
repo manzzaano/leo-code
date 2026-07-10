@@ -77,6 +77,18 @@ class Indexer:
             print("[indexer] 0 archivos encontrados")
             return 0
 
+        # Anti-acumulación: un rebuild NO debe apilar sobre cápsulas previas del
+        # mismo repo (duplicados) ni conservar rutas absolutas ya inexistentes
+        # (repo movido/renombrado — quedaban como símbolos fantasma en retrieval).
+        # Cápsulas de OTROS repos vivos se conservan: el Indexer es multi-repo.
+        repo_abs = os.path.abspath(repo_path)
+        with self._capsules_lock:
+            self._capsules = {
+                cid: c for cid, c in self._capsules.items()
+                if not os.path.abspath(c.file_path).startswith(repo_abs)
+                and not (os.path.isabs(c.file_path) and not os.path.exists(c.file_path))
+            }
+
         stats = defaultdict(lambda: {"files": 0, "capsules": 0})
         count = 0
 

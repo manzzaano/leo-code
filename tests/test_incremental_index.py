@@ -106,3 +106,47 @@ def test_ttl_default_no_fuerza_stale_si_esta_fresco(tmp_path):
     cache_path = tmp_path / ".leo-code" / "kc_index.json.gz"
 
     assert agent._is_cache_stale(cache_path, str(tmp_path)) is False
+
+
+def test_rebuild_does_not_accumulate_capsules(tmp_path):
+    # Bug real observado: build() sobre estado previo apilaba capsulas (4128 vs
+    # 1912 esperadas). Un rebuild del mismo repo debe dejar SOLO lo actual.
+    a = tmp_path / "a.py"
+    _write(a, "def foo():\n    return 1\n")
+    idx = Indexer()
+    idx.build(str(tmp_path), languages=["python"])
+    n1 = len(idx.get_capsules())
+
+    _write(a, "def foo_renamed():\n    return 1\n")
+    idx.build(str(tmp_path), languages=["python"])
+    names = {c.name for c in idx.get_capsules().values()}
+    assert "foo_renamed" in names
+    assert "foo" not in names                 # el viejo no sobrevive al rebuild
+    assert len(idx.get_capsules()) == n1      # mismo repo -> mismo tamano, sin apilar
+
+
+def test_rebuild_prunes_dead_absolute_paths_but_keeps_other_repos(tmp_path):
+    # Repo movido: capsulas con ruta absoluta inexistente son fantasmas -> fuera.
+    # Capsulas de OTRO repo vivo se conservan (Indexer multi-repo).
+    repo_a = tmp_path / "repo_a"; repo_a.mkdir()
+    repo_b = tmp_path / "repo_b"; repo_b.mkdir()
+    _write(repo_a / "a.py", "def in_a():\n    return 1\n")
+    _write(repo_b / "b.py", "def in_b():\n    return 2\n")
+
+    idx = Indexer()
+    idx.build(str(repo_a), languages=["python"])
+    idx.build(str(repo_b), languages=["python"])
+    # simula capsula huerfana de un repo que ya no existe en disco
+    caps = idx.get_capsules()
+    ghost_id = next(iter(caps))
+    import copy
+    ghost = copy.copy(caps[ghost_id])
+    ghost.id = "ghost1"
+    ghost.file_path = str(tmp_path / "repo_borrado" / "gone.py")
+    caps["ghost1"] = ghost
+
+    idx.build(str(repo_a), languages=["python"])  # rebuild de A
+    names = {c.name for c in idx.get_capsules().values()}
+    paths = {c.file_path for c in idx.get_capsules().values()}
+    assert "in_a" in names and "in_b" in names    # B (otro repo vivo) intacto
+    assert not any("repo_borrado" in p for p in paths)  # fantasma podado
