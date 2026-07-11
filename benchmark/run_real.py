@@ -321,18 +321,25 @@ def print_summary(results: list[dict]):
 
 
 def _isolated_worktree(repo: str) -> str:
-    """Copia desechable del repo (clon local de HEAD): los agentes write-enabled
-    (LEO/OC/OCMCP) editan archivos REALES durante el benchmark — sin esto
-    contaminan el working tree (paso 5+ veces: parser.py, compressor.py,
-    archivos nuevos sin pedir). CLON y no git worktree: el .git de un worktree
-    es un puntero al repo principal, y opencode resuelve la raiz del proyecto
-    via git — acababa editando el repo REAL con rutas absolutas (visto en su
-    DB). El clon tiene .git propio; se destruye al final, pase lo que pase."""
+    """Copia desechable del repo SIN ningun puntero git al original: los agentes
+    write-enabled editan archivos reales durante el benchmark. Ni worktree (su
+    .git apunta al repo principal) ni clone --local (deja remote origin): con
+    ambos, opencode resolvia la raiz del proyecto via git y editaba el repo
+    REAL con rutas absolutas (confirmado en su DB). git archive de HEAD +
+    git init fresco: la copia es un repo independiente sin rastro del origen."""
     import tempfile
-    wt = Path(tempfile.mkdtemp(prefix="leo_bench_clone_")) / "repo"
-    subprocess.run(["git", "clone", "--local", "--depth", "1", ".", str(wt)],
-                   cwd=repo, check=True, capture_output=True)
-    print(f"  Clon aislado: {wt}")
+    wt = Path(tempfile.mkdtemp(prefix="leo_bench_iso_")) / "repo"
+    wt.mkdir(parents=True)
+    ar = subprocess.run(["git", "archive", "HEAD"], cwd=repo, check=True,
+                        capture_output=True)
+    import io, tarfile
+    with tarfile.open(fileobj=io.BytesIO(ar.stdout)) as tf:
+        tf.extractall(wt)
+    for cmd in (["git", "init", "-q"], ["git", "add", "-A"],
+                ["git", "-c", "user.email=bench@leo", "-c", "user.name=bench",
+                 "commit", "-q", "-m", "bench snapshot", "--no-gpg-sign"]):
+        subprocess.run(cmd, cwd=str(wt), check=True, capture_output=True)
+    print(f"  Copia aislada (git archive): {wt}")
     return str(wt)
 
 
