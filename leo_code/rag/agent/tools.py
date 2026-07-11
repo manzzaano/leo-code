@@ -301,7 +301,9 @@ class ToolRegistry:
             return f"[Error leyendo {path}: {e}]"
 
     def write_file(self, args: dict, repo_path: str) -> str:
-        path = Path(repo_path) / args.get("file_path", "")
+        path, err = _resolve_in_repo(repo_path, args.get("file_path", ""))
+        if err:
+            return err
         content = args.get("content", "")
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -311,7 +313,9 @@ class ToolRegistry:
             return f"[Error escribiendo {path}: {e}]"
 
     def replace_in_file(self, args: dict, repo_path: str) -> str:
-        path = Path(repo_path) / args.get("file_path", "")
+        path, err = _resolve_in_repo(repo_path, args.get("file_path", ""))
+        if err:
+            return err
         old = args.get("old_string", "")
         new = args.get("new_string", "")
         if not old:
@@ -576,6 +580,20 @@ class ToolRegistry:
             return self._relativize(out, repo_path)
         except Exception as e:
             return f"[guard fallo: {e}]"
+
+
+def _resolve_in_repo(repo_path: str, file_path: str):
+    """Resuelve file_path DENTRO de repo_path. Devuelve (Path, None) o (None, error).
+    Path(repo)/absoluta descarta el lado izquierdo (pathlib), asi que una ruta
+    absoluta a OTRO repo (p.ej. del cache global de capsulas) escribiria fuera
+    del sandbox — visto en benchmark --isolate. Tambien corta ../ traversal."""
+    import os as _os
+    repo = _os.path.realpath(repo_path)
+    target = _os.path.realpath(_os.path.join(repo, file_path or ""))
+    if target != repo and not target.startswith(repo + _os.sep):
+        return None, f"[Bloqueado: '{file_path}' resuelve fuera del repo ({target}). Usa una ruta relativa al repo.]"
+    from pathlib import Path as _P
+    return _P(target), None
 
 
 def _verify_py(path: Path) -> str:
