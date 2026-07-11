@@ -150,7 +150,12 @@ def run_oc_subprocess(query: str, repo_path: str) -> dict:
         empty_xdg = Path("benchmark/.oc_empty_config")
         empty_xdg.mkdir(parents=True, exist_ok=True)
         env = {**os.environ, "DEEPSEEK_API_KEY": os.getenv("DEEPSEEK_API_KEY", ""),
-               "PYTHONIOENCODING": "utf-8", "XDG_CONFIG_HOME": str(empty_xdg.resolve())}
+               "PYTHONIOENCODING": "utf-8", "XDG_CONFIG_HOME": str(empty_xdg.resolve()),
+               # opencode (bun) confia en $PWD heredado por encima del cwd real:
+               # con PWD apuntando al repo principal, resolvia la raiz del proyecto
+               # ALLI y editaba el repo real pese al aislamiento (visto en su DB:
+               # "cd C:\...\leo-code && ..." en cada bash). Forzar PWD a la copia.
+               "PWD": os.path.abspath(repo_path)}
         import shutil
         oc_bin = shutil.which("opencode") or "opencode"  # Windows: resuelve opencode.cmd
         r = subprocess.run(
@@ -201,7 +206,12 @@ def run_oc_mcp_subprocess(query: str, repo_path: str) -> dict:
         empty_xdg = Path("benchmark/.oc_empty_config")
         empty_xdg.mkdir(parents=True, exist_ok=True)
         env = {**os.environ, "DEEPSEEK_API_KEY": os.getenv("DEEPSEEK_API_KEY", ""),
-               "PYTHONIOENCODING": "utf-8", "XDG_CONFIG_HOME": str(empty_xdg.resolve())}
+               "PYTHONIOENCODING": "utf-8", "XDG_CONFIG_HOME": str(empty_xdg.resolve()),
+               # opencode (bun) confia en $PWD heredado por encima del cwd real:
+               # con PWD apuntando al repo principal, resolvia la raiz del proyecto
+               # ALLI y editaba el repo real pese al aislamiento (visto en su DB:
+               # "cd C:\...\leo-code && ..." en cada bash). Forzar PWD a la copia.
+               "PWD": os.path.abspath(repo_path)}
         import shutil
         oc_bin = shutil.which("opencode") or "opencode"
         r = subprocess.run(
