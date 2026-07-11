@@ -74,3 +74,22 @@ def test_verify_py_detects_syntax_error(tmp_path):
     bad = tmp_path / "b.py"; bad.write_text("def f(:\n    pass\n", encoding="utf-8")
     assert "OK" in _verify_py(good)
     assert "SYNTAX ERROR" in _verify_py(bad)
+
+
+def test_write_tools_refuse_paths_outside_repo(tmp_path):
+    # Fuga real (benchmark --isolate): Path(repo)/absoluta descarta el repo y
+    # escribia en OTRO repo cuyas rutas venian del cache global de capsulas.
+    repo = tmp_path / "repo"; repo.mkdir()
+    outside = tmp_path / "otro_repo" / "victima.py"
+    t = ToolRegistry()
+    out = t.execute("write_file", {"file_path": str(outside), "content": "x"}, str(repo))
+    assert "Bloqueado" in out
+    assert not outside.exists()
+    out = t.execute("write_file", {"file_path": "../fuera.py", "content": "x"}, str(repo))
+    assert "Bloqueado" in out
+    assert not (tmp_path / "fuera.py").exists()
+    # dentro del repo sigue funcionando (relativa y absoluta interna)
+    out = t.execute("write_file", {"file_path": "ok.py", "content": "a = 1"}, str(repo))
+    assert "Escrito" in out and (repo / "ok.py").exists()
+    out = t.execute("replace_in_file", {"file_path": str(outside), "old_string": "a", "new_string": "b"}, str(repo))
+    assert "Bloqueado" in out

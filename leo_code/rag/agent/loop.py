@@ -826,7 +826,11 @@ class AgentLoop:
                 engine._do_index(repo)
             timings["t_index_ms"] = (time.perf_counter() - t_idx0) * 1000
             # Cablea capsules + GraphQuery (cerebro) a las tools cada llamada (barato).
-            self.tools.set_index(engine._get_indexer().get_capsules())
+            # SOLO las capsulas de ESTE repo: el indexer global puede tener otros
+            # repos (o rutas viejas del cache) y sus file_path absolutos se filtran
+            # a las tools — read_symbol devolvia rutas de OTRO repo y write_file
+            # las escribia tal cual (fuga real vista con benchmark --isolate).
+            self.tools.set_index({c.id: c for c in engine._repo_caps(engine._get_indexer(), repo)})
             # Inyecta el subgrafo comprimido en vez de que el agente lea archivos enteros.
             t_c0 = time.perf_counter()
             ctx = engine.compute_context(repo, query, task_type).get("context", "")
