@@ -57,6 +57,7 @@ def run_leo_subprocess(query: str, repo_path: str) -> dict:
         r = subprocess.run(
             [sys.executable, RUNNER, query, repo_path, MODEL],
             capture_output=True, text=True, timeout=300, env=env, encoding="utf-8", errors="replace",
+            cwd=repo_path,
         )
         # La respuesta es la ULTIMA linea de stdout (despues del indexer log)
         stdout = (r.stdout or "").strip()
@@ -89,6 +90,7 @@ def run_leo_rag_subprocess(query: str, repo_path: str) -> dict:
         r = subprocess.run(
             [sys.executable, RAG_RUNNER, query, repo_path, MODEL],
             capture_output=True, text=True, timeout=300, env=env, encoding="utf-8", errors="replace",
+            cwd=repo_path,
         )
         stdout = (r.stdout or "").strip()
         lines = stdout.split("\n")
@@ -112,6 +114,7 @@ def run_leo_smart_subprocess(query: str, repo_path: str) -> dict:
         r = subprocess.run(
             [sys.executable, SMART_RUNNER, query, repo_path, MODEL],
             capture_output=True, text=True, timeout=300, env=env, encoding="utf-8", errors="replace",
+            cwd=repo_path,
         )
         stdout = (r.stdout or "").strip()
         lines = stdout.split("\n")
@@ -389,6 +392,17 @@ def _run_benchmark(args):
 
     if {"LEO", "RAG", "SMART"} & set(systems):
         os.environ["LEO_QDRANT_PREWARM_PATH"] = _prewarm_index(args.repo)
+        # Con --isolate los runners corren con cwd=copia: sembrar alli el cache
+        # de indice que el prewarm dejo en ./cache (si no, cada subproceso
+        # re-embebe el repo entero: ~100s/task en vez de ~1s).
+        if os.path.abspath(args.repo) != os.path.abspath("."):
+            import shutil
+            dst = Path(args.repo) / "cache"
+            dst.mkdir(exist_ok=True)
+            for f in ("kc_index.json.gz", "kc_indexed_repos.json"):
+                src = Path("cache") / f
+                if src.exists():
+                    shutil.copy(src, dst / f)
 
     t0 = time.time()
     all_results = []
