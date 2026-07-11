@@ -321,21 +321,27 @@ def print_summary(results: list[dict]):
 
 
 def _isolated_worktree(repo: str) -> str:
-    """Copia desechable del repo (git worktree --detach de HEAD): los agentes
-    write-enabled (LEO/OC/OCMCP) editan archivos REALES durante el benchmark —
-    sin esto contaminan el working tree (paso 5+ veces: parser.py, compressor.py,
-    archivos nuevos sin pedir). El worktree se destruye al final, pase lo que pase."""
+    """Copia desechable del repo (clon local de HEAD): los agentes write-enabled
+    (LEO/OC/OCMCP) editan archivos REALES durante el benchmark — sin esto
+    contaminan el working tree (paso 5+ veces: parser.py, compressor.py,
+    archivos nuevos sin pedir). CLON y no git worktree: el .git de un worktree
+    es un puntero al repo principal, y opencode resuelve la raiz del proyecto
+    via git — acababa editando el repo REAL con rutas absolutas (visto en su
+    DB). El clon tiene .git propio; se destruye al final, pase lo que pase."""
     import tempfile
-    wt = Path(tempfile.mkdtemp(prefix="leo_bench_wt_")) / "repo"
-    subprocess.run(["git", "worktree", "add", "--detach", str(wt), "HEAD"],
+    wt = Path(tempfile.mkdtemp(prefix="leo_bench_clone_")) / "repo"
+    subprocess.run(["git", "clone", "--local", "--depth", "1", ".", str(wt)],
                    cwd=repo, check=True, capture_output=True)
-    print(f"  Worktree aislado: {wt}")
+    print(f"  Clon aislado: {wt}")
     return str(wt)
 
 
 def _remove_worktree(repo: str, wt: str):
-    subprocess.run(["git", "worktree", "remove", "--force", wt],
-                   cwd=repo, capture_output=True)
+    import shutil, stat
+    def _rw(func, path, _exc):
+        os.chmod(path, stat.S_IWRITE)  # .git trae read-only en Windows
+        func(path)
+    shutil.rmtree(Path(wt).parent, onerror=_rw)
 
 
 def main():
