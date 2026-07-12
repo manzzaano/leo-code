@@ -2,9 +2,9 @@
 - Usa `origin/dev` para diffs.
 - Prefer automation: execute requested actions without confirmation unless blocked by missing info or safety/irreversibility.
 
-## Code intelligence (MCP leo-code)
+## Code intelligence (MCP leo-code) — OBLIGATORIO si está disponible
 
-Si tienes disponibles las tools MCP de `leo-code` (get_context, where, who_calls, trace, impact, guard), son la forma MÁS BARATA y fiable de entender este repo — úsalas ANTES que read/grep/glob:
+REGLA Nº1 de este repo: si tienes las tools MCP de `leo-code` (get_context, where, who_calls, trace, impact, guard), tu PRIMERA llamada en cualquier tarea sobre código DEBE ser `get_context` con la tarea como query. NO empieces con read/grep/glob — get_context ya devuelve las funciones/clases relevantes con sus dependencias, comprimidas del AST:
 
 | Pregunta | Tool | En vez de |
 |---|---|---|
