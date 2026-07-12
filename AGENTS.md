@@ -2,6 +2,26 @@
 - Usa `origin/dev` para diffs.
 - Prefer automation: execute requested actions without confirmation unless blocked by missing info or safety/irreversibility.
 
+## Code intelligence (MCP leo-code)
+
+Si tienes disponibles las tools MCP de `leo-code` (get_context, where, who_calls, trace, impact, guard), son la forma MÁS BARATA y fiable de entender este repo — úsalas ANTES que read/grep/glob:
+
+| Pregunta | Tool | En vez de |
+|---|---|---|
+| Cualquier pregunta sobre código, arquitectura, un símbolo o un archivo | `get_context(query)` | leer archivos enteros |
+| ¿Dónde se define X? | `where(symbol)` | grep |
+| ¿Quién llama a X? | `who_calls(symbol)` | grep |
+| ¿Cómo llega X a Y? | `trace(src, dst)` | leer varios archivos |
+| ¿Qué rompo si cambio X? | `impact(symbol)` / `guard(symbol)` | adivinar |
+
+Reglas:
+1. **Primera acción** para cualquier tarea sobre código: `get_context` con la tarea como query. Devuelve las funciones/clases relevantes ya extraídas con sus dependencias — normalmente NO necesitas releer esos archivos después.
+2. Antes de EDITAR un símbolo: `guard(symbol)` — muestra qué se rompe y qué está cubierto por tests.
+3. `read` solo para: ver un archivo que vas a editar (líneas exactas), o contenido no-código (README, configs, docs).
+4. Las tools de grafo (where/who_calls/trace/impact/guard) son deterministas y citan `archivo:línea` — su salida es prueba, no estimación.
+
+Si estas tools no están disponibles, usa tus tools nativas normalmente.
+
 ## Style Guide
 
 ### General Principles
