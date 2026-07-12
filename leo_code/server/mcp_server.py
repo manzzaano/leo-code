@@ -106,11 +106,12 @@ def _embed_bg(repo: str):
 _TOOL = types.Tool(
     name="get_context",
     description=(
-        "Devuelve el subgrafo de codigo relevante y COMPRIMIDO para una consulta "
-        "(funciones/clases con sus dependencias directas, extraido del AST), en vez "
-        "del archivo entero. USALO ANTES de leer archivos con tus tools de fichero: "
-        "ahorra ~80% de tokens manteniendo la senal. Ideal para preguntas sobre "
-        "simbolos, refactors, code review, debugging y trazas cross-file."
+        "PRIMERA ACCION OBLIGATORIA para cualquier tarea sobre este codigo (pregunta, "
+        "bug, refactor, review, test): devuelve el subgrafo relevante COMPRIMIDO "
+        "(funciones/clases con sus dependencias, extraido del AST) en vez del archivo "
+        "entero. Sustituye a read/grep/glob para entender codigo: ahorra ~80% de "
+        "tokens con la misma senal. Solo despues de esto, usa read si vas a EDITAR "
+        "lineas concretas."
     ),
     inputSchema={
         "type": "object",
@@ -262,13 +263,23 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         return result
 
     result = await asyncio.to_thread(_work)
+    ctx = result["context"]
+    # El compressor antepone "ARCHIVOS: <paths>" — util para el agente nativo de LEO,
+    # pero a un agente generico esa lista al INICIO le dispara un read por archivo
+    # (doble coste medido en benchmark). Moverla al pie, marcada como ya-incluida.
+    files_line = ""
+    if ctx.startswith("ARCHIVOS: "):
+        files_line, _, ctx = ctx.partition("\n")
+        files_line = "\n\n[fuentes ya incluidas en este contexto — NO las releas: " \
+                     + files_line[len("ARCHIVOS: "):] + "]"
+        ctx = ctx.lstrip("\n")
     header = (f"[leo-code KC-RAG | task={result['task_type']} | ~{result['tokens']} tok "
-              f"| {result['capsules_total']} capsulas indexadas]\n\n")
-    footer = ("\n\n[siguiente paso] Este contexto ya contiene los cuerpos relevantes "
-              "extraidos del AST: responde con el, NO releas estos archivos enteros. "
-              "Si falta un simbolo concreto: where/get_context con ese nombre. "
-              "Callers: who_calls | camino A->B: trace | antes de editar: guard.")
-    return [types.TextContent(type="text", text=_relativize(header + result["context"] + footer, repo))]
+              f"| {result['capsules_total']} capsulas indexadas]\n"
+              "[Contexto extraido del AST, ya comprimido: responde DIRECTAMENTE con el. "
+              "No leas los archivos citados — su parte relevante ya esta aqui.]\n\n")
+    footer = ("\n\n[siguiente paso] Si falta un simbolo concreto: where/get_context con ese "
+              "nombre. Callers: who_calls | camino A->B: trace | antes de editar: guard.")
+    return [types.TextContent(type="text", text=_relativize(header + ctx + files_line + footer, repo))]
 
 
 def _warmup(repo: str):
