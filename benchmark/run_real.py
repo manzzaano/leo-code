@@ -434,17 +434,18 @@ def _run_benchmark(args):
 
     if {"LEO", "RAG", "SMART"} & set(systems):
         os.environ["LEO_QDRANT_PREWARM_PATH"] = _prewarm_index(args.repo)
-        # Con --isolate los runners corren con cwd=copia: sembrar alli el cache
-        # de indice que el prewarm dejo en ./cache (si no, cada subproceso
-        # re-embebe el repo entero: ~100s/task en vez de ~1s).
-        if os.path.abspath(args.repo) != os.path.abspath("."):
-            import shutil
-            dst = Path(args.repo) / "cache"
-            dst.mkdir(exist_ok=True)
-            for f in ("kc_index.json.gz", "kc_indexed_repos.json"):
-                src = Path("cache") / f
-                if src.exists():
-                    shutil.copy(src, dst / f)
+    # Con --isolate los subprocesos corren con cwd=copia: sembrar alli el cache
+    # de indice estructural (si no, cada task re-parsea el repo desde cero).
+    # Aplica a LEO/RAG/SMART y tambien a OCMCP (su MCP server carga este cache).
+    if ({"LEO", "RAG", "SMART", "OCMCP"} & set(systems)
+            and os.path.abspath(args.repo) != os.path.abspath(".")):
+        import shutil
+        dst = Path(args.repo) / "cache"
+        dst.mkdir(exist_ok=True)
+        for f in ("kc_index.json.gz", "kc_indexed_repos.json"):
+            src = Path("cache") / f
+            if src.exists():
+                shutil.copy(src, dst / f)
 
     t0 = time.time()
     all_results = []
