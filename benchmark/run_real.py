@@ -130,6 +130,61 @@ def run_leo_smart_subprocess(query: str, repo_path: str) -> dict:
         return {"system": "SMART", "response": f"[Error: {e}]", "tokens": 0, "duration_ms": 0}
 
 
+MCP_TOOLS = {"get_context", "trace", "impact", "who_calls", "where", "guard"}
+NATIVE_EXPLORE = {"read", "grep", "glob", "list"}
+
+
+def parse_oc_events(stdout: str) -> dict:
+    """Parsea el stream --format json de opencode: texto final, tokens reales por
+    step_finish, y telemetría de tool-calls (adopción MCP vs exploración nativa).
+
+    'redundant_native_after_ctx': reads/greps/globs nativos DESPUÉS del primer
+    get_context — mide el 'doble coste' (el agente pidió contexto comprimido y aun
+    así releyó archivos)."""
+    text_parts, tool_seq = [], []
+    real_tokens = 0
+    for line in (stdout or "").splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            evt = json.loads(line)
+        except Exception:
+            continue
+        part = evt.get("part", {}) or {}
+        if evt.get("type") == "text" and part.get("type") == "text":
+            text_parts.append(part.get("text", ""))
+        elif evt.get("type") == "step_finish":
+            real_tokens += (part.get("tokens", {}) or {}).get("total", 0)
+        elif evt.get("type") == "tool_use" and part.get("type") == "tool":
+            tool_seq.append(part.get("tool", "?"))
+
+    # opencode nombra las tools MCP con el server como prefijo (p.ej.
+    # "leo-code_get_context" o "leo-code.get_context"); detectar por sufijo.
+    def base(t):
+        for m in MCP_TOOLS:
+            if t == m or t.endswith("_" + m) or t.endswith("." + m):
+                return m
+        return t
+
+    mcp_calls, native_calls = {}, {}
+    redundant = 0
+    seen_ctx = False
+    for t in tool_seq:
+        b = base(t)
+        if b in MCP_TOOLS and ("leo" in t or t == b):
+            mcp_calls[b] = mcp_calls.get(b, 0) + 1
+            if b == "get_context":
+                seen_ctx = True
+        else:
+            native_calls[t] = native_calls.get(t, 0) + 1
+            if seen_ctx and t in NATIVE_EXPLORE:
+                redundant += 1
+    return {"response": "\n".join(text_parts).strip(), "tokens": real_tokens,
+            "tool_seq": tool_seq, "mcp_calls": mcp_calls, "native_calls": native_calls,
+            "redundant_native_after_ctx": redundant}
+
+
 def run_oc_subprocess(query: str, repo_path: str) -> dict:
     """Corre opencode vanilla — SIN MCP (ni el leo-code local ni codegraph/pencil
     globales del usuario). --pure NO desactiva MCP (solo plugins), asi que:
@@ -162,27 +217,11 @@ def run_oc_subprocess(query: str, repo_path: str) -> dict:
             [oc_bin, "run", query, "-m", "deepseek/deepseek-chat", "--format", "json"],
             capture_output=True, text=True, timeout=180, cwd=repo_path, env=env, encoding="utf-8", errors="replace",
         )
-        # --format json emite un evento por linea; "step_finish" trae tokens reales
-        # (input+output+cache) por cada llamada al LLM que opencode hizo internamente.
-        # len(response)//4 solo media el texto final visible y subestimaba MUCHO el
-        # costo real de exploracion con tools (no expuesto de otra forma).
-        text_parts = []
-        real_tokens = 0
-        for line in (r.stdout or "").splitlines():
-            line = line.strip()
-            if not line.startswith("{"):
-                continue
-            try:
-                evt = json.loads(line)
-            except Exception:
-                continue
-            part = evt.get("part", {}) or {}
-            if evt.get("type") == "text" and part.get("type") == "text":
-                text_parts.append(part.get("text", ""))
-            elif evt.get("type") == "step_finish":
-                real_tokens += (part.get("tokens", {}) or {}).get("total", 0)
-        response = "\n".join(text_parts).strip() or (r.stderr or "").strip()
-        return {"system": "OC", "response": response[:4000], "tokens": real_tokens,
+        p = parse_oc_events(r.stdout)
+        response = p["response"] or (r.stderr or "").strip()
+        return {"system": "OC", "response": response[:4000], "tokens": p["tokens"],
+                "mcp_calls": p["mcp_calls"], "native_calls": p["native_calls"],
+                "redundant_native_after_ctx": p["redundant_native_after_ctx"],
                 "duration_ms": int((time.time() - t0) * 1000)}
     except subprocess.TimeoutExpired:
         return {"system": "OC", "response": "[Timeout]", "tokens": 0, "duration_ms": 180000}
@@ -218,23 +257,11 @@ def run_oc_mcp_subprocess(query: str, repo_path: str) -> dict:
             [oc_bin, "run", query, "-m", "deepseek/deepseek-chat", "--format", "json"],
             capture_output=True, text=True, timeout=180, cwd=repo_path, env=env, encoding="utf-8", errors="replace",
         )
-        text_parts = []
-        real_tokens = 0
-        for line in (r.stdout or "").splitlines():
-            line = line.strip()
-            if not line.startswith("{"):
-                continue
-            try:
-                evt = json.loads(line)
-            except Exception:
-                continue
-            part = evt.get("part", {}) or {}
-            if evt.get("type") == "text" and part.get("type") == "text":
-                text_parts.append(part.get("text", ""))
-            elif evt.get("type") == "step_finish":
-                real_tokens += (part.get("tokens", {}) or {}).get("total", 0)
-        response = "\n".join(text_parts).strip() or (r.stderr or "").strip()
-        return {"system": "OCMCP", "response": response[:4000], "tokens": real_tokens,
+        p = parse_oc_events(r.stdout)
+        response = p["response"] or (r.stderr or "").strip()
+        return {"system": "OCMCP", "response": response[:4000], "tokens": p["tokens"],
+                "mcp_calls": p["mcp_calls"], "native_calls": p["native_calls"],
+                "redundant_native_after_ctx": p["redundant_native_after_ctx"],
                 "duration_ms": int((time.time() - t0) * 1000)}
     except subprocess.TimeoutExpired:
         return {"system": "OCMCP", "response": "[Timeout]", "tokens": 0, "duration_ms": 180000}
@@ -319,6 +346,11 @@ def print_summary(results: list[dict]):
         score = sum(r.get("score_total", 0) for r in valid) / len(valid)
         time_ms = sum(r.get("duration_ms", 0) for r in valid) / len(valid)
         print(f"  {s}: {len(valid)} tasks | {tok:,} tok | {tok/len(valid):.0f} tok/task | {score:.1f}/10 | {time_ms:.0f}ms avg")
+        if s == "OCMCP":
+            adopted = [r for r in valid if r.get("mcp_calls")]
+            n_mcp = sum(sum(r.get("mcp_calls", {}).values()) for r in valid)
+            n_red = sum(r.get("redundant_native_after_ctx", 0) for r in valid)
+            print(f"       adopcion MCP: {len(adopted)}/{len(valid)} tasks | {n_mcp} llamadas MCP | {n_red} reads nativos redundantes tras get_context")
     leo = [r for r in results if r["system"] == "LEO" and r.get("response")]
     oc = [r for r in results if r["system"] == "OC" and r.get("response")]
     if leo and oc:

@@ -181,9 +181,41 @@ def _relativize(text: str, repo: str) -> str:
     return text.replace("\\", "/").replace(pref, "")
 
 
+# Recuperación in-band: símbolo desconocido → candidatos cercanos, para que el
+# siguiente intento del agente sea otra llamada MCP y no una regresión a grep.
+def _fuzzy_notfound(gq: GraphQuery, name: str) -> str:
+    import difflib
+    cands = difflib.get_close_matches(name, list(gq.by_name), n=5, cutoff=0.55)
+    if not cands:
+        return (f"Simbolo '{name}' no esta en el indice. "
+                f"Prueba get_context(\"{name}\") para busqueda semantica.")
+    return (f"Simbolo '{name}' no encontrado. Candidatos cercanos: "
+            + ", ".join(f"`{c}`" for c in cands)
+            + ". Reintenta la MISMA tool con uno de esos nombres.")
+
+
+def _known(gq: GraphQuery, s: str) -> bool:
+    from leo_code.core.graphquery import _bare
+    return bool(gq._resolve(s) or gq.callers.get(s) or gq.callers.get(_bare(s)))
+
+
+# Siguiente paso sugerido por tool: la respuesta dirige la próxima llamada MCP.
+_NEXT = {
+    "where": "[siguiente paso] cuerpo y dependencias: get_context(\"<simbolo>\") | callers: who_calls",
+    "who_calls": "[siguiente paso] cierre transitivo (todo lo que se rompe): impact | antes de editar: guard",
+    "impact": "[siguiente paso] cuales de estos afectados tienen test: guard(\"<simbolo>\")",
+    "trace": "[siguiente paso] cuerpo de cualquier salto: get_context(\"<simbolo>\")",
+    "guard": "[nota] los afectados SIN test son el riesgo real: revisalos o cubre con tests antes de editar.",
+}
+
+
 def _run_graph_tool(name: str, args: dict) -> str:
     repo = os.path.abspath(args.get("repo_path") or ".")
     gq = _graphquery(repo)
+    syms = (args["src"], args["dst"]) if name == "trace" else (args["symbol"],)
+    missing = [s for s in syms if not _known(gq, s)]
+    if missing:
+        return "\n".join(_fuzzy_notfound(gq, s) for s in missing)
     if name == "trace":
         out = gq.trace(args["src"], args["dst"]).render()
     elif name == "impact":
@@ -197,7 +229,7 @@ def _run_graph_tool(name: str, args: dict) -> str:
         out = Guardian(_get_indexer().get_capsules()).review(args["symbol"]).render()
     else:
         raise ValueError(f"Tool de grafo desconocida: {name}")
-    return _relativize(out, repo)
+    return _relativize(out + "\n\n" + _NEXT[name], repo)
 
 
 @server.call_tool()
@@ -232,7 +264,11 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
     result = await asyncio.to_thread(_work)
     header = (f"[leo-code KC-RAG | task={result['task_type']} | ~{result['tokens']} tok "
               f"| {result['capsules_total']} capsulas indexadas]\n\n")
-    return [types.TextContent(type="text", text=_relativize(header + result["context"], repo))]
+    footer = ("\n\n[siguiente paso] Este contexto ya contiene los cuerpos relevantes "
+              "extraidos del AST: responde con el, NO releas estos archivos enteros. "
+              "Si falta un simbolo concreto: where/get_context con ese nombre. "
+              "Callers: who_calls | camino A->B: trace | antes de editar: guard.")
+    return [types.TextContent(type="text", text=_relativize(header + result["context"] + footer, repo))]
 
 
 def _warmup(repo: str):
