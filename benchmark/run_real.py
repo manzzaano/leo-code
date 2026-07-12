@@ -309,8 +309,15 @@ async def run_batch(tasks: list[dict], repo_path: str, systems: list[str]) -> li
             print(f"      ERR: {e}")
             return {"system": sys_name, "task_id": tid, "response": f"[{e}]", "tokens": 0, "duration_ms": 0}
 
-    coros = [run_one(task, s) for task in tasks for s in systems if s in ("LEO", "RAG", "SMART", "OC", "OCMCP", "NO")]
-    return await asyncio.gather(*coros)
+    # SECUENCIAL por sistema: run_oc_subprocess renombra opencode.json un instante
+    # (para quitarle el MCP a OC vanilla) — si OC y OCMCP corren a la vez, OCMCP
+    # arranca SIN MCP (adopcion 0) y ambos editan los mismos archivos en paralelo.
+    out = []
+    for s in systems:
+        if s not in ("LEO", "RAG", "SMART", "OC", "OCMCP", "NO"):
+            continue
+        out.extend(await asyncio.gather(*[run_one(task, s) for task in tasks]))
+    return out
 
 
 def judge_results(raw_results: list[dict], tasks: list[dict]) -> list[dict]:
