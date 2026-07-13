@@ -56,6 +56,7 @@ class CompressConfig:
     callers_limit: int = 5
     type_filter: set[str] | None = None
     footer_msg: str = ""
+    body_chars: int = 2000  # cap por cuerpo cuando include_body
 
 
 COMPRESS_STRATEGIES = {
@@ -94,8 +95,14 @@ def compress(
     task_type: str = "code_query",
     dir_filter: set[str] | None = None,
     query: str = "",
+    self_sufficient: bool = False,
 ) -> str:
-    """Compresión adaptativa según tipo de tarea."""
+    """Compresión adaptativa según tipo de tarea.
+
+    self_sufficient (vía MCP): el cliente es un agente genérico SIN nuestras
+    tools de seguimiento — si el contexto no basta, relee archivos enteros y
+    duplica el coste (medido en benchmark: hasta 15 relecturas/tarea). Incluye
+    cuerpos completos y no manda a read_file."""
 
     if task_type == "no_code":
         doc_caps = [c for c in top_capsules if c.type == "document"]
@@ -128,6 +135,10 @@ def compress(
     elif task_type in COMPRESS_STRATEGIES:
         # Usar estrategia configurada
         config = COMPRESS_STRATEGIES[task_type]
+        if self_sufficient:
+            from dataclasses import replace
+            config = replace(config, include_body=True, body_chars=6000,
+                             footer_msg="\n\nEl codigo relevante ya esta incluido arriba: trabaja con el, no releas archivos.")
         result = _build_nodes_from_config(top_capsules, all_capsules, config, task_type)
     else:
         # Default: code_query
@@ -172,8 +183,8 @@ def _build_nodes_from_config(
 
         if config.include_body and c.content:
             body = c.content
-            if len(body) > 2000:
-                body = body[:2000] + "\n# ... [truncado]"
+            if len(body) > config.body_chars:
+                body = body[:config.body_chars] + "\n# ... [truncado]"
             props["content"] = body
 
         if config.include_calls and c.calls:

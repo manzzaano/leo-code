@@ -75,8 +75,10 @@ def serialize_context(nodes: list[dict], edges: list[dict] = None) -> str:
 
         if content_body:
             body_str = str(content_body)
-            if len(body_str) > 2000:
-                body_str = body_str[:2000] + "\n# ... [truncado]"
+            # Red de seguridad: los productores capan antes (body_chars); esto solo
+            # protege de un productor sin cap, no decide el tamaño del contexto.
+            if len(body_str) > 8000:
+                body_str = body_str[:8000] + "\n# ... [truncado]"
             lines.append("**Content:**")
             lines.append(f"```\n{body_str}\n```")
 

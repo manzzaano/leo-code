@@ -219,12 +219,16 @@ def _get_bm25(repo: str, caps: dict) -> object:
 
 
 def compute_context(repo: str, query: str, task_type_in: str = "auto",
-                    budget_tokens_in: int = 0) -> dict:
+                    budget_tokens_in: int = 0, self_sufficient: bool = False) -> dict:
     """Retrieval híbrido (exact + Qdrant + BM25 + scorer → RRF) + compress.
 
     Núcleo compartido por el endpoint HTTP /context y el servidor MCP (stdio).
     El repo debe estar ya indexado (`await _ensure_indexed(repo)`) antes de llamar.
     Devuelve {context, tokens, task_type, capsules_total}.
+
+    self_sufficient (vía MCP): contexto con cuerpos completos y presupuesto ×4 —
+    el cliente genérico no tiene tools de seguimiento y si le falta algo relee
+    archivos enteros (doble coste medido en benchmark).
     """
     idx = _get_indexer()
     all_caps = idx.get_capsules()
@@ -243,6 +247,9 @@ def compute_context(repo: str, query: str, task_type_in: str = "auto",
     # la query por su cuenta: con task_type forzado a code_query y query corta en inglés
     # daba no_code → presupuesto 0 → contexto VACÍO al cliente MCP.
     budget = budget_tokens_in if budget_tokens_in > 0 else TOKEN_BUDGET.get(task_type, 1500)
+    if self_sufficient and budget_tokens_in <= 0:
+        # ×4 sigue siendo ~10× menos que releer los archivos que evita.
+        budget = max(budget * 4, 4000)
 
     # no_code: devolver documentos relevantes a la query (keyword match en contenido)
     if task_type == "no_code":
@@ -376,5 +383,5 @@ def compute_context(repo: str, query: str, task_type_in: str = "auto",
     top_caps = exact + top_caps
     top_caps = top_caps[:cap]
 
-    context = compress(top_caps, list(caps.values()), budget_tokens=budget, task_type=task_type, dir_filter=dir_prefixes, query=query)
+    context = compress(top_caps, list(caps.values()), budget_tokens=budget, task_type=task_type, dir_filter=dir_prefixes, query=query, self_sufficient=self_sufficient)
     return {"context": context, "tokens": len(context) // 2, "task_type": task_type, "capsules_total": len(caps)}
