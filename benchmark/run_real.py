@@ -185,6 +185,26 @@ def parse_oc_events(stdout: str) -> dict:
             "redundant_native_after_ctx": redundant}
 
 
+def _run_capture(cmd, timeout, cwd=None, env=None):
+    """Como subprocess.run(capture_output=True, timeout=...) pero sin el cuelgue de
+    Windows: run() mata solo el hijo directo (el shim npm de opencode) y los nietos
+    (bun + servidor MCP) sobreviven con los pipes heredados -> communicate() bloquea
+    para siempre. Aqui el timeout mata el ARBOL entero (taskkill /T)."""
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                         text=True, cwd=cwd, env=env, encoding="utf-8", errors="replace")
+    try:
+        out, err = p.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(p.pid)], capture_output=True)
+        else:
+            p.kill()
+        p.stdout.close()
+        p.stderr.close()
+        raise
+    return subprocess.CompletedProcess(cmd, p.returncode, out, err)
+
+
 def run_oc_subprocess(query: str, repo_path: str) -> dict:
     """Corre opencode vanilla — SIN MCP (ni el leo-code local ni codegraph/pencil
     globales del usuario). --pure NO desactiva MCP (solo plugins), asi que:
@@ -213,9 +233,9 @@ def run_oc_subprocess(query: str, repo_path: str) -> dict:
                "PWD": os.path.abspath(repo_path)}
         import shutil
         oc_bin = shutil.which("opencode") or "opencode"  # Windows: resuelve opencode.cmd
-        r = subprocess.run(
+        r = _run_capture(
             [oc_bin, "run", query, "-m", "deepseek/deepseek-chat", "--format", "json"],
-            capture_output=True, text=True, timeout=180, cwd=repo_path, env=env, encoding="utf-8", errors="replace",
+            timeout=180, cwd=repo_path, env=env,
         )
         p = parse_oc_events(r.stdout)
         response = p["response"] or (r.stderr or "").strip()
@@ -253,9 +273,9 @@ def run_oc_mcp_subprocess(query: str, repo_path: str) -> dict:
                "PWD": os.path.abspath(repo_path)}
         import shutil
         oc_bin = shutil.which("opencode") or "opencode"
-        r = subprocess.run(
+        r = _run_capture(
             [oc_bin, "run", query, "-m", "deepseek/deepseek-chat", "--format", "json"],
-            capture_output=True, text=True, timeout=180, cwd=repo_path, env=env, encoding="utf-8", errors="replace",
+            timeout=180, cwd=repo_path, env=env,
         )
         p = parse_oc_events(r.stdout)
         response = p["response"] or (r.stderr or "").strip()
