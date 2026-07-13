@@ -69,7 +69,10 @@ Harnesses objetivo: **Claude Code, opencode, Codex**. Sin fecha límite: kanban 
 - [x] **C v2** (commit fec9f92): el plugin captura del footer las fuentes ya entregadas y veta releerlas enteras (1 veto/archivo; offset/limit pasa). 6/6 ramas testeadas.
 - [x] RUN 1 Cv2: +4,2% agregado era espejismo (OC outlier 1,05M en t4). Por tarea: OCMCP peor en 11/15 (t11 +575%, t14 +412%); la válvula "1 veto y pasa" deja pagar contexto Y archivo.
 - [x] **C v3** (commit e2572f2): sustitución forzada — incluidos nunca enteros (rango sí); archivo nuevo exige antes `get_context("<archivo>")` (comprimido), una insistencia de escape. 9/9 ramas testeadas.
-- [~] Validación 3× stack B1+B2+Cv3 EN MARCHA (22:33, HEAD=e2572f2) → `harness_run1/2/3.json`
+- [x] RUN 1 Cv3: **+108%** con adopción 2,7 — contraproducente. **Lección estructural: cada turno extra (veto, llamada forzada) re-envía la conversación entera; los turnos dominan el coste, no el contenido.** Validación abortada.
+- [x] Decisión usuario 2026-07-14: **seguir hasta −40%** (no reencuadrar criterio).
+- [x] **C v5** (commits b47f45a+4201037): sustitución PASIVA — read entero de código devuelve la vista comprimida del AST (`leo_code.filectx`, ~50% del crudo, 0,9s con índice caliente) sin turnos extra ni vetos (un veto dejó al agente respondiendo a ciegas). MCP reducido a 2 tools (get_context + graph op=...). Footer ordena responder ya. Swap verificado end-to-end (28,2k→13,8k, respuesta correcta).
+- [~] Corrida-señal c5 EN MARCHA (01:47, HEAD=b47f45a — SIN el fix 4201037 de persistencia: duración puede salir inflada por re-indexados; tokens válidos) → `c5_signal.json`
 - [x] **B2 — dieta de definiciones** (commit 381803e): descripciones 823→664 tok/turno (−19%). Marginal; la palanca es C.
 - [x] **C — primera acción forzada (opencode)** (commit 5bc375f): plugin `.opencode/plugin/leo-first-action.js` veta read/grep/glob/list hasta la 1ª llamada a get_context; válvula tras 3 vetos; gated LEO_FORCE=1 (benchmark lo activa solo en OCMCP). Validado: smoke test + 4 ramas en node.
 - [ ] Benchmark 15 tareas × 3 corridas con B1+B2+C (HEAD≥5bc375f) → tabla de criterio
