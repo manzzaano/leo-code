@@ -125,48 +125,25 @@ _TOOL = types.Tool(
 
 # --- Tools DETERMINISTAS (grafo): respuesta estructural con prueba, CERO tokens LLM ---
 _repo_arg = {"repo_path": {"type": "string", "description": "Ruta del repo/monorepo.", "default": "."}}
-_GRAPH_TOOLS = [
-    types.Tool(
-        name="trace",
-        description=("Camino de llamadas real de A a B (cruza archivos y lenguajes), "
-            "cada salto citado archivo:linea. Determinista, sin alucinar. "
-            "Para 'como llega X a Y'."),
-        inputSchema={"type": "object", "properties": {
-            "src": {"type": "string", "description": "Simbolo origen."},
-            "dst": {"type": "string", "description": "Simbolo destino."}, **_repo_arg},
-            "required": ["src", "dst"]}),
-    types.Tool(
-        name="impact",
-        description=("Que se ROMPE si cambias un simbolo: cierre transitivo de callers, "
-            "citado archivo:linea. Grafo real, determinista."),
-        inputSchema={"type": "object", "properties": {
-            "symbol": {"type": "string", "description": "Simbolo a cambiar."}, **_repo_arg},
-            "required": ["symbol"]}),
-    types.Tool(
-        name="who_calls",
-        description="Callers directos de un simbolo, citados archivo:linea. Determinista.",
-        inputSchema={"type": "object", "properties": {
-            "symbol": {"type": "string", "description": "Simbolo."}, **_repo_arg},
-            "required": ["symbol"]}),
-    types.Tool(
-        name="where",
-        description="Donde se define un simbolo (todas las definiciones), citado archivo:linea. Determinista.",
-        inputSchema={"type": "object", "properties": {
-            "symbol": {"type": "string", "description": "Simbolo."}, **_repo_arg},
-            "required": ["symbol"]}),
-    types.Tool(
-        name="guard",
-        description=("ANTES de editar un simbolo: radio de explosion (transitivo, "
-            "cross-lenguaje) marcando que afectados tienen test y cuales NO. Determinista."),
-        inputSchema={"type": "object", "properties": {
-            "symbol": {"type": "string", "description": "Simbolo que vas a cambiar."}, **_repo_arg},
-            "required": ["symbol"]}),
-]
+_GRAPH_OPS = ("where", "who_calls", "impact", "trace", "guard")
+_GRAPH_TOOL = types.Tool(
+    name="graph",
+    description=("Consulta DETERMINISTA al grafo real del codigo, citada archivo:linea, "
+        "0 alucinacion. op: where=donde se define | who_calls=callers directos | "
+        "impact=que se rompe si lo cambias (transitivo) | trace=camino de llamadas "
+        "src->dst | guard=antes de editar, afectados con/sin test."),
+    inputSchema={"type": "object", "properties": {
+        "op": {"type": "string", "enum": list(_GRAPH_OPS)},
+        "symbol": {"type": "string", "description": "Simbolo (where/who_calls/impact/guard)."},
+        "src": {"type": "string", "description": "Origen (trace)."},
+        "dst": {"type": "string", "description": "Destino (trace)."}, **_repo_arg},
+        "required": ["op"]},
+)
 
 
 @server.list_tools()
 async def list_tools() -> list[types.Tool]:
-    return [_TOOL] + _GRAPH_TOOLS
+    return [_TOOL, _GRAPH_TOOL]
 
 
 def _relativize(text: str, repo: str) -> str:
@@ -193,11 +170,11 @@ def _known(gq: GraphQuery, s: str) -> bool:
     return bool(gq._resolve(s) or gq.callers.get(s) or gq.callers.get(_bare(s)))
 
 
-# Siguiente paso sugerido por tool: la respuesta dirige la próxima llamada MCP.
+# Siguiente paso sugerido por op: la respuesta dirige la próxima llamada MCP.
 _NEXT = {
-    "where": "[siguiente paso] cuerpo y dependencias: get_context(\"<simbolo>\") | callers: who_calls",
-    "who_calls": "[siguiente paso] cierre transitivo (todo lo que se rompe): impact | antes de editar: guard",
-    "impact": "[siguiente paso] cuales de estos afectados tienen test: guard(\"<simbolo>\")",
+    "where": "[siguiente paso] cuerpo y dependencias: get_context(\"<simbolo>\") | callers: graph(op=who_calls)",
+    "who_calls": "[siguiente paso] cierre transitivo: graph(op=impact) | antes de editar: graph(op=guard)",
+    "impact": "[siguiente paso] cuales de estos afectados tienen test: graph(op=guard, symbol=\"<simbolo>\")",
     "trace": "[siguiente paso] cuerpo de cualquier salto: get_context(\"<simbolo>\")",
     "guard": "[nota] los afectados SIN test son el riesgo real: revisalos o cubre con tests antes de editar.",
 }
@@ -228,9 +205,12 @@ def _run_graph_tool(name: str, args: dict) -> str:
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
-    # Tools deterministas de grafo (sin LLM, respuesta con prueba citable).
-    if name in ("trace", "impact", "who_calls", "where", "guard"):
-        text = await asyncio.to_thread(_run_graph_tool, name, arguments)
+    # Tool determinista de grafo (sin LLM, respuesta con prueba citable).
+    if name == "graph":
+        op = arguments.get("op")
+        if op not in _GRAPH_OPS:
+            raise ValueError(f"op invalida: {op}. Usa una de {_GRAPH_OPS}")
+        text = await asyncio.to_thread(_run_graph_tool, op, arguments)
         return [types.TextContent(type="text", text=text)]
 
     if name != "get_context":
@@ -270,8 +250,9 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
               f"| {result['capsules_total']} capsulas indexadas]\n"
               "[Contexto extraido del AST, ya comprimido: responde DIRECTAMENTE con el. "
               "No leas los archivos citados — su parte relevante ya esta aqui.]\n\n")
-    footer = ("\n\n[siguiente paso] Si falta un simbolo concreto: where/get_context con ese "
-              "nombre. Callers: who_calls | camino A->B: trace | antes de editar: guard.")
+    footer = ("\n\n[RESPONDE YA con este contexto — no explores mas salvo que falte algo "
+              "imprescindible. Simbolo concreto: get_context(\"<nombre>\") | estructura "
+              "(callers/impacto/camino/tests): tool graph.]")
     return [types.TextContent(type="text", text=_relativize(header + ctx + files_line + footer, repo))]
 
 
