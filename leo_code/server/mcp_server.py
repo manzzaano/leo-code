@@ -254,12 +254,12 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
     def _work():
         _ensure_structural(repo)
         _embed_bg(repo)  # no bloquea; sube el recall semántico cuando termine
-        result = compute_context(repo, query, task_type, budget)
+        result = compute_context(repo, query, task_type, budget, self_sufficient=True)
         if result.get("task_type") == "no_code":
             # Una llamada a get_context ES sobre código por definición; el clasificador
             # marca no_code con queries cortas en inglés ("guardian blast radius") y
             # devolvía contexto VACÍO al cliente MCP.
-            result = compute_context(repo, query, "code_query", budget)
+            result = compute_context(repo, query, "code_query", budget, self_sufficient=True)
         return result
 
     result = await asyncio.to_thread(_work)

@@ -15,13 +15,15 @@ def test_content_not_flattened_to_120_chars():
     assert "```" in out                       # renderizado en bloque de codigo
 
 
-def test_content_over_2000_chars_gets_truncated_with_marker():
-    body = "x" * 3000
+def test_content_over_8000_chars_gets_truncated_with_marker():
+    # Red de seguridad: los productores (compressor) capan antes con body_chars;
+    # 8000 aqui solo protege de un productor sin cap.
+    body = "x" * 9000
     node = {"id": "n1", "name": "foo", "type": "function", "properties": {"content": body}}
     out = serialize_context([node])
     assert "[truncado]" in out
-    assert "x" * 2000 in out
-    assert "x" * 2001 not in out
+    assert "x" * 8000 in out
+    assert "x" * 8001 not in out
 
 
 def test_other_properties_still_capped_at_120():
