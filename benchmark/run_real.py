@@ -270,7 +270,10 @@ def run_oc_mcp_subprocess(query: str, repo_path: str) -> dict:
                # con PWD apuntando al repo principal, resolvia la raiz del proyecto
                # ALLI y editaba el repo real pese al aislamiento (visto en su DB:
                # "cd C:\...\leo-code && ..." en cada bash). Forzar PWD a la copia.
-               "PWD": os.path.abspath(repo_path)}
+               "PWD": os.path.abspath(repo_path),
+               # Activa el plugin .opencode/plugin/leo-first-action.js (C de M1):
+               # veta read/grep/glob/list hasta la primera llamada a get_context.
+               "LEO_FORCE": "1"}
         import shutil
         oc_bin = shutil.which("opencode") or "opencode"
         r = _run_capture(
