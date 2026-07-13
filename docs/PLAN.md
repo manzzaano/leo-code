@@ -65,9 +65,9 @@ Harnesses objetivo: **Claude Code, opencode, Codex**. Sin fecha límite: kanban 
 ### 🔵 M1 — Delta fuerte en opencode (ACTIVO)
 - [x] **B1 — get_context autosuficiente** (commit 335a3d2, 206 tests OK): vía MCP con cuerpos completos (body_chars 6000), presupuesto ×4, footer sin "read_file"; serializador re-truncaba a 2000 → red de seguridad 8000. Agente nativo sin cambios. Métrica guía: `redundant_native_after_ctx` → ~0.
 - [~] Corrida-señal B1 EN MARCHA (21:27, `benchmark/run_signal.ps1 b1_signal` → `b1_signal.json`) — mide B1 solo antes de decidir alcance de B2/C.
-- [ ] **B2 — dieta de definiciones:** revisar tamaño/número de tools expuestas (uso real: get_context 31, where 7, trace 4, resto 0 en 45 tareas). Fusionar o adelgazar lo no usado sin romper la promesa del producto.
-- [ ] **C — primera acción forzada (opencode):** plugin/config que garantice `get_context` como primer paso en tareas de código. Métrica guía: adopción ≥2 en tareas estructurales, varianza entre corridas ↓.
-- [ ] Benchmark 15 tareas × 3 corridas tras B1+B2, y otra tras C
+- [x] **B2 — dieta de definiciones** (commit 381803e): descripciones 823→664 tok/turno (−19%). Marginal; la palanca es C.
+- [x] **C — primera acción forzada (opencode)** (commit 5bc375f): plugin `.opencode/plugin/leo-first-action.js` veta read/grep/glob/list hasta la 1ª llamada a get_context; válvula tras 3 vetos; gated LEO_FORCE=1 (benchmark lo activa solo en OCMCP). Validado: smoke test + 4 ramas en node.
+- [ ] Benchmark 15 tareas × 3 corridas con B1+B2+C (HEAD≥5bc375f) → tabla de criterio
 - **Done cuando:** tabla de criterio de éxito cumple los 4 umbrales
 
 ### ⚪ M2 — Multi-harness
