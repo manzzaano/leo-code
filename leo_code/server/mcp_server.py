@@ -106,20 +106,17 @@ def _embed_bg(repo: str):
 _TOOL = types.Tool(
     name="get_context",
     description=(
-        "PRIMERA ACCION OBLIGATORIA para cualquier tarea sobre este codigo (pregunta, "
-        "bug, refactor, review, test): devuelve el subgrafo relevante COMPRIMIDO "
-        "(funciones/clases con sus dependencias, extraido del AST) en vez del archivo "
-        "entero. Sustituye a read/grep/glob para entender codigo: ahorra ~80% de "
-        "tokens con la misma senal. Solo despues de esto, usa read si vas a EDITAR "
-        "lineas concretas."
+        "PRIMERA ACCION OBLIGATORIA para cualquier tarea sobre este codigo: devuelve "
+        "el subgrafo relevante del AST con los cuerpos ya incluidos. Sustituye a "
+        "read/grep/glob para entender codigo — no releas lo que ya devuelve."
     ),
     inputSchema={
         "type": "object",
         "properties": {
-            "query": {"type": "string", "description": "La pregunta o tarea sobre el codigo."},
-            "repo_path": {"type": "string", "description": "Ruta del repo a consultar.", "default": "."},
+            "query": {"type": "string", "description": "Pregunta o tarea sobre el codigo."},
+            "repo_path": {"type": "string", "description": "Ruta del repo.", "default": "."},
             "task_type": {"type": "string", "description": "auto|code_query|refactor|debug|review|search|code_gen|optimize|audit", "default": "auto"},
-            "budget_tokens": {"type": "integer", "description": "Tope de tokens del contexto (0 = automatico segun tarea).", "default": 0},
+            "budget_tokens": {"type": "integer", "description": "Tope de tokens (0 = auto).", "default": 0},
         },
         "required": ["query"],
     },
@@ -131,40 +128,36 @@ _repo_arg = {"repo_path": {"type": "string", "description": "Ruta del repo/monor
 _GRAPH_TOOLS = [
     types.Tool(
         name="trace",
-        description=("DETERMINISTA, con prueba, sin alucinar. Devuelve el camino de "
-            "llamadas de un simbolo a otro (como fluye el control/dato de A a B), "
-            "incluso cruzando archivos, repos y lenguajes (frontend->endpoint->DB). "
-            "Cada salto citado como archivo:linea. Usalo para 'como llega X a Y'."),
+        description=("Camino de llamadas real de A a B (cruza archivos y lenguajes), "
+            "cada salto citado archivo:linea. Determinista, sin alucinar. "
+            "Para 'como llega X a Y'."),
         inputSchema={"type": "object", "properties": {
             "src": {"type": "string", "description": "Simbolo origen."},
             "dst": {"type": "string", "description": "Simbolo destino."}, **_repo_arg},
             "required": ["src", "dst"]}),
     types.Tool(
         name="impact",
-        description=("DETERMINISTA, con prueba. Que se ROMPE si cambias un simbolo: "
-            "cierre transitivo de todos sus llamadores, cada uno citado archivo:linea. "
-            "Cero alucinacion: es el grafo real, no una estimacion del LLM."),
+        description=("Que se ROMPE si cambias un simbolo: cierre transitivo de callers, "
+            "citado archivo:linea. Grafo real, determinista."),
         inputSchema={"type": "object", "properties": {
             "symbol": {"type": "string", "description": "Simbolo a cambiar."}, **_repo_arg},
             "required": ["symbol"]}),
     types.Tool(
         name="who_calls",
-        description="DETERMINISTA, con prueba. Quien llama a un simbolo (callers directos), citado archivo:linea.",
+        description="Callers directos de un simbolo, citados archivo:linea. Determinista.",
         inputSchema={"type": "object", "properties": {
             "symbol": {"type": "string", "description": "Simbolo."}, **_repo_arg},
             "required": ["symbol"]}),
     types.Tool(
         name="where",
-        description="DETERMINISTA, con prueba. Donde se define un simbolo, citado archivo:linea (todas las definiciones).",
+        description="Donde se define un simbolo (todas las definiciones), citado archivo:linea. Determinista.",
         inputSchema={"type": "object", "properties": {
             "symbol": {"type": "string", "description": "Simbolo."}, **_repo_arg},
             "required": ["symbol"]}),
     types.Tool(
         name="guard",
-        description=("DETERMINISTA, con prueba, cero LLM. ANTES de editar un simbolo: muestra el "
-            "RADIO DE EXPLOSION (que se rompe, transitivo, incluso cross-lenguaje via HTTP) y marca "
-            "que afectados estan CUBIERTOS por tests y cuales NO (riesgo). Usalo antes de cambiar "
-            "codigo para no introducir regresiones que un revisor-LLM se perderia."),
+        description=("ANTES de editar un simbolo: radio de explosion (transitivo, "
+            "cross-lenguaje) marcando que afectados tienen test y cuales NO. Determinista."),
         inputSchema={"type": "object", "properties": {
             "symbol": {"type": "string", "description": "Simbolo que vas a cambiar."}, **_repo_arg},
             "required": ["symbol"]}),
