@@ -65,7 +65,9 @@ Harnesses objetivo: **Claude Code, opencode, Codex**. Sin fecha límite: kanban 
 ### 🔵 M1 — Delta fuerte en opencode (ACTIVO)
 - [x] **B1 — get_context autosuficiente** (commit 335a3d2, 206 tests OK): vía MCP con cuerpos completos (body_chars 6000), presupuesto ×4, footer sin "read_file"; serializador re-truncaba a 2000 → red de seguridad 8000. Agente nativo sin cambios. Métrica guía: `redundant_native_after_ctx` → ~0.
 - [x] Corrida-señal B1 sola (`b1_signal.json`, 19 min): OC 5.00/57.0k · OCMCP 5.00/93.6k (**+64%**), adopción 0,7, 27 relecturas tras ctx. **B1 sin C no mueve nada** — el agente ni llama, y cuando llama relee. Confirma C como palanca.
-- [~] Validación 3× stack B1+B2+C EN MARCHA (21:46, HEAD=05d4d71) → sobreescribe `harness_run1/2/3.json`
+- [x] RUN 1 stack v1 (C = solo primera acción): **+83,5% tokens**, adopción 1,1, 28 relecturas TRAS get_context. Lección: autosuficiencia sin sustitución = lastre ×4 por turno. Corridas 2-3 abortadas (config descartada).
+- [x] **C v2** (commit fec9f92): el plugin captura del footer las fuentes ya entregadas y veta releerlas enteras (1 veto/archivo; offset/limit pasa). 6/6 ramas testeadas.
+- [~] Validación 3× stack B1+B2+Cv2 EN MARCHA (22:09, HEAD=fec9f92) → `harness_run1/2/3.json`
 - [x] **B2 — dieta de definiciones** (commit 381803e): descripciones 823→664 tok/turno (−19%). Marginal; la palanca es C.
 - [x] **C — primera acción forzada (opencode)** (commit 5bc375f): plugin `.opencode/plugin/leo-first-action.js` veta read/grep/glob/list hasta la 1ª llamada a get_context; válvula tras 3 vetos; gated LEO_FORCE=1 (benchmark lo activa solo en OCMCP). Validado: smoke test + 4 ramas en node.
 - [ ] Benchmark 15 tareas × 3 corridas con B1+B2+C (HEAD≥5bc375f) → tabla de criterio
