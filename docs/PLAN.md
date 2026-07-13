@@ -63,7 +63,8 @@ Harnesses objetivo: **Claude Code, opencode, Codex**. Sin fecha límite: kanban 
 - **Resultado:** steering v2 dobla adopción (0,5→0,93) y no basta ni de lejos. B+C confirmado.
 
 ### 🔵 M1 — Delta fuerte en opencode (ACTIVO)
-- [ ] **B1 — get_context autosuficiente:** incluir cuerpos fuente relevantes en la respuesta (con cap de tokens) para que el agente NO relea archivos. Métrica guía: `redundant_native_after_ctx` → ~0 (hoy: hasta 15 relecturas/tarea).
+- [x] **B1 — get_context autosuficiente** (commit 335a3d2, 206 tests OK): vía MCP con cuerpos completos (body_chars 6000), presupuesto ×4, footer sin "read_file"; serializador re-truncaba a 2000 → red de seguridad 8000. Agente nativo sin cambios. Métrica guía: `redundant_native_after_ctx` → ~0.
+- [~] Corrida-señal B1 EN MARCHA (21:27, `benchmark/run_signal.ps1 b1_signal` → `b1_signal.json`) — mide B1 solo antes de decidir alcance de B2/C.
 - [ ] **B2 — dieta de definiciones:** revisar tamaño/número de tools expuestas (uso real: get_context 31, where 7, trace 4, resto 0 en 45 tareas). Fusionar o adelgazar lo no usado sin romper la promesa del producto.
 - [ ] **C — primera acción forzada (opencode):** plugin/config que garantice `get_context` como primer paso en tareas de código. Métrica guía: adopción ≥2 en tareas estructurales, varianza entre corridas ↓.
 - [ ] Benchmark 15 tareas × 3 corridas tras B1+B2, y otra tras C
@@ -92,6 +93,12 @@ Harnesses objetivo: **Claude Code, opencode, Codex**. Sin fecha límite: kanban 
 - 2026-07-13 (cierre M0): steering v2 validado con n=3 → adopción 0,93 (objetivo ≥2), tokens +64,5% (objetivo −40%), score +0,09 (objetivo +0,5). **Vía A (steering) agotada como palanca principal.** M1 = B1 autosuficiencia de get_context + B2 dieta de tools + C forzado de primera acción en opencode.
 
 ## Notas de sesión
+
+**2026-07-13 noche (M1/B1):**
+- Causa técnica de las relecturas encontrada: estrategias code_edit/refactor/review/audit NO incluían cuerpo (solo firma+docstring) y el footer de code_edit decía "Usa read_file…"; debug truncaba a 2000 chars; el serializador (core/context.py) re-truncaba TODO a 2000 aunque el compresor pidiera más. Presupuestos 500–2500 tok.
+- B1 hecho (335a3d2): `self_sufficient=True` solo en la vía MCP. Tests: `tests/test_self_sufficient.py`.
+- Corrida-señal en marcha: si `redundant_native_after_ctx` no cae y tokens no bajan, B1 no basta → priorizar C (forzado). Si cae: B2 (dieta de definiciones) y luego validación 3×.
+- `benchmark/run_signal.ps1 <label>` = 1 corrida pareada suelta; `run_validation.ps1` = 3×.
 
 **2026-07-13 (M0):**
 - summary.json actual (mtime 2026-07-12 20:49) = corrida PRE-v2 (HEAD era 8d7588d al arrancar; v2 se committeó 20:52). Backup en `harness_prev2_run1.json`. Números: OC 4.73/89.9k tok/47s · OCMCP 5.00/124.8k tok(+39%)/37s · adopción 0,5.
