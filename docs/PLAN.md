@@ -4,7 +4,12 @@
 > ANTES de cerrar contexto. Si el contexto de la conversación supera ~40%, volcar
 > estado aquí y pedir `/clear`.
 
-**Última actualización:** 2026-07-14 02:45 · **Hito activo: M1**
+**Última actualización:** 2026-07-14 14:30 · **Hito activo: M1**
+
+> ⚠️ **Toda la tabla histórica de falsaciones y la línea base tienen sesgo de
+> medición** (tokens de subagentes `task` no contados; OC delegaba mucho más que
+> OCMCP → OC salía artificialmente barato). Corregido desde commit 364cc5b.
+> No re-derivar conclusiones de números antiguos sin re-medir.
 
 ## Objetivo
 
@@ -94,8 +99,10 @@ Harnesses objetivo: **Claude Code, opencode, Codex**. Sin fecha límite: kanban 
 - [x] **Fricción localizada** (diagnóstico c5b por tarea): tareas SIN get_context **+1%** mediana (overhead ~cero; swap gana: t5 −64%, t13 −48%); CON get_context **+128%** — la respuesta ×4 cebaba MÁS exploración (t14: 1→14 nativas) y viajaba cada turno. El veneno era la grasa de B1, no el MCP.
 - [x] **Dieta de get_context** (commit b1eee05): sin multiplicador ×4, cuerpos de estrategias 6000→2500. 206 tests OK.
 - [x] Señal c6 (11:03-11:21): agregado +36,4% PERO **mediana por tarea +3%** y gana 4/15; dur +0,5%, score 0,00. Agregado sesgado por 2 outliers estocásticos (t4 +753%, t6 +684% — get_context ceba exploración; en cambio t15 −69%, t14 −36% donde el swap trabaja solo). Señal única no decide ±10% → pooled n=3.
-- [~] **Validación 3× criterio v2 EN MARCHA** (11:45, HEAD=b1eee05) → `harness_run1/2/3.json`. Juzgar con pooled Y mediana por tarea. Si tokens ±10% + score ≥ + dur ≤+10% → M1 CERRADO → PushNotification.
-- [ ] Validación 3× con el criterio v2 (score ≥, dur ≤+10%, tokens ±10%) → cierra M1
+- [x] **Validación 3× criterio v2** (11:45-12:52, HEAD=3d7310e≡b1eee05 en código) → `harness_run1/2/3.json`. **FALLA tokens**: mediana +52,5%, gana 9/42 pares; dur −8% OK; score +0,27 OK. c6 (+3%) fue tiro afortunado (su t15 −69% era un OC desafortunado de 185k, no el swap).
+- [x] **Diagnóstico del +52% → SESGO DE MEDICIÓN CONFIRMADO** (DB de opencode, `session.parent_id`): el stream `--format json` solo emite step_finish de la sesión PADRE; los subagentes de `task` corren en sesiones hijas invisibles. En la validación: OC ocultaba **5,15M tokens** (2× su cifra medida, 14 hijas) y OCMCP 0,82M (5 hijas). Verificación del mapeo: stream total == in+out+reasoning+cache de la DB, exacto (0,0%) en 87 sesiones. **Corregido: pooled −23,5%, mediana/tarea +6,0%, gana 19/44** — el criterio v2 PASARÍA. Por corrida corregida: r1 −19%, r2 +4,3%, r3 +55,5% de mediana (varianza alta → confirmar con medición limpia, no post-hoc).
+- [x] **Fix contabilidad** (commit 364cc5b): `hidden_task_tokens()` en run_real.py suma descendientes (CTE recursiva, unidades idénticas al stream) por directorio+t_start; campo `task_tokens` en resultados. Auto-check contra los totales conocidos: exacto.
+- [~] **Validación 3× con contabilidad correcta EN MARCHA** (14:26, HEAD=364cc5b) → `harness_run1/2/3.json` (los sesgados respaldados como `harness_biased_run1/2/3.json`). Si mediana ±10% + score ≥ + dur ≤+10% → **M1 CERRADO** → PushNotification.
 - [x] **B2 — dieta de definiciones** (commit 381803e): descripciones 823→664 tok/turno (−19%). Marginal; la palanca es C.
 - [x] **C — primera acción forzada (opencode)** (commit 5bc375f): plugin `.opencode/plugin/leo-first-action.js` veta read/grep/glob/list hasta la 1ª llamada a get_context; válvula tras 3 vetos; gated LEO_FORCE=1 (benchmark lo activa solo en OCMCP). Validado: smoke test + 4 ramas en node.
 - [ ] Benchmark 15 tareas × 3 corridas con B1+B2+C (HEAD≥5bc375f) → tabla de criterio
@@ -129,7 +136,12 @@ Harnesses objetivo: **Claude Code, opencode, Codex**. Sin fecha límite: kanban 
 **2026-07-14 madrugada (M1, criterio v2) — ESTADO PARA /clear:**
 - c5b analizada (+51,9% tokens, adopción 0,5, score/dur ≈). Criterio M1 REDEFINIDO (goal nuevo del usuario, ver tablas arriba): objetivo tokens ahora ±10% e2e, no −40%.
 - SIGUIENTE PASO EXACTO: diagnóstico por tarea de `c5b_signal.json` para localizar la fricción residual (+52%). Preguntas concretas: (1) ¿cuántos tokens aporta cada respuesta get_context (×4 de B1)? → probar presupuesto ×1 (revertir multiplicador en engine.py línea `budget = max(budget * 4, 4000)`); (2) ¿el swap disparó? (grep SWAP en debug o comparar native_calls de reads enteros); (3) ¿overhead de defs×turnos? Después: corrida-señal por palanca (`run_signal.ps1 <label>`), y cuando una señal dé tokens dentro de ±10% con score igual → validación 3× → cierra M1 → PushNotification.
-- Monitor bbcwi974v vigila `validation_progress.log`. No usar datos de c5 (murió por re-indexado). No lanzar 2 corridas en paralelo.
+- Monitor baelrpthu (sesión 11:54) vigila `validation_progress.log`. No usar datos de c5 (murió por re-indexado). No lanzar 2 corridas en paralelo.
+- 11:54: RUN 1 en batch 5/15. Visto en vivo: t4 OC timeout (tok=0, 180s) y t4 OCMCP 552k — t4 vuelve a ser outlier estocástico; al juzgar, mirar mediana por tarea además del pooled. Zombi python 7148 (`leo_code.server.mcp_server` huérfano de c5b) vivo e inofensivo — c6 corrió bien con él.
+- Nuevo: `benchmark/judge_v2.py` (pooled + mediana/tarea + veredicto v2 en un comando; auto-verificado contra c6).
+- 12:13 RUN 1 exit=0 (27 min, lento): **3 timeouts OC** (t4/t9/t14 tok=0 → OC score 4,20), mediana +52,5%, pooled +206%. Ruido enorme vs c6 (+3% mediana) — posible franja degradada de API. No decidir con n=1; esperar RUN 2-3 y juzgar pooled n=3 con `judge_v2.py`.
+- 12:32 RUN 2 exit=0 (19 min, 0 timeouts): mediana **+47,6%**, gana 3/15, pooled +44%, dur −7,8%, score 0,00, adopción 0,7. Dos corridas seguidas ~+50% con la MISMA config que c6 (+3%) → c6 fue tiro afortunado, no la dieta. Outliers nuevos: t11 +532%, t14 +640%. RUN 3 decide, pero pinta a FALLA de tokens ±10% → tocará diagnóstico con n=3 (¿qué hace get_context para cebar exploración?).
+- 14:26 tarde: sesgo `task` confirmado y corregido (ver kanban). DB opencode en `~/.local/share/opencode/opencode.db` (tabla `session`: parent_id + tokens_*; stream total == in+out+reasoning+cache exacto). Análisis reproducible: scratchpad `fix_bias.py`. Sonda viva con `opencode run` COLGÓ 84 min (evitar; la DB responde todo). LEO_FORCE=1 en OCMCP verificado: `leo-first-action.js` ES el swap pasivo de C v5 (sin vetos, nombre heredado) — sin fricción fantasma. Validación limpia corre desde 14:26 (~60 min); juzgar con `judge_v2.py harness_run{1,2,3}.json`.
 
 **2026-07-13 noche (M1/B1):**
 - Causa técnica de las relecturas encontrada: estrategias code_edit/refactor/review/audit NO incluían cuerpo (solo firma+docstring) y el footer de code_edit decía "Usa read_file…"; debug truncaba a 2000 chars; el serializador (core/context.py) re-truncaba TODO a 2000 aunque el compresor pidiera más. Presupuestos 500–2500 tok.
