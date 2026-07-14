@@ -4,22 +4,39 @@
 > ANTES de cerrar contexto. Si el contexto de la conversación supera ~40%, volcar
 > estado aquí y pedir `/clear`.
 
-**Última actualización:** 2026-07-13 20:55 · **Hito activo: M1**
+**Última actualización:** 2026-07-14 02:45 · **Hito activo: M1**
 
 ## Objetivo
 
-Entregar **leo-mcp** (servidor MCP, 6 tools) empaquetado a compañeros para que lo
-usen en su agente diario y den su visto bueno. "Terminado" = cumple sus promesas
-con **delta fuerte** medido vs agente vanilla.
+Entregar **leo-mcp** (servidor MCP, 2 tools: get_context + graph) empaquetado a
+compañeros para que lo usen en su agente diario y den su visto bueno.
 
-### Criterio de éxito (delta fuerte, OC+leo-mcp vs OC vanilla, benchmark 15 tareas × 3 corridas)
+### Criterio de éxito M1 (v2, redefinido 2026-07-14 con 6 falsaciones medidas)
 
-| Métrica | Umbral |
-|---|---|
-| Tokens | **≥40% menos** |
-| Score respuesta | **+0.5** |
-| Duración | **−30%** |
-| Adopción | ≥2 llamadas MCP/tarea estructural |
+La promesa medible es **corrección estructural garantizada sin coste**, no ahorro e2e:
+
+| Métrica | Umbral | Estado |
+|---|---|---|
+| Corrección estructural (graph: impact/trace/guard/who_calls) | 100% precisión+recall vs oráculos, gateado en CI | ✅ ya probado (`audit_formal.py`) |
+| Ahorro POR consulta (get_context vs leer los archivos que cubre) | 80-97% | ✅ ya probado (`token_efficiency.py`) |
+| Calidad (score juez, 3× validación) | OCMCP ≥ OC | por validar |
+| Velocidad | duración ≤ +10% vs vanilla | por validar |
+| Sobrecoste tokens e2e | **dentro de ±10%** vs vanilla (hoy +52%: eliminar fricción residual) | **TRABAJO PENDIENTE** |
+
+**Evidencia que mató "−40% e2e vía MCP"** (6 configs, todas medidas, todas peor o neutro):
+
+| Config | Δ tokens | Δ dur | Δ score |
+|---|---|---|---|
+| Steering v2 (n=45) | +64,5% | ≈0 | +0,09 |
+| B1 autosuficiente | +64% | ≈0 | 0 |
+| B1+veto 1ª acción | +83,5% | −2% | 0 |
+| C v2 veto relecturas | +4% (espejismo; pierde 11/15 tareas) | +5% | 0 |
+| C v3 sustitución forzada | +108% | ≈0 | 0 |
+| C v5 pasiva (c5b) | +51,9% | +7,7% | 0,00 |
+
+Causa estructural: no controlamos el loop del agente; cada fricción (veto, llamada
+forzada) añade turnos y cada turno re-envía la conversación entera. El ahorro real
+del motor es POR consulta y la corrección estructural es lo que vanilla no tiene.
 
 ### Línea base (2026-07-13, 15 tareas)
 
@@ -73,7 +90,9 @@ Harnesses objetivo: **Claude Code, opencode, Codex**. Sin fecha límite: kanban 
 - [x] Decisión usuario 2026-07-14: **seguir hasta −40%** (no reencuadrar criterio).
 - [x] **C v5** (commits b47f45a+4201037): sustitución PASIVA — read entero de código devuelve la vista comprimida del AST (`leo_code.filectx`, ~50% del crudo, 0,9s con índice caliente) sin turnos extra ni vetos (un veto dejó al agente respondiendo a ciegas). MCP reducido a 2 tools (get_context + graph op=...). Footer ordena responder ya. Swap verificado end-to-end (28,2k→13,8k, respuesta correcta).
 - [x] Señal c5 (HEAD=b47f45a, sin fix persistencia) MURIÓ: cada read re-indexaba en la copia → timeouts 180s con tok=0. Confirma que el fix 4201037 era necesario. NO sembrar la ruta de la copia en kc_indexed_repos.json: el índice sembrado lleva rutas del repo original (daría contexto vacío).
-- [~] Señal c5b EN MARCHA (02:11, HEAD=7fe67cf, con fix) → `c5b_signal.json`. Vigilar timeouts en primeros minutos.
+- [x] Señal c5b (02:11-02:34, HEAD=7fe67cf, 0 timeouts): OC 5.00/91.5k/43,3s · OCMCP 5.00/138.9k(**+51,9%**)/46,6s(+7,7%) · adopción 0,5. C v5 pasiva tampoco baja. 6ª falsación → criterio M1 redefinido (ver arriba).
+- [ ] **Fricción residual → ±10%:** localizar el sobrecoste que queda con datos de c5b (candidatos: respuesta ×4 de B1 cuando SÍ llama [bajar a ×1-×2], overhead de definiciones×turnos, swap no disparando [adopción de reads enteros baja]). Corridas-señal por palanca.
+- [ ] Validación 3× con el criterio v2 (score ≥, dur ≤+10%, tokens ±10%) → cierra M1
 - [x] **B2 — dieta de definiciones** (commit 381803e): descripciones 823→664 tok/turno (−19%). Marginal; la palanca es C.
 - [x] **C — primera acción forzada (opencode)** (commit 5bc375f): plugin `.opencode/plugin/leo-first-action.js` veta read/grep/glob/list hasta la 1ª llamada a get_context; válvula tras 3 vetos; gated LEO_FORCE=1 (benchmark lo activa solo en OCMCP). Validado: smoke test + 4 ramas en node.
 - [ ] Benchmark 15 tareas × 3 corridas con B1+B2+C (HEAD≥5bc375f) → tabla de criterio
@@ -100,14 +119,14 @@ Harnesses objetivo: **Claude Code, opencode, Codex**. Sin fecha límite: kanban 
 
 - 2026-07-13: producto a entregar = **leo-mcp** (no el agente TUI). Criterio = delta fuerte. Estrategia B+C. Kanban sin fecha.
 - 2026-07-13 (cierre M0): steering v2 validado con n=3 → adopción 0,93 (objetivo ≥2), tokens +64,5% (objetivo −40%), score +0,09 (objetivo +0,5). **Vía A (steering) agotada como palanca principal.** M1 = B1 autosuficiencia de get_context + B2 dieta de tools + C forzado de primera acción en opencode.
+- 2026-07-14 (goal nuevo del usuario): **criterio M1 v2** — corrección estructural 100% (probada) + ahorro 80-97% por consulta (probado) + score ≥ vanilla + dur ≤+10% + tokens e2e ±10%. "−40% e2e" descartado tras 6 falsaciones (tabla arriba). PushNotification al cerrar cada hito.
 
 ## Notas de sesión
 
-**2026-07-14 madrugada (M1/C v5) — ESTADO PARA /clear:**
-- EN CURSO: señal c5b (`run_signal.ps1 c5b_signal`, arrancada 02:11, HEAD=7fe67cf). Salud verificada a 02:14: batch 4/15, 0 timeouts, OCMCP t3 28s. Termina ~02:30 → `benchmark/results_real/c5b_signal.json`.
-- SIGUIENTE PASO EXACTO al llegar el json: agregar métricas (script de análisis: agrupar por system; campos tokens/score_total/mcp_calls/redundant_native_after_ctx; delta = OCMCP/OC−1). Si delta tokens ≤ ~−10% y score igual → lanzar validación 3× (`run_validation.ps1`) y con n=3 rellenar tabla de criterio. Si delta sigue positivo → siguiente palanca: bajar presupuesto B1 ×4→×2 (engine.py `budget*4`) y/o swap también en outputs de grep/list; nueva señal.
-- Monitor bbcwi974v vigila `validation_progress.log` (avisa RUN start/exit). Señal previa c5 murió por re-indexado (sin fix 4201037) — no reutilizar sus datos.
-- Al terminar TODO M1: PushNotification al usuario con tabla vs criterio.
+**2026-07-14 madrugada (M1, criterio v2) — ESTADO PARA /clear:**
+- c5b analizada (+51,9% tokens, adopción 0,5, score/dur ≈). Criterio M1 REDEFINIDO (goal nuevo del usuario, ver tablas arriba): objetivo tokens ahora ±10% e2e, no −40%.
+- SIGUIENTE PASO EXACTO: diagnóstico por tarea de `c5b_signal.json` para localizar la fricción residual (+52%). Preguntas concretas: (1) ¿cuántos tokens aporta cada respuesta get_context (×4 de B1)? → probar presupuesto ×1 (revertir multiplicador en engine.py línea `budget = max(budget * 4, 4000)`); (2) ¿el swap disparó? (grep SWAP en debug o comparar native_calls de reads enteros); (3) ¿overhead de defs×turnos? Después: corrida-señal por palanca (`run_signal.ps1 <label>`), y cuando una señal dé tokens dentro de ±10% con score igual → validación 3× → cierra M1 → PushNotification.
+- Monitor bbcwi974v vigila `validation_progress.log`. No usar datos de c5 (murió por re-indexado). No lanzar 2 corridas en paralelo.
 
 **2026-07-13 noche (M1/B1):**
 - Causa técnica de las relecturas encontrada: estrategias code_edit/refactor/review/audit NO incluían cuerpo (solo firma+docstring) y el footer de code_edit decía "Usa read_file…"; debug truncaba a 2000 chars; el serializador (core/context.py) re-truncaba TODO a 2000 aunque el compresor pidiera más. Presupuestos 500–2500 tok.
