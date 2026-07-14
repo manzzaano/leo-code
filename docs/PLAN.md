@@ -72,7 +72,8 @@ Harnesses objetivo: **Claude Code, opencode, Codex**. Sin fecha límite: kanban 
 - [x] RUN 1 Cv3: **+108%** con adopción 2,7 — contraproducente. **Lección estructural: cada turno extra (veto, llamada forzada) re-envía la conversación entera; los turnos dominan el coste, no el contenido.** Validación abortada.
 - [x] Decisión usuario 2026-07-14: **seguir hasta −40%** (no reencuadrar criterio).
 - [x] **C v5** (commits b47f45a+4201037): sustitución PASIVA — read entero de código devuelve la vista comprimida del AST (`leo_code.filectx`, ~50% del crudo, 0,9s con índice caliente) sin turnos extra ni vetos (un veto dejó al agente respondiendo a ciegas). MCP reducido a 2 tools (get_context + graph op=...). Footer ordena responder ya. Swap verificado end-to-end (28,2k→13,8k, respuesta correcta).
-- [~] Corrida-señal c5 EN MARCHA (01:47, HEAD=b47f45a — SIN el fix 4201037 de persistencia: duración puede salir inflada por re-indexados; tokens válidos) → `c5_signal.json`
+- [x] Señal c5 (HEAD=b47f45a, sin fix persistencia) MURIÓ: cada read re-indexaba en la copia → timeouts 180s con tok=0. Confirma que el fix 4201037 era necesario. NO sembrar la ruta de la copia en kc_indexed_repos.json: el índice sembrado lleva rutas del repo original (daría contexto vacío).
+- [~] Señal c5b EN MARCHA (02:11, HEAD=7fe67cf, con fix) → `c5b_signal.json`. Vigilar timeouts en primeros minutos.
 - [x] **B2 — dieta de definiciones** (commit 381803e): descripciones 823→664 tok/turno (−19%). Marginal; la palanca es C.
 - [x] **C — primera acción forzada (opencode)** (commit 5bc375f): plugin `.opencode/plugin/leo-first-action.js` veta read/grep/glob/list hasta la 1ª llamada a get_context; válvula tras 3 vetos; gated LEO_FORCE=1 (benchmark lo activa solo en OCMCP). Validado: smoke test + 4 ramas en node.
 - [ ] Benchmark 15 tareas × 3 corridas con B1+B2+C (HEAD≥5bc375f) → tabla de criterio
@@ -101,6 +102,12 @@ Harnesses objetivo: **Claude Code, opencode, Codex**. Sin fecha límite: kanban 
 - 2026-07-13 (cierre M0): steering v2 validado con n=3 → adopción 0,93 (objetivo ≥2), tokens +64,5% (objetivo −40%), score +0,09 (objetivo +0,5). **Vía A (steering) agotada como palanca principal.** M1 = B1 autosuficiencia de get_context + B2 dieta de tools + C forzado de primera acción en opencode.
 
 ## Notas de sesión
+
+**2026-07-14 madrugada (M1/C v5) — ESTADO PARA /clear:**
+- EN CURSO: señal c5b (`run_signal.ps1 c5b_signal`, arrancada 02:11, HEAD=7fe67cf). Salud verificada a 02:14: batch 4/15, 0 timeouts, OCMCP t3 28s. Termina ~02:30 → `benchmark/results_real/c5b_signal.json`.
+- SIGUIENTE PASO EXACTO al llegar el json: agregar métricas (script de análisis: agrupar por system; campos tokens/score_total/mcp_calls/redundant_native_after_ctx; delta = OCMCP/OC−1). Si delta tokens ≤ ~−10% y score igual → lanzar validación 3× (`run_validation.ps1`) y con n=3 rellenar tabla de criterio. Si delta sigue positivo → siguiente palanca: bajar presupuesto B1 ×4→×2 (engine.py `budget*4`) y/o swap también en outputs de grep/list; nueva señal.
+- Monitor bbcwi974v vigila `validation_progress.log` (avisa RUN start/exit). Señal previa c5 murió por re-indexado (sin fix 4201037) — no reutilizar sus datos.
+- Al terminar TODO M1: PushNotification al usuario con tabla vs criterio.
 
 **2026-07-13 noche (M1/B1):**
 - Causa técnica de las relecturas encontrada: estrategias code_edit/refactor/review/audit NO incluían cuerpo (solo firma+docstring) y el footer de code_edit decía "Usa read_file…"; debug truncaba a 2000 chars; el serializador (core/context.py) re-truncaba TODO a 2000 aunque el compresor pidiera más. Presupuestos 500–2500 tok.
