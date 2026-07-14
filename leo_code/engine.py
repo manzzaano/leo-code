@@ -247,9 +247,9 @@ def compute_context(repo: str, query: str, task_type_in: str = "auto",
     # la query por su cuenta: con task_type forzado a code_query y query corta en inglés
     # daba no_code → presupuesto 0 → contexto VACÍO al cliente MCP.
     budget = budget_tokens_in if budget_tokens_in > 0 else TOKEN_BUDGET.get(task_type, 1500)
-    if self_sufficient and budget_tokens_in <= 0:
-        # ×4 sigue siendo ~10× menos que releer los archivos que evita.
-        budget = max(budget * 4, 4000)
+    # self_sufficient ya NO multiplica el presupuesto: medido en c5b, la respuesta
+    # x4 no sustituia la exploracion sino que la cebaba (tareas con get_context
+    # +128% mediana; sin el, +1%). Cuerpos si, grasa no.
 
     # no_code: devolver documentos relevantes a la query (keyword match en contenido)
     if task_type == "no_code":

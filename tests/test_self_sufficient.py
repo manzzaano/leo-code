@@ -27,11 +27,12 @@ def test_code_edit_self_sufficient_incluye_cuerpo_y_no_manda_a_read_file():
     assert "return 42" in ss                   # ahora: cuerpo incluido
     assert "read_file" not in ss               # y sin invitación a releer
 
-    # cuerpos largos: cap sube de 2000 a 6000 chars
+    # cuerpos largos: cap 2500 (medido en c5b: respuestas gordas ceban mas
+    # exploracion en vez de sustituirla)
     big = [_cap("big_fn", "x = 1\n" * 2000)]  # 12000 chars
     ss_big = compress(big, big, task_type="debug", self_sufficient=True)
     body = ss_big.split("content")[1] if "content" in ss_big else ss_big
-    assert len(body) > 4000
+    assert 2000 < len(body) < 4000
 
 
 def test_default_no_cambia_para_agente_nativo():
