@@ -133,6 +133,45 @@ def run_leo_smart_subprocess(query: str, repo_path: str) -> dict:
 MCP_TOOLS = {"get_context", "trace", "impact", "who_calls", "where", "guard"}
 NATIVE_EXPLORE = {"read", "grep", "glob", "list"}
 
+_OC_DB = Path.home() / ".local" / "share" / "opencode" / "opencode.db"
+
+
+def hidden_task_tokens(repo_path: str, t_start_ms: int) -> int:
+    """Tokens de sesiones hijas (tool `task`) que el stream del padre NO emite.
+
+    El total del stream (step_finish) == in+out+reasoning+cache de la sesión padre
+    en la DB de opencode (verificado exacto sobre 87 sesiones), pero los subagentes
+    de `task` corren en sesiones hijas invisibles al stream: en la validación del
+    14/07 OC ocultaba 5,15M tokens así (2x su cifra medida). Se atribuye por
+    directorio+tiempo: con --batch 1 hay exactamente una sesión padre por
+    `opencode run` en ese directorio desde t_start."""
+    import sqlite3
+    try:
+        con = sqlite3.connect(f"file:{_OC_DB.as_posix()}?mode=ro", uri=True, timeout=5)
+        try:
+            row = con.execute(
+                "SELECT id FROM session WHERE replace(directory,'\\','/')=? "
+                "AND parent_id IS NULL AND time_created>=? "
+                "ORDER BY time_created DESC LIMIT 1",
+                (os.path.abspath(repo_path).replace("\\", "/"), t_start_ms),
+            ).fetchone()
+            if not row:
+                return 0
+            total = con.execute(
+                "WITH RECURSIVE d(id) AS (SELECT ? UNION "
+                "SELECT s.id FROM session s JOIN d ON s.parent_id=d.id) "
+                "SELECT COALESCE(SUM(tokens_input+tokens_output+COALESCE(tokens_reasoning,0)"
+                "+tokens_cache_read+tokens_cache_write),0) FROM session "
+                "WHERE id IN (SELECT id FROM d) AND id<>?",
+                (row[0], row[0]),
+            ).fetchone()[0]
+            return int(total or 0)
+        finally:
+            con.close()
+    except Exception as e:
+        print(f"      [WARN] hidden_task_tokens fallo ({e}); tokens de task NO contados")
+        return 0
+
 
 def parse_oc_events(stdout: str) -> dict:
     """Parsea el stream --format json de opencode: texto final, tokens reales por
@@ -239,7 +278,9 @@ def run_oc_subprocess(query: str, repo_path: str) -> dict:
         )
         p = parse_oc_events(r.stdout)
         response = p["response"] or (r.stderr or "").strip()
-        return {"system": "OC", "response": response[:4000], "tokens": p["tokens"],
+        task_tok = hidden_task_tokens(repo_path, int(t0 * 1000))
+        return {"system": "OC", "response": response[:4000], "tokens": p["tokens"] + task_tok,
+                "task_tokens": task_tok,
                 "mcp_calls": p["mcp_calls"], "native_calls": p["native_calls"],
                 "redundant_native_after_ctx": p["redundant_native_after_ctx"],
                 "duration_ms": int((time.time() - t0) * 1000)}
@@ -282,7 +323,9 @@ def run_oc_mcp_subprocess(query: str, repo_path: str) -> dict:
         )
         p = parse_oc_events(r.stdout)
         response = p["response"] or (r.stderr or "").strip()
-        return {"system": "OCMCP", "response": response[:4000], "tokens": p["tokens"],
+        task_tok = hidden_task_tokens(repo_path, int(t0 * 1000))
+        return {"system": "OCMCP", "response": response[:4000], "tokens": p["tokens"] + task_tok,
+                "task_tokens": task_tok,
                 "mcp_calls": p["mcp_calls"], "native_calls": p["native_calls"],
                 "redundant_native_after_ctx": p["redundant_native_after_ctx"],
                 "duration_ms": int((time.time() - t0) * 1000)}
