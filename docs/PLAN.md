@@ -93,7 +93,8 @@ Harnesses objetivo: **Claude Code, opencode, Codex**. Sin fecha límite: kanban 
 - [x] Señal c5b (02:11-02:34, HEAD=7fe67cf, 0 timeouts): OC 5.00/91.5k/43,3s · OCMCP 5.00/138.9k(**+51,9%**)/46,6s(+7,7%) · adopción 0,5. C v5 pasiva tampoco baja. 6ª falsación → criterio M1 redefinido (ver arriba).
 - [x] **Fricción localizada** (diagnóstico c5b por tarea): tareas SIN get_context **+1%** mediana (overhead ~cero; swap gana: t5 −64%, t13 −48%); CON get_context **+128%** — la respuesta ×4 cebaba MÁS exploración (t14: 1→14 nativas) y viajaba cada turno. El veneno era la grasa de B1, no el MCP.
 - [x] **Dieta de get_context** (commit b1eee05): sin multiplicador ×4, cuerpos de estrategias 6000→2500. 206 tests OK.
-- [~] Señal c6 EN MARCHA (11:03, HEAD=b1eee05) → `c6_signal.json`. Si tokens ±10% y score igual → validación 3× (criterio v2).
+- [x] Señal c6 (11:03-11:21): agregado +36,4% PERO **mediana por tarea +3%** y gana 4/15; dur +0,5%, score 0,00. Agregado sesgado por 2 outliers estocásticos (t4 +753%, t6 +684% — get_context ceba exploración; en cambio t15 −69%, t14 −36% donde el swap trabaja solo). Señal única no decide ±10% → pooled n=3.
+- [~] **Validación 3× criterio v2 EN MARCHA** (11:45, HEAD=b1eee05) → `harness_run1/2/3.json`. Juzgar con pooled Y mediana por tarea. Si tokens ±10% + score ≥ + dur ≤+10% → M1 CERRADO → PushNotification.
 - [ ] Validación 3× con el criterio v2 (score ≥, dur ≤+10%, tokens ±10%) → cierra M1
 - [x] **B2 — dieta de definiciones** (commit 381803e): descripciones 823→664 tok/turno (−19%). Marginal; la palanca es C.
 - [x] **C — primera acción forzada (opencode)** (commit 5bc375f): plugin `.opencode/plugin/leo-first-action.js` veta read/grep/glob/list hasta la 1ª llamada a get_context; válvula tras 3 vetos; gated LEO_FORCE=1 (benchmark lo activa solo en OCMCP). Validado: smoke test + 4 ramas en node.
