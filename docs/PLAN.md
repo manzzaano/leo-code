@@ -4,7 +4,7 @@
 > ANTES de cerrar contexto. Si el contexto de la conversación supera ~40%, volcar
 > estado aquí y pedir `/clear`.
 
-**Última actualización:** 2026-07-14 14:30 · **Hito activo: M1**
+**Última actualización:** 2026-07-14 19:55 · **Hito activo: M1 CERRADO → M2 pendiente de arranque**
 
 > ⚠️ **Toda la tabla histórica de falsaciones y la línea base tienen sesgo de
 > medición** (tokens de subagentes `task` no contados; OC delegaba mucho más que
@@ -22,11 +22,14 @@ La promesa medible es **corrección estructural garantizada sin coste**, no ahor
 
 | Métrica | Umbral | Estado |
 |---|---|---|
-| Corrección estructural (graph: impact/trace/guard/who_calls) | 100% precisión+recall vs oráculos, gateado en CI | ✅ ya probado (`audit_formal.py`) |
-| Ahorro POR consulta (get_context vs leer los archivos que cubre) | 80-97% | ✅ ya probado (`token_efficiency.py`) |
-| Calidad (score juez, 3× validación) | OCMCP ≥ OC | por validar |
-| Velocidad | duración ≤ +10% vs vanilla | por validar |
-| Sobrecoste tokens e2e | **dentro de ±10%** vs vanilla (hoy +52%: eliminar fricción residual) | **TRABAJO PENDIENTE** |
+| Corrección estructural (graph: impact/trace/guard/who_calls) | 100% precisión+recall vs oráculos, gateado en CI | ✅ probado (`audit_formal.py`) |
+| Ahorro POR consulta (get_context vs leer los archivos que cubre) | 80-97% | ✅ probado (`token_efficiency.py`) |
+| Calidad (score juez, 3× validación) | OCMCP ≥ OC | ✅ **+0,18** (5,00 vs 4,82; n=3 bc1400) |
+| Velocidad | duración ≤ +10% vs vanilla | ✅ **−14,2%** |
+| Sobrecoste tokens e2e | ≤ +10% mediana/tarea | ✅ **+1,9%** (pooled **−30,1%**) |
+
+**✅ CUMPLIDO 2026-07-14 19:49 — validación 3× config bc1400 (HEAD=b636a9f), contabilidad
+completa (subagentes incluidos), exit=0 de `judge_v2.py`.**
 
 **Evidencia que mató "−40% e2e vía MCP"** (6 configs, todas medidas, todas peor o neutro):
 
@@ -84,7 +87,7 @@ Harnesses objetivo: **Claude Code, opencode, Codex**. Sin fecha límite: kanban 
 - [x] Análisis → decisión B/C (ver "Resultados steering v2" y "Decisiones")
 - **Resultado:** steering v2 dobla adopción (0,5→0,93) y no basta ni de lejos. B+C confirmado.
 
-### 🔵 M1 — Delta fuerte en opencode (ACTIVO)
+### ✅ M1 — Delta fuerte en opencode (CERRADO 2026-07-14)
 - [x] **B1 — get_context autosuficiente** (commit 335a3d2, 206 tests OK): vía MCP con cuerpos completos (body_chars 6000), presupuesto ×4, footer sin "read_file"; serializador re-truncaba a 2000 → red de seguridad 8000. Agente nativo sin cambios. Métrica guía: `redundant_native_after_ctx` → ~0.
 - [x] Corrida-señal B1 sola (`b1_signal.json`, 19 min): OC 5.00/57.0k · OCMCP 5.00/93.6k (**+64%**), adopción 0,7, 27 relecturas tras ctx. **B1 sin C no mueve nada** — el agente ni llama, y cuando llama relee. Confirma C como palanca.
 - [x] RUN 1 stack v1 (C = solo primera acción): **+83,5% tokens**, adopción 1,1, 28 relecturas TRAS get_context. Lección: autosuficiencia sin sustitución = lastre ×4 por turno. Corridas 2-3 abortadas (config descartada).
@@ -105,15 +108,15 @@ Harnesses objetivo: **Claude Code, opencode, Codex**. Sin fecha límite: kanban 
 - [x] **Validación 3× con contabilidad correcta** (14:26-15:33, HEAD=364cc5b) → respaldada en `harness_clean_run1/2/3.json` (sesgadas en `harness_biased_run*.json`). Pooled n=3: **tokens mediana −1,6% / pooled −34,1% OK · dur +6,9% OK · score −0,09 FALLA**. El gap de score es SOLO asimetría de timeouts (OCMCP 2: t5/t4; OC 1: t14; cada timeout puntúa 0): en los 42 pares válidos ambos = 5,000 exacto. Fricción real que queda: t2_debug (+207/+258/+409) y t5_search (+281/+652/timeout) — sistemáticas; el resto dentro de ruido o ganando.
 - [x] **Ampliación a n=6** (15:34-16:26): corridas 4-6 impecables (0 timeouts, score 5,00=5,00). **Pooled n=6 (87 pares): tokens mediana +1,2% / pooled −32,1% ✅ · dur +1,8% ✅ · score 4,96 vs 4,91 ❌ por la letra** — el −0,04 es íntegramente los 3 timeouts de las corridas 1-3 (OCMCP 2 vs OC 1; en pares válidos 5,000=5,000; 2/90 vs 1/90 n.s.). Regla preregistrada no se retuerce: M1 sigue abierto.
 - [~] **Palanca anti-timeout/fricción** (commit pendiente de señal): t2_debug pide un bug a nivel de línea en `rag/compressor.py`, EXACTAMENTE un archivo donde el swap a 600 disparaba (vista 52%) → compensación con greps/relecturas (+224%). Barrido medido: a 1400 el swap suelta compressor.py (81%) y parser.py (95%) y conserva loop.py (61%). **body-chars 600→1400** aplicado (commit b636a9f). **Señal bc1400 (18:35-18:52): mediana −18,3% · pooled −23,6% · 0 timeouts · score 5,00=5,00 · dur −11,3%. Las 3 tareas de texto exacto arregladas: t2 +224%→+2,5%, t7 +62%→−37%, t4 +103%→−28%.**
-- [~] **Validación 3× config bc1400 EN MARCHA** (18:53, HEAD=b636a9f) — si pasa (mediana ≤+10% + score ≥ + dur ≤+10%) → **M1 CERRADO** → PushNotification. judge_v2 corregido a umbral unilateral de sobrecoste (ahorro no es fallo). Corridas 4-6 respaldadas como `harness_clean_run4/5/6.json`.
+- [x] **Validación 3× config bc1400** (18:53-19:49, HEAD=b636a9f) → **exit=0: mediana +1,9% ✅ · pooled −30,1% ✅ · dur −14,2% ✅ · score +0,18 ✅ · timeouts solo de OC (t14 ×2)**. judge_v2 con umbral unilateral de sobrecoste. Corridas 4-6 de la config anterior respaldadas como `harness_clean_run4/5/6.json`.
+- [x] ~~Benchmark 15 tareas × 3 corridas con B1+B2+C~~ → superado por la validación bc1400 (la config final es B1+B2+C v5 pasiva con body-chars 1400).
 - ⚠️ **Lección operativa**: lanzar benchmarks SIEMPRE con `Start-Process` desacoplado. La 1ª bc1400 (16:30) salió 30/30 timeouts en ambos sistemas: iba como hijo del shell sandboxeado del agente (sin red). Misma firma que la sonda colgada de las 12:55. Corrida borrada e invalidada en el log.
 - Diagnóstico fricción restante (read-only, clean n=3): **t2_debug** = OCMCP hace 2-4 reads + 2-3 greps sin MCP (113→188k) vs 1 read de OC — hipótesis: el swap (body-chars 600) recorta el detalle que depurar exige → exploración compensatoria; palanca: subir body-chars del swap o swap solo para archivos grandes. **t5_search** = OC usa bash barato; OCMCP se dispersa (get_context+write / timeout / task 584k) — palanca: steering no debe desincentivar bash para búsquedas. NO tocar hasta cerrar n=6.
 - [x] **B2 — dieta de definiciones** (commit 381803e): descripciones 823→664 tok/turno (−19%). Marginal; la palanca es C.
 - [x] **C — primera acción forzada (opencode)** (commit 5bc375f): plugin `.opencode/plugin/leo-first-action.js` veta read/grep/glob/list hasta la 1ª llamada a get_context; válvula tras 3 vetos; gated LEO_FORCE=1 (benchmark lo activa solo en OCMCP). Validado: smoke test + 4 ramas en node.
-- [ ] Benchmark 15 tareas × 3 corridas con B1+B2+C (HEAD≥5bc375f) → tabla de criterio
-- **Done cuando:** tabla de criterio de éxito cumple los 4 umbrales
+- **Done cuando:** tabla de criterio de éxito cumple los 4 umbrales → **✅ CERRADO 2026-07-14 19:49**
 
-### ⚪ M2 — Multi-harness
+### ⚪ M2 — Multi-harness (SIGUIENTE — pendiente de arranque con el usuario)
 - [ ] Claude Code: instalación + hook C + smoke test + mini-benchmark (5 tareas)
 - [ ] Codex: instalación + smoke test + mini-benchmark (5 tareas)
 - **Done cuando:** los 3 harnesses instalan y pasan smoke test; mini-bench sin regresión
@@ -135,6 +138,7 @@ Harnesses objetivo: **Claude Code, opencode, Codex**. Sin fecha límite: kanban 
 - 2026-07-13: producto a entregar = **leo-mcp** (no el agente TUI). Criterio = delta fuerte. Estrategia B+C. Kanban sin fecha.
 - 2026-07-13 (cierre M0): steering v2 validado con n=3 → adopción 0,93 (objetivo ≥2), tokens +64,5% (objetivo −40%), score +0,09 (objetivo +0,5). **Vía A (steering) agotada como palanca principal.** M1 = B1 autosuficiencia de get_context + B2 dieta de tools + C forzado de primera acción en opencode.
 - 2026-07-14 (goal nuevo del usuario): **criterio M1 v2** — corrección estructural 100% (probada) + ahorro 80-97% por consulta (probado) + score ≥ vanilla + dur ≤+10% + tokens e2e ±10%. "−40% e2e" descartado tras 6 falsaciones (tabla arriba). PushNotification al cerrar cada hito.
+- 2026-07-14 (cierre M1): **las "6 falsaciones" estaban contaminadas por el sesgo de subagentes** — con contabilidad completa y config bc1400, OCMCP gana en pooled (−30,1%) y empata en mediana (+1,9%). Config final: MCP 2 tools (get_context dieta + graph) + swap pasivo AST body-chars 1400 + steering v2. La promesa e2e del README debe ser la medida: **mediana por tarea ≈ neutra, pooled −30% (el ahorro viene de tareas pesadas), score y velocidad iguales o mejores, corrección estructural garantizada**.
 
 ## Notas de sesión
 
