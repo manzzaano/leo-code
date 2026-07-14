@@ -57,11 +57,11 @@ def main(paths):
         ds = by_task[t]
         print(f"  {t:20s} {statistics.median(ds):+8.1f}%  ({', '.join(f'{d:+.0f}%' for d in ds)})")
 
-    # criterio v2
-    tok_ok = abs(med) <= 10
+    # criterio v2: umbral de SOBRECOSTE — ahorro por debajo de −10% no es fallo
+    tok_ok = med <= 10
     dur_ok = (dur_mcp - dur_oc) / dur_oc <= 0.10
     sc_ok = sc_mcp >= sc_oc
-    print(f"\nCRITERIO v2: tokens ±10% {'OK' if tok_ok else 'FALLA'} | dur <=+10% {'OK' if dur_ok else 'FALLA'} | score >= {'OK' if sc_ok else 'FALLA'}")
+    print(f"\nCRITERIO v2: tokens <=+10% {'OK' if tok_ok else 'FALLA'} | dur <=+10% {'OK' if dur_ok else 'FALLA'} | score >= {'OK' if sc_ok else 'FALLA'}")
     return 0 if (tok_ok and dur_ok and sc_ok) else 1
 
 
