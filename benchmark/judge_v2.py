@@ -34,7 +34,7 @@ def main(paths):
     by_task = {}
     for a, b in zip(oc, mcp):
         assert a["task_id"] == b["task_id"], "corridas no pareadas"
-        if a["tokens"] == 0:  # timeout OC: par no comparable
+        if a["tokens"] == 0 or b["tokens"] == 0:  # timeout en cualquiera: par no comparable
             continue
         d = (b["tokens"] - a["tokens"]) / a["tokens"] * 100
         deltas.append(d)
@@ -48,8 +48,10 @@ def main(paths):
     print(f"tokens  mediana/tarea: {med:+.1f}% | gana OCMCP en {wins}/{len(deltas)} pares")
     print(f"dur     pooled: {100*(dur_mcp-dur_oc)/dur_oc:+.1f}%")
     print(f"score   OC {sc_oc:.2f} vs OCMCP {sc_mcp:.2f} ({sc_mcp-sc_oc:+.2f})")
-    n_mcp_calls = sum(sum(r["mcp_calls"].values()) for r in mcp)
-    print(f"mcp_calls/tarea: {n_mcp_calls/len(mcp):.1f} | relecturas tras ctx: {tot(mcp, 'redundant_native_after_ctx')}")
+    n_mcp_calls = sum(sum(r.get("mcp_calls", {}).values()) for r in mcp)
+    n_red = sum(r.get("redundant_native_after_ctx", 0) for r in mcp)
+    timeouts = [(r["system"], r["task_id"]) for r in rows if r["tokens"] == 0]
+    print(f"mcp_calls/tarea: {n_mcp_calls/len(mcp):.1f} | relecturas tras ctx: {n_red} | timeouts: {timeouts or 'ninguno'}")
     print("\npor tarea (mediana de deltas entre corridas):")
     for t in sorted(by_task, key=lambda t: statistics.median(by_task[t])):
         ds = by_task[t]
