@@ -137,7 +137,9 @@ def compress(
         config = COMPRESS_STRATEGIES[task_type]
         if self_sufficient:
             from dataclasses import replace
-            config = replace(config, include_body=True, body_chars=6000,
+            # body_chars 2500 (no 6000): en c5b la respuesta gorda cebaba mas
+            # exploracion en vez de sustituirla, y viaja en cada turno.
+            config = replace(config, include_body=True, body_chars=2500,
                              footer_msg="\n\nEl codigo relevante ya esta incluido arriba: trabaja con el, no releas archivos.")
         result = _build_nodes_from_config(top_capsules, all_capsules, config, task_type)
     else:
