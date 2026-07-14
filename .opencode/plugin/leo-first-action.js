@@ -29,7 +29,12 @@ export const LeoFirstAction = async ({ $ }) => {
       const surgical = args.offset != null || args.limit != null
       if (!fp || surgical || !CODE_EXT.test(fp)) return
       try {
-        const r = await $`python -m leo_code.filectx ${fp} --repo . --body-chars 600`.quiet().nothrow()
+        // body-chars 1400: con 600 el swap disparaba en rag/compressor.py (vista 52%)
+        // y t2_debug — que pide un bug a nivel de línea AHÍ — compensaba con greps y
+        // relecturas (+224% medido, n=6). A 1400 solo dispara donde el ahorro es
+        // dramático (loop.py 61%) y suelta los archivos de tareas de texto exacto
+        // (compressor.py 81%, parser.py 95% → crudo). Guard >25% sigue.
+        const r = await $`python -m leo_code.filectx ${fp} --repo . --body-chars 1400`.quiet().nothrow()
         const compressed = r.exitCode === 0 ? r.stdout.toString() : ""
         const original = String((output && output.output) || "")
         // Solo sustituir si de verdad ahorra (>25%): si no, el crudo ya es barato.
