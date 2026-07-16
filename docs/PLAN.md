@@ -4,7 +4,7 @@
 > ANTES de cerrar contexto. Si el contexto de la conversación supera ~40%, volcar
 > estado aquí y pedir `/clear`.
 
-**Última actualización:** 2026-07-14 19:55 · **Hito activo: M1 CERRADO → M2 pendiente de arranque**
+**Última actualización:** 2026-07-14 20:05 · **Hito activo: M2 — Multi-harness**
 
 > ⚠️ **Toda la tabla histórica de falsaciones y la línea base tienen sesgo de
 > medición** (tokens de subagentes `task` no contados; OC delegaba mucho más que
@@ -116,8 +116,10 @@ Harnesses objetivo: **Claude Code, opencode, Codex**. Sin fecha límite: kanban 
 - [x] **C — primera acción forzada (opencode)** (commit 5bc375f): plugin `.opencode/plugin/leo-first-action.js` veta read/grep/glob/list hasta la 1ª llamada a get_context; válvula tras 3 vetos; gated LEO_FORCE=1 (benchmark lo activa solo en OCMCP). Validado: smoke test + 4 ramas en node.
 - **Done cuando:** tabla de criterio de éxito cumple los 4 umbrales → **✅ CERRADO 2026-07-14 19:49**
 
-### ⚪ M2 — Multi-harness (SIGUIENTE — pendiente de arranque con el usuario)
-- [ ] Claude Code: instalación + hook C + smoke test + mini-benchmark (5 tareas)
+### 🔵 M2 — Multi-harness (ACTIVO 2026-07-14; usuario dijo "sigue" tras cierre M1)
+- [x] Claude Code: **smoke test MCP PASA** (20:05, desde la propia sesión: `graph who_calls hidden_task_tokens` → 2 callers correctos con archivo:línea; `get_context` → contexto AST coherente; índice fresco con código del día). Instalación = config MCP del proyecto ya operativa.
+- [ ] Claude Code: hook C — decidir equivalente del swap pasivo (opencode usa plugin `tool.execute.after` sobre read; en Claude Code investigar si PostToolUse puede sustituir el output del Read; si no, alternativa: solo steering + MCP, medir si basta)
+- [ ] Claude Code: mini-benchmark (5 tareas) — necesita runner `claude -p` headless equivalente a run_real (reusar `hidden_task_tokens`-style: la telemetría de Claude Code está en los transcripts JSONL de `~/.claude/projects/`)
 - [ ] Codex: instalación + smoke test + mini-benchmark (5 tareas)
 - **Done cuando:** los 3 harnesses instalan y pasan smoke test; mini-bench sin regresión
 
@@ -141,6 +143,11 @@ Harnesses objetivo: **Claude Code, opencode, Codex**. Sin fecha límite: kanban 
 - 2026-07-14 (cierre M1): **las "6 falsaciones" estaban contaminadas por el sesgo de subagentes** — con contabilidad completa y config bc1400, OCMCP gana en pooled (−30,1%) y empata en mediana (+1,9%). Config final: MCP 2 tools (get_context dieta + graph) + swap pasivo AST body-chars 1400 + steering v2. La promesa e2e del README debe ser la medida: **mediana por tarea ≈ neutra, pooled −30% (el ahorro viene de tareas pesadas), score y velocidad iguales o mejores, corrección estructural garantizada**.
 
 ## Notas de sesión
+
+**2026-07-14 noche (arranque M2) — ESTADO PARA /clear:**
+- M1 cerrado (19:49) y notificado. M2 activado con OK del usuario ("sigue con la goal").
+- Claude Code smoke test PASA (ver kanban M2). SIGUIENTE PASO EXACTO: hook C para Claude Code — (1) leer docs de hooks (¿PostToolUse puede reemplazar el output de Read? probable que no → plan B: PreToolUse deny+contexto, o solo steering+MCP y medirlo); (2) si hay mecanismo, portar la lógica de `.opencode/plugin/leo-first-action.js` (swap si comprimido <75% del crudo, body-chars 1400, rango offset/limit pasa); (3) mini-bench 5 tareas con runner headless `claude -p` (telemetría: transcripts JSONL en `~/.claude/projects/` — cuentan también subagentes; reutilizar la lección del sesgo `task`).
+- La sesión anterior quedó larguísima (validaciones + sesgo + cierre M1): este bloque existe para re-orientar tras `/clear`.
 
 **2026-07-14 madrugada (M1, criterio v2) — ESTADO PARA /clear:**
 - c5b analizada (+51,9% tokens, adopción 0,5, score/dur ≈). Criterio M1 REDEFINIDO (goal nuevo del usuario, ver tablas arriba): objetivo tokens ahora ±10% e2e, no −40%.
