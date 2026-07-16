@@ -4,7 +4,7 @@
 > ANTES de cerrar contexto. Si el contexto de la conversación supera ~40%, volcar
 > estado aquí y pedir `/clear`.
 
-**Última actualización:** 2026-07-14 20:05 · **Hito activo: M2 — Multi-harness**
+**Última actualización:** 2026-07-16 20:50 · **Hito activo: M2 — Multi-harness**
 
 > ⚠️ **Toda la tabla histórica de falsaciones y la línea base tienen sesgo de
 > medición** (tokens de subagentes `task` no contados; OC delegaba mucho más que
@@ -118,7 +118,7 @@ Harnesses objetivo: **Claude Code, opencode, Codex**. Sin fecha límite: kanban 
 
 ### 🔵 M2 — Multi-harness (ACTIVO 2026-07-14; usuario dijo "sigue" tras cierre M1)
 - [x] Claude Code: **smoke test MCP PASA** (20:05, desde la propia sesión: `graph who_calls hidden_task_tokens` → 2 callers correctos con archivo:línea; `get_context` → contexto AST coherente; índice fresco con código del día). Instalación = config MCP del proyecto ya operativa.
-- [ ] Claude Code: hook C — decidir equivalente del swap pasivo (opencode usa plugin `tool.execute.after` sobre read; en Claude Code investigar si PostToolUse puede sustituir el output del Read; si no, alternativa: solo steering + MCP, medir si basta)
+- [x] Claude Code: hook C — **swap pasivo portado y smoke test e2e PASA** (2026-07-16 20:45). Mecanismo: PostToolUse `hookSpecificOutput.updatedToolOutput` (existe desde ~2.1.2xx; probado en 2.1.211). Implementación: `.claude/hooks/leo-read-swap.py` + registro en `.claude/settings.json`, gated LEO_FORCE=1 igual que opencode. 3 gotchas resueltos: (1) updatedToolOutput se valida contra el outputSchema del tool — para Read hay que devolver `{type,file:{content,...}}` mutado, un string pelado se descarta con "does not match output shape"; (2) stdout/stdin del hook arrancan en cp1252 en Windows → `sys.stdout.reconfigure(encoding="utf-8")` obligatorio (el contenido lleva →/ñ); (3) subprocess filectx necesita PYTHONUTF8=1 + errors="replace". Verificado: sesión headless `claude -p` recibió la vista comprimida (loop.py 55,8k→34,3k chars) como output del Read; guard >25% y rama offset/limit intactos (mismo comportamiento que plugin opencode).
 - [ ] Claude Code: mini-benchmark (5 tareas) — necesita runner `claude -p` headless equivalente a run_real (reusar `hidden_task_tokens`-style: la telemetría de Claude Code está en los transcripts JSONL de `~/.claude/projects/`)
 - [ ] Codex: instalación + smoke test + mini-benchmark (5 tareas)
 - **Done cuando:** los 3 harnesses instalan y pasan smoke test; mini-bench sin regresión
@@ -143,6 +143,11 @@ Harnesses objetivo: **Claude Code, opencode, Codex**. Sin fecha límite: kanban 
 - 2026-07-14 (cierre M1): **las "6 falsaciones" estaban contaminadas por el sesgo de subagentes** — con contabilidad completa y config bc1400, OCMCP gana en pooled (−30,1%) y empata en mediana (+1,9%). Config final: MCP 2 tools (get_context dieta + graph) + swap pasivo AST body-chars 1400 + steering v2. La promesa e2e del README debe ser la medida: **mediana por tarea ≈ neutra, pooled −30% (el ahorro viene de tareas pesadas), score y velocidad iguales o mejores, corrección estructural garantizada**.
 
 ## Notas de sesión
+
+**2026-07-16 tarde (M2, hook C Claude Code) — ESTADO PARA /clear:**
+- Hook C Claude Code CERRADO (ver kanban M2, checkbox con los 3 gotchas documentados). Commit del hook + settings + PLAN.
+- SIGUIENTE PASO EXACTO: **mini-benchmark 5 tareas en Claude Code** — runner headless `claude -p` equivalente a run_real. Diseño: (1) pareado CC vanilla vs CC+leo (LEO_FORCE=1 + MCP `.mcp.json`; vanilla = sin LEO_FORCE y sin MCP — ojo, `.mcp.json` vive en el repo: para vanilla usar `--strict-mcp-config --mcp-config` vacío o copiar repo como hace run_real con opencode.json); (2) telemetría en transcripts JSONL de `~/.claude/projects/<slug>/` — sumar usage de TODOS los jsonl de la corrida incluyendo subagentes (lección sesgo `task` de opencode; los sidechains están en el mismo directorio); (3) 5 tareas = subset de las 15 de run_real (incluir t2_debug y t5_search, las que friccionaban); (4) lanzar SIEMPRE desacoplado con Start-Process (shell sandboxeado del agente no tiene red — 2 corridas ya murieron por esto).
+- Smoke tests dejaron sesiones basura haiku en `~/.claude/projects/C--Users-Ismael-Desktop--Sandbox-leo-code/` (628aa1c5, y 2 más del 16/07) — no confundirlas con corridas del mini-bench.
 
 **2026-07-14 noche (arranque M2) — ESTADO PARA /clear:**
 - M1 cerrado (19:49) y notificado. M2 activado con OK del usuario ("sigue con la goal").
