@@ -4,7 +4,7 @@
 > ANTES de cerrar contexto. Si el contexto de la conversación supera ~40%, volcar
 > estado aquí y pedir `/clear`.
 
-**Última actualización:** 2026-07-16 20:50 · **Hito activo: M2 — Multi-harness**
+**Última actualización:** 2026-07-16 21:15 · **Hito activo: M2 — Multi-harness**
 
 > ⚠️ **Toda la tabla histórica de falsaciones y la línea base tienen sesgo de
 > medición** (tokens de subagentes `task` no contados; OC delegaba mucho más que
@@ -119,7 +119,7 @@ Harnesses objetivo: **Claude Code, opencode, Codex**. Sin fecha límite: kanban 
 ### 🔵 M2 — Multi-harness (ACTIVO 2026-07-14; usuario dijo "sigue" tras cierre M1)
 - [x] Claude Code: **smoke test MCP PASA** (20:05, desde la propia sesión: `graph who_calls hidden_task_tokens` → 2 callers correctos con archivo:línea; `get_context` → contexto AST coherente; índice fresco con código del día). Instalación = config MCP del proyecto ya operativa.
 - [x] Claude Code: hook C — **swap pasivo portado y smoke test e2e PASA** (2026-07-16 20:45). Mecanismo: PostToolUse `hookSpecificOutput.updatedToolOutput` (existe desde ~2.1.2xx; probado en 2.1.211). Implementación: `.claude/hooks/leo-read-swap.py` + registro en `.claude/settings.json`, gated LEO_FORCE=1 igual que opencode. 3 gotchas resueltos: (1) updatedToolOutput se valida contra el outputSchema del tool — para Read hay que devolver `{type,file:{content,...}}` mutado, un string pelado se descarta con "does not match output shape"; (2) stdout/stdin del hook arrancan en cp1252 en Windows → `sys.stdout.reconfigure(encoding="utf-8")` obligatorio (el contenido lleva →/ñ); (3) subprocess filectx necesita PYTHONUTF8=1 + errors="replace". Verificado: sesión headless `claude -p` recibió la vista comprimida (loop.py 55,8k→34,3k chars) como output del Read; guard >25% y rama offset/limit intactos (mismo comportamiento que plugin opencode).
-- [ ] Claude Code: mini-benchmark (5 tareas) — necesita runner `claude -p` headless equivalente a run_real (reusar `hidden_task_tokens`-style: la telemetría de Claude Code está en los transcripts JSONL de `~/.claude/projects/`)
+- [~] Claude Code: mini-benchmark (5 tareas) — runner `benchmark/run_cc.py` HECHO y validado e2e (copia aislada sin CLAUDE.md/AGENTS.md autocargados; CC = --strict-mcp-config sin MCP; CCMCP = --mcp-config .mcp.json + LEO_FORCE=1 + steering via --append-system-prompt; tokens del transcript JSONL con dedupe por message.id, subagentes incluidos — el sesgo `task` EXISTE también en CC: t5 stream 34,8k vs jsonl 98,8k). **RUN 1 (haiku, 2026-07-16 21:05)**: mediana +5% ✅ (t1 −20%, t2 −21%, t5 +7%, t7 +5%, t14 +283%) · pooled +94% ❌ (todo el daño es t14: 1,06M tok, 22 turns, 10 reads + 8 bash tras get_context — el patrón "get_context ceba exploración" de opencode) · score 6,75 vs 6,90 (−0,15) · dur +15%. **Adopción ~0: las tools MCP salen DIFERIDAS tras ToolSearch en Claude Code** (el agente tuvo que buscarlas; solo t14 llamó get_context 1 vez). Swap disparó 1/16 reads (loop.py; en archivos pequeños la vista sale más grande que el crudo, guard OK). Falta: n=3, y decidir si medir con `ENABLE_TOOL_SEARCH=false` (desactiva el deferral; valores true/false/auto:N) o aceptar el default del harness.
 - [ ] Codex: instalación + smoke test + mini-benchmark (5 tareas)
 - **Done cuando:** los 3 harnesses instalan y pasan smoke test; mini-bench sin regresión
 
@@ -144,10 +144,12 @@ Harnesses objetivo: **Claude Code, opencode, Codex**. Sin fecha límite: kanban 
 
 ## Notas de sesión
 
-**2026-07-16 tarde (M2, hook C Claude Code) — ESTADO PARA /clear:**
-- Hook C Claude Code CERRADO (ver kanban M2, checkbox con los 3 gotchas documentados). Commit del hook + settings + PLAN.
-- SIGUIENTE PASO EXACTO: **mini-benchmark 5 tareas en Claude Code** — runner headless `claude -p` equivalente a run_real. Diseño: (1) pareado CC vanilla vs CC+leo (LEO_FORCE=1 + MCP `.mcp.json`; vanilla = sin LEO_FORCE y sin MCP — ojo, `.mcp.json` vive en el repo: para vanilla usar `--strict-mcp-config --mcp-config` vacío o copiar repo como hace run_real con opencode.json); (2) telemetría en transcripts JSONL de `~/.claude/projects/<slug>/` — sumar usage de TODOS los jsonl de la corrida incluyendo subagentes (lección sesgo `task` de opencode; los sidechains están en el mismo directorio); (3) 5 tareas = subset de las 15 de run_real (incluir t2_debug y t5_search, las que friccionaban); (4) lanzar SIEMPRE desacoplado con Start-Process (shell sandboxeado del agente no tiene red — 2 corridas ya murieron por esto).
-- Smoke tests dejaron sesiones basura haiku en `~/.claude/projects/C--Users-Ismael-Desktop--Sandbox-leo-code/` (628aa1c5, y 2 más del 16/07) — no confundirlas con corridas del mini-bench.
+**2026-07-16 noche (M2, mini-bench CC run 1) — ESTADO PARA /clear:**
+- Hook C Claude Code CERRADO por la tarde (commit ec3aada). Mini-bench RUN 1 hecho — números y hallazgos en el checkbox del kanban M2. Resultados: `benchmark/results_real/cc_mini_run1.json` (+ .log).
+- SIGUIENTE PASO EXACTO: decidir config de medición y correr n=3. Dos opciones: (a) default del harness (tools MCP diferidas tras ToolSearch — es lo que verán los compañeros sin tocar nada) o (b) `ENABLE_TOOL_SEARCH=false` en el env de CCMCP (tools cargadas upfront, adopción comparable a opencode). Recomendación: medir (b) 1 corrida-señal primero; si mueve adopción y no empeora, n=3 con (b) y documentar la env var como parte de la instalación recomendada en M3. OJO: t14 outlier (+283%, get_context ceba exploración en haiku) — mirar si con adopción real temprana se calma o empeora.
+- Lanzamiento: SIEMPRE Start-Process desacoplado (`cmd /c python benchmark/run_cc.py --label <label> > benchmark\results_real\<label>.log 2>&1`); el shell del agente no tiene red. DEEPSEEK_API_KEY se autocarga de .env (fix en run_cc.py).
+- Bug corregido post-run1: Claude Code normaliza server "leo-code" → tools `mcp__leo_code__*` (guión bajo); el run1 json tiene mcp_calls={} por eso — la adopción real del run1 fue 1 get_context (t14), contada a mano del tool_seq.
+- Sesiones basura haiku en `~/.claude/projects/` del 16/07 (smoke tests + mini-bench): no confundir al depurar transcripts.
 
 **2026-07-14 noche (arranque M2) — ESTADO PARA /clear:**
 - M1 cerrado (19:49) y notificado. M2 activado con OK del usuario ("sigue con la goal").
