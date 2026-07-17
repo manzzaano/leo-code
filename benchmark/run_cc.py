@@ -102,19 +102,22 @@ def run_cc(query: str, repo_path: str, leo: bool) -> dict:
            "--dangerously-skip-permissions", "--strict-mcp-config"]
     env = {**os.environ, "PYTHONUTF8": "1", "LEO_DEBUG": "1"}
     env.pop("LEO_FORCE", None)
+    # Steering simétrico (como opencode, que autocarga AGENTS.md en AMBOS):
+    # style guide a los dos; la sección MCP solo a CCMCP. Si solo uno lleva el
+    # style guide "conciso", el judge castiga al terso (visto: t2 1,4 vs 4,0
+    # con el MISMO bug encontrado) o el otro gasta el doble en verborrea.
+    steering = Path(repo_path) / "_leo_steering.md"  # AGENTS.md renombrado en la copia
+    if steering.exists():
+        txt = steering.read_text(encoding="utf-8")
+        cut = txt.find("## Style Guide")
+        prompt = txt if leo else txt[cut:] if cut >= 0 else ""
+        if prompt:
+            cmd += ["--append-system-prompt", prompt]
     if leo:
         env["LEO_FORCE"] = "1"
         if NO_DEFER:
             env["ENABLE_TOOL_SEARCH"] = "false"
         cmd += ["--mcp-config", ".mcp.json"]
-        steering = Path(repo_path) / "_leo_steering.md"  # AGENTS.md renombrado en la copia
-        if steering.exists():
-            # Solo la sección MCP: el style guide ("conciso") sesgaría al judge
-            # contra CCMCP — CC vanilla no recibe steering de estilo (en opencode
-            # ambos autocargaban AGENTS.md entero; aquí hay que igualar a mano).
-            txt = steering.read_text(encoding="utf-8")
-            txt = txt.split("## Style Guide")[0]
-            cmd += ["--append-system-prompt", txt]
     try:
         r = _run_capture(cmd, timeout=TIMEOUT, cwd=repo_path, env=env)
         out = json.loads((r.stdout or "").strip() or "{}")
