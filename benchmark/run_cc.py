@@ -39,6 +39,7 @@ for _line in (Path(__file__).parent.parent / ".env").read_text(encoding="utf-8")
 
 MODEL = "haiku"
 TIMEOUT = 300
+NO_DEFER = False  # --no-defer: ENABLE_TOOL_SEARCH=false (tools MCP upfront, sin ToolSearch)
 DEFAULT_TASKS = "t1_code_query,t2_debug,t5_search,t7_code_edit,t14_cross_file"
 NATIVE_EXPLORE = {"Read", "Grep", "Glob"}
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -103,10 +104,17 @@ def run_cc(query: str, repo_path: str, leo: bool) -> dict:
     env.pop("LEO_FORCE", None)
     if leo:
         env["LEO_FORCE"] = "1"
+        if NO_DEFER:
+            env["ENABLE_TOOL_SEARCH"] = "false"
         cmd += ["--mcp-config", ".mcp.json"]
         steering = Path(repo_path) / "_leo_steering.md"  # AGENTS.md renombrado en la copia
         if steering.exists():
-            cmd += ["--append-system-prompt", steering.read_text(encoding="utf-8")]
+            # Solo la sección MCP: el style guide ("conciso") sesgaría al judge
+            # contra CCMCP — CC vanilla no recibe steering de estilo (en opencode
+            # ambos autocargaban AGENTS.md entero; aquí hay que igualar a mano).
+            txt = steering.read_text(encoding="utf-8")
+            txt = txt.split("## Style Guide")[0]
+            cmd += ["--append-system-prompt", txt]
     try:
         r = _run_capture(cmd, timeout=TIMEOUT, cwd=repo_path, env=env)
         out = json.loads((r.stdout or "").strip() or "{}")
@@ -134,7 +142,11 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--tasks", default=DEFAULT_TASKS)
     p.add_argument("--label", default="cc_mini_run1")
+    p.add_argument("--no-defer", action="store_true",
+                   help="CCMCP con ENABLE_TOOL_SEARCH=false (tools MCP upfront)")
     args = p.parse_args()
+    global NO_DEFER
+    NO_DEFER = args.no_defer
 
     tasks = json.loads(Path("benchmark/tasks.json").read_text(encoding="utf-8"))
     ids = set(args.tasks.split(","))
