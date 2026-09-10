@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Instalar leo-code desde el repo local (modo editable)
 COPY . /app
-RUN pip install --no-cache-dir -e ".[all]"
+RUN pip install --no-cache-dir -e .
 
 # Cache dir para Qdrant local e índices
 RUN mkdir -p /cache
