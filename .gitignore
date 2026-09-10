@@ -51,6 +51,9 @@ benchmark_run.log
 # Local dev
 leo-code-dev
 
+# Worktrees aislados (superpowers:using-git-worktrees)
+.worktrees/
+
 # build artifacts de los wheels de packaging
 packaging/*/dist/
 packaging/*/build/
