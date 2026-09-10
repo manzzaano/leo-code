@@ -16,4 +16,4 @@ jobs:
       - name: Instalar leo-code-core (motor, sin LLM)
         run: pip install -e .
       - name: Revisar el PR (impacto + cobertura, con prueba)
-        run: leo-code guardian --base "origin/${{ github.base_ref }}"
+        run: python -m leo_code.core.guardian --base "origin/${{ github.base_ref }}"

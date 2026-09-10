@@ -235,4 +235,40 @@ def _demo():
 
 
 if __name__ == "__main__":
-    _demo()
+    # ponytail: CLI minima standalone (sin depender del agente/rag.cli) para que
+    # `python -m leo_code.core.guardian --base <rama>` sirva en CI (guardian.yml).
+    import argparse
+    import sys
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--repo", "-r", default=".")
+    ap.add_argument("--staged", action="store_true")
+    ap.add_argument("--base", default=None)
+    ap.add_argument("--symbol", "-s", default=None, help="Preview de impacto de UN simbolo")
+    args = ap.parse_args()
+
+    if args.symbol:
+        from leo_code.rag.indexer import Indexer
+        from leo_code.core.boundary import link_http_edges
+        idx = Indexer()
+        idx.build(args.repo, verbose=False)
+        caps = idx.get_capsules()
+        link_http_edges(caps)
+        print(Guardian(caps).review(args.symbol).render())
+        sys.exit(0)
+
+    if not args.staged and not args.base:
+        _demo()
+        sys.exit(0)
+
+    reports, summ = guard_repo(args.repo, staged=args.staged, base=args.base)
+    if not reports:
+        print("guardian: sin simbolos cambiados en el diff.")
+        sys.exit(0)
+    for r in reports:
+        print(r.render())
+        print()
+    risk = summ["uncovered_risk"]
+    print(f"guardian · {summ['changed']} cambios · {summ['affected']} afectados · "
+          f"{risk} SIN test (riesgo) — determinista, con prueba, cero LLM")
+    sys.exit(1 if risk else 0)

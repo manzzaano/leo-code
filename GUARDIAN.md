@@ -1,4 +1,4 @@
-# leo-code guardian — garantía determinista de cambios
+# python -m leo_code.core.guardian — garantía determinista de cambios
 
 Todo agente GENERA código; ninguno PRUEBA que el cambio es seguro. El guardián sí,
 porque tiene el grafo del código. **Determinista, con prueba citable, cero tokens de LLM.**
@@ -15,13 +15,13 @@ Es justo lo que un revisor-LLM aluciona o se pierde.
 
 ```bash
 # ANTES de editar: ¿qué rompo si toco esto?
-leo-code guardian -s compress
+python -m leo_code.core.guardian -s compress
 
 # PR: revisa el diff vs main, sale !=0 si hay afectados SIN test
-leo-code guardian --base main
+python -m leo_code.core.guardian --base main
 
 # pre-commit: solo lo staged
-leo-code guardian --staged
+python -m leo_code.core.guardian --staged
 ```
 
 Salida (ejemplo, cero LLM):
@@ -46,8 +46,8 @@ cubierto por tests — con el detalle y la prueba en el log. Cero coste de LLM.
 - repo: local
   hooks:
     - id: leo-guardian
-      name: leo-code guardian (radio de explosión + cobertura)
-      entry: leo-code guardian --staged
+      name: python -m leo_code.core.guardian (radio de explosión + cobertura)
+      entry: python -m leo_code.core.guardian --staged
       language: system
       pass_filenames: false
 ```
