@@ -80,6 +80,7 @@ leo_code/tui/
 leo_code/session/
 leo_code/learning/
 leo_code/sdk/
+leo_code/rag/conversation_history.py
 leo_code/skills/
 packaging/leo-code/
 
