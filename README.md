@@ -23,15 +23,15 @@ los de leo** (el `ast` de Python, el compilador `tsc` de TypeScript) y compara
 arista a arista. Corre gateado en CI (`.github/workflows/audit.yml`) — una
 regresión no mergea.
 
-Última corrida verde en CI ([`leo-code formal audit`](https://github.com/manzzaano/leo-code/actions/workflows/audit.yml), 2026-09-10, `FORMAL: 5/5 → IRREFUTABLE`):
+Última corrida verde en CI ([`leo-code formal audit`](https://github.com/manzzaano/leo-code/actions/workflows/audit.yml), 2026-09-10, tras reestructurar el repo a solo motor+MCP, `FORMAL: 5/5 → IRREFUTABLE`):
 
 | Check | Repos/escala | Resultado real medido |
 |---|---|---|
-| (a) Grafo Python vs `ast` | leo-code + 3 repos externos (~100.600 símbolos, ~483.600 aristas) | **100,000% precisión · 100,000% recall** (0 falsas, 0 perdidas) |
+| (a) Grafo Python vs `ast` | leo-code + 3 repos externos (~100.400 símbolos, ~480.200 aristas) | **100,000% precisión · 100,000% recall** (0 falsas, 0 perdidas) |
 | (a-ts) Grafo TS/JS vs `tsc` | repo del compilador TypeScript (36.739 símbolos) | **99,950% precisión · 99,926% recall** (31 falsas / 46 perdidas sobre 62,2k aristas) |
-| (b) Cobertura del guardián vs `coverage.py` | 204 funciones ejecutadas | **0 falsos** en ambas direcciones |
-| (c) Blast radius vs mutation testing real | `compress` (24 tests fallaron, 115 predichos) · `classify_task` (18 fallaron, 128 predichos) | Todos los fallos **⊆** lo predicho |
-| (d) SLA a escala | 272.656 símbolos indexados | query peor caso **1,11ms** (<50ms) · guardián **10ms** (<2s) |
+| (b) Cobertura del guardián vs `coverage.py` | 113 funciones ejecutadas | **0 falsos** en ambas direcciones |
+| (c) Blast radius vs mutation testing real | `compress` (19 tests fallaron, 107 predichos) · `classify_task` (11 fallaron, 106 predichos) | Todos los fallos **⊆** lo predicho |
+| (d) SLA a escala | 271.493 símbolos indexados | query peor caso **1,98ms** (<50ms) · guardián **13ms** (<2s) |
 
 El único check que no da 100,000% exacto es el de TS/JS (~99,93-99,95%) — se
 deja el número real en vez de redondear para arriba; el resto de la garantía
@@ -165,7 +165,7 @@ leo_code/
 ## Tests
 
 ```bash
-pytest tests/ -q     # 225 tests
+pytest tests/ -q     # 130 tests
 ```
 
 `core/*`, `engine.py`, `rag/{indexer,bm25,classifier,compressor,encoder,scorer,vector_store}`
