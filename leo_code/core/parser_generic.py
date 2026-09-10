@@ -473,8 +473,8 @@ def _parse_css(content: str, file_path: str, module_name: str) -> list[Capsule]:
         signature=f"[css] {module_name}",
         content=content[:3000],
         properties={
-            "selectors": ", ".join(set(selectors)[:30]),
-            "colors": ", ".join(set(colors)[:20]),
+            "selectors": ", ".join(sorted(set(selectors))[:30]),
+            "colors": ", ".join(sorted(set(colors))[:20]),
             "fonts": ", ".join(f.strip() for f in fonts[:10]),
             "media_queries": ", ".join(mq.strip() for mq in media_queries[:5]),
             "chars": len(content),
