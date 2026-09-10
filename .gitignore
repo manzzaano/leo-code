@@ -49,6 +49,8 @@ benchmark_run.log
 # Local dev
 leo-code-dev
 
+.worktrees/
+
 # build artifacts de los wheels de packaging
 packaging/*/dist/
 packaging/*/build/
