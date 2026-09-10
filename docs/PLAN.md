@@ -4,7 +4,7 @@
 > ANTES de cerrar contexto. Si el contexto de la conversación supera ~40%, volcar
 > estado aquí y pedir `/clear`.
 
-**Última actualización:** 2026-09-10 14:30 · **Hito activo: M2 — Multi-harness (retomado tras M2.5)**
+**Última actualización:** 2026-09-10 20:45 · **Hito activo: M2 — Multi-harness (retomado tras M2.5; publicación adelantada por pedido explícito, ver nota de sesión)**
 
 > ⚠️ **Toda la tabla histórica de falsaciones y la línea base tienen sesgo de
 > medición** (tokens de subagentes `task` no contados; OC delegaba mucho más que
@@ -161,6 +161,60 @@ Harnesses objetivo: **Claude Code, opencode, Codex**. Sin fecha límite: kanban 
 - 2026-07-14 (cierre M1): **las "6 falsaciones" estaban contaminadas por el sesgo de subagentes** — con contabilidad completa y config bc1400, OCMCP gana en pooled (−30,1%) y empata en mediana (+1,9%). Config final: MCP 2 tools (get_context dieta + graph) + swap pasivo AST body-chars 1400 + steering v2. La promesa e2e del README debe ser la medida: **mediana por tarea ≈ neutra, pooled −30% (el ahorro viene de tareas pesadas), score y velocidad iguales o mejores, corrección estructural garantizada**.
 
 ## Notas de sesión
+
+**2026-09-10 tarde/noche (M2.5 cierre + publicación adelantada, fuera de orden de M3/M4 por pedido explícito del usuario):**
+- M2.5 cerrado con review final de rama completa (opus): 2 Important reales
+  encontrados y arreglados en 1 fix wave — `test_compute_context_no_code_returns_documents`
+  era vacuo (escribía `.md`, el indexer no lo indexa; ahora usa `docs/*.txt`
+  y verifica contenido real) y el plan/spec de esta hardening nunca se habían
+  comiteado a git (vivían sueltos en el checkout). Merge local a `dev`
+  (fast-forward, 227/227 verde), worktree y rama borrados.
+- Usuario pidió explícitamente publicar en GitHub para portfolio (adelanta
+  parte de M3/M4 sin cerrar el resto). Hecho: repo pasado a **público**;
+  `main` (que estaba 80 commits atrás y ni tenía `engine.py`) fast-forward
+  a `dev`; README reescrito enfocado 100% en leo-mcp (antes mezclaba con el
+  agente TUI y tenía datos viejos: "6 tools" vs 2 reales, "147 tests" vs 227);
+  `benchmark/results_real/*.json` sueltos gitignorados (solo `summary.json`
+  se trackea) — sin tocar `.claude/`/`.opencode/` (no pedido).
+- Segunda vuelta (pedido explícito): **sin licencia** — quitado `license = {text
+  = "MIT"}` de los 4 `pyproject.toml` (raíz + 3 de `packaging/`), borrado
+  `LICENSE`, y las referencias sueltas en `Dockerfile` y `docs/index.md`.
+  README ampliado con números reales de la última corrida verde de
+  `leo-code formal audit` en CI (2026-07-09, `FORMAL: 5/5 → IRREFUTABLE`):
+  Python vs `ast` 100,000%/100,000% (4 repos, ~99,5k símbolos); TS/JS vs
+  `tsc` **99,965%/99,959%** (no se redondeó a 100% — número real); guardián
+  0 falsos/146 funciones; blast radius ⊆ predicho; SLA 1,78ms/12ms @291k
+  símbolos.
+- **CI rota encontrada y arreglada:** el workflow `Test` fallaba en los 3
+  Python (3.11/3.12/3.13) desde julio — `pip install -e ".[dev]"` no
+  resuelve `tree_sitter_languages>=1.10` en 3.13 (paquete sin build ahí).
+  Grep confirmó que `tree_sitter_languages` no lo importa nada en
+  `leo_code/` — superado hace tiempo por `tree-sitter-typescript`/
+  `-javascript` directos en `parser_ts.py`. Quitado de `pyproject.toml`
+  (raíz + `packaging/leo-code-core`). Verificado local: `pip install -e
+  ".[dev]" --dry-run` resuelve limpio, 227/227 tests, import smoke test de
+  CI pasa. Push a `dev`+`main`, CI re-lanzada.
+- **Segundo bug de CI, mismo push:** con el install ya arreglado, `pytest`
+  reventaba en collection — `mcp>=1.0` sin techo bajaba `mcp==2.2.0` en
+  instalación fresca, que rediseñó la API de `Server` (handlers por
+  `ctx`/`params` en vez de los decoradores `@server.list_tools()`/
+  `@server.call_tool()` que usa `mcp_server.py`). Local tenía 1.28.1
+  (funciona) — nunca se vio hasta correr en un entorno realmente fresco.
+  No se migró a la API 2.x a ciegas (cambio mayor, sin verificar el
+  transport nuevo) — se fijó `mcp>=1.0,<2.0` en `pyproject.toml` raíz y
+  `packaging/leo-mcp`. Confirmado en CI real (no solo local): `Test`
+  verde en 3.11/3.12/3.13 (commit 58d6abf) y `leo-code formal audit`
+  verde de nuevo (commit 58d6abf, 2026-09-10, `FORMAL: 5/5 →
+  IRREFUTABLE`, números actualizados en el README). Ambos workflows
+  llevaban rotos desde julio sin que nadie lo viera (repo era privado,
+  nadie miraba Actions).
+- `docker.yml`/`publish.yml` (solo tags) y `guardian.yml` (solo PRs) no
+  corrieron — esperado, no hay tag ni PRs todavía.
+- No se tocó nada de M2 (Codex) ni M3/M4 formalmente en el kanban — este
+  bloque documenta trabajo real hecho fuera de la cola de milestones, a
+  pedido explícito. Falta si se retoma M3 después: instalación 1-comando
+  verificada de punta a punta, versión etiquetada, y decidir si se
+  re-agrega alguna licencia más adelante.
 
 **2026-09-10 (Fase 2 hardening, Task 10 — auditoría dedup grupo grafo):**
 - Comparados los símbolos públicos de `core/graph.py`, `graphquery.py`, `refgraph.py`, `orggraph.py` (grep `^def \|^class`): no hay duplicado literal que unificar. Una coincidencia de nombre sí existe — `_demo` está definido en `graphquery.py` (línea 202) y en `orggraph.py` (línea 81) — pero son rutinas privadas de auto-chequeo con cuerpos no relacionados (una arma una cadena sintética de cápsulas y valida `where`/`who_calls`/`callees`/`impact`/`trace`; la otra arma un par frontend/backend sintético y valida `link_http_edges` + `trace` cross-repo), clasificable como (a) "mismo nombre, responsabilidad distinta" — no redundancia. `refgraph.py` importa `_bare` de `graphquery.py` y `orggraph.py` compone `GraphQuery` + `link_http_edges` (boundary.py): ambos son composición legítima documentada en sus propios docstrings, no redundancia.
