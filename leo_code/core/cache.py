@@ -96,10 +96,14 @@ def get_cached_result(query: str) -> Optional[dict]:
 
 
 def cache_result(query: str, result: dict, ttl: int = 60):
+    if not _client:
+        return
     _safe_op(_client.setex, _query_key(query), ttl, json.dumps(result, ensure_ascii=False))
 
 
 def cache_subgraph(entity_id: str, subgraph: dict, ttl: int = 300):
+    if not _client:
+        return
     _safe_op(_client.setex, _subgraph_key(entity_id), ttl, json.dumps(subgraph, ensure_ascii=False))
 
 
@@ -114,6 +118,8 @@ def get_cached_subgraph(entity_id: str) -> Optional[dict]:
 
 
 def cache_ontology(domain: str, ontology: dict):
+    if not _client:
+        return
     _safe_op(_client.set, f"ontology:{domain}", json.dumps(ontology, ensure_ascii=False))
 
 
