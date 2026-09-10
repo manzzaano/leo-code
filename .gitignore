@@ -118,6 +118,7 @@ tests/test_session.py
 tests/test_structural_tools.py
 tests/test_tools_relative_cites.py
 tests/test_tui.py
+tests/test_benchmark_tokens.py
 
 # Docs/scripts del agente TUI o desactualizados (superados por README.md/PLAN.md)
 AGENTS.md
