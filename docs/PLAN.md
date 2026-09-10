@@ -4,7 +4,7 @@
 > ANTES de cerrar contexto. Si el contexto de la conversación supera ~40%, volcar
 > estado aquí y pedir `/clear`.
 
-**Última actualización:** 2026-07-16 21:15 · **Hito activo: M2 — Multi-harness**
+**Última actualización:** 2026-09-10 14:30 · **Hito activo: M2 — Multi-harness (retomado tras M2.5)**
 
 > ⚠️ **Toda la tabla histórica de falsaciones y la línea base tienen sesgo de
 > medición** (tokens de subagentes `task` no contados; OC delegaba mucho más que
@@ -122,6 +122,24 @@ Harnesses objetivo: **Claude Code, opencode, Codex**. Sin fecha límite: kanban 
 - [~] Claude Code: mini-benchmark (5 tareas) — runner `benchmark/run_cc.py` HECHO y validado e2e (copia aislada sin CLAUDE.md/AGENTS.md autocargados; CC = --strict-mcp-config sin MCP; CCMCP = --mcp-config .mcp.json + LEO_FORCE=1 + steering via --append-system-prompt; tokens del transcript JSONL con dedupe por message.id, subagentes incluidos — el sesgo `task` EXISTE también en CC: t5 stream 34,8k vs jsonl 98,8k). **RUN 1 (haiku, 2026-07-16 21:05)**: mediana +5% ✅ (t1 −20%, t2 −21%, t5 +7%, t7 +5%, t14 +283%) · pooled +94% ❌ (todo el daño es t14: 1,06M tok, 22 turns, 10 reads + 8 bash tras get_context — el patrón "get_context ceba exploración" de opencode) · score 6,75 vs 6,90 (−0,15) · dur +15%. **Adopción ~0: las tools MCP salen DIFERIDAS tras ToolSearch en Claude Code** (el agente tuvo que buscarlas; solo t14 llamó get_context 1 vez). Swap disparó 1/16 reads (loop.py; en archivos pequeños la vista sale más grande que el crudo, guard OK). Falta: n=3, y decidir si medir con `ENABLE_TOOL_SEARCH=false` (desactiva el deferral; valores true/false/auto:N) o aceptar el default del harness.
 - [ ] Codex: instalación + smoke test + mini-benchmark (5 tareas)
 - **Done cuando:** los 3 harnesses instalan y pasan smoke test; mini-bench sin regresión
+
+### ✅ M2.5 — Hardening núcleo leo-mcp (2026-09-10)
+- [x] 8 módulos sin test directo cubiertos con smoke tests: `engine.py`,
+  `filectx.py`, `core/cache.py`, `core/evidence.py`, `core/tokens.py`,
+  `core/parser_generic.py`, `core/benchmark.py`, `core/orggraph.py`.
+- [x] 2 bugs reales encontrados y arreglados: `core/cache.py` (writers
+  `cache_result`/`cache_subgraph`/`cache_ontology` reventaban con
+  `AttributeError` sin Redis, tapado por un `try/except` en `engine.py`) y
+  `core/parser_generic.py` `_parse_css` (`set(...)[:30]` no indexable —
+  `extract_html_css` con CSS reventaba siempre). Fix + test de regresión en
+  ambos.
+- [x] Auditoría de redundancia: grupo grafo (graph/graphquery/refgraph/orggraph),
+  grupo parser (parser/parser_generic/parser_ts), scorer vs metrics — ver
+  notas de sesión de esta fecha para el detalle de cada hallazgo.
+- **Resultado:** suite en verde (206 + nuevos), núcleo leo-mcp con cobertura
+  directa en el camino crítico. M2 (Codex smoke test + mini-bench) se retoma
+  a continuación.
+- **Done cuando:** Fase 1 + Fase 2 completas → **CERRADO 2026-09-10**
 
 ### ⚪ M3 — Empaquetado
 - [ ] Instalación 1 comando por harness (pipx/uvx + snippet de config)
