@@ -65,3 +65,7 @@ cov.json
 _no_docstring_*.txt
 benchmark/.oc_empty_config/
 opencode.json.bench_bak
+
+# Corridas sueltas de benchmark (ruido): solo summary.json se trackea
+benchmark/results_real/*.json
+!benchmark/results_real/summary.json
