@@ -69,3 +69,63 @@ opencode.json.bench_bak
 # Corridas sueltas de benchmark (ruido): solo summary.json se trackea
 benchmark/results_real/*.json
 !benchmark/results_real/summary.json
+
+# Agente TUI (producto aparte, fuera de este repo público — solo leo-mcp se publica)
+leo_code/rag/agent/
+leo_code/rag/cli/
+leo_code/rag/llm/
+leo_code/plugins/
+leo_code/meter/
+leo_code/tui/
+leo_code/session/
+leo_code/learning/
+leo_code/sdk/
+leo_code/skills/
+packaging/leo-code/
+
+# Benchmarks de comparación agente-vs-agente (dependen del agente TUI de arriba)
+benchmark/agent_vs_agent.py
+benchmark/audit.py
+benchmark/bench_qdrant.py
+benchmark/judge.py
+benchmark/judge_v2.py
+benchmark/leo_rag_runner.py
+benchmark/leo_runner.py
+benchmark/leo_smart_runner.py
+benchmark/retrieval_bench.py
+benchmark/run_cc.py
+benchmark/run_real.py
+benchmark/run_signal.ps1
+benchmark/run_validation.ps1
+benchmark/config.json
+benchmark/tasks.json
+
+# Tests acoplados al agente TUI (importan modulos de arriba)
+tests/test_breadth.py
+tests/test_ccr.py
+tests/test_compact_messages.py
+tests/test_compactor.py
+tests/test_effort_routing.py
+tests/test_finalize.py
+tests/test_integration_rag.py
+tests/test_learning.py
+tests/test_list_files.py
+tests/test_loop_detector.py
+tests/test_loop_messages.py
+tests/test_memory.py
+tests/test_meter_reader.py
+tests/test_session.py
+tests/test_structural_tools.py
+tests/test_tools_relative_cites.py
+tests/test_tui.py
+
+# Docs/scripts del agente TUI o desactualizados (superados por README.md/PLAN.md)
+AGENTS.md
+PACKAGING.md
+CHANGES.md
+docs/BENCHMARK_PLAN.md
+docs/OPTIMIZATION_REPORT.md
+docs/mkdocs.yml
+docs/index.md
+install.sh
+install.ps1

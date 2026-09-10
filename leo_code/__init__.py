@@ -1,11 +1,10 @@
-"""leo_code — KC-RAG: Recuperación estructural de código por subgrafo de dependencias.
+"""leo_code — KC-RAG: motor de contexto de código estructural, expuesto como servidor MCP.
 
 Submódulos:
-- leo_code.core: parser AST, grafo BFS, serialización de contexto, cache Redis
-- leo_code.rag: pipeline retrieval (encoder, vector store Qdrant, compressor, classifier)
-- leo_code.rag.llm: capa model-agnostic (12 providers)
-- leo_code.rag.agent: agent loop (KC-RAG → LLM → tools → repeat)
-- leo_code.server: servidor FastAPI KC-RAG (:9898)
+- leo_code.engine: indexado persistente + retrieval híbrido + compresión (el motor)
+- leo_code.core: parser AST, grafo determinista (where/who_calls/impact/trace/guard), cache Redis
+- leo_code.rag: pipeline de retrieval (encoder, vector store Qdrant, compressor, classifier, indexer)
+- leo_code.server: servidor MCP (mcp_server.py) + servidor HTTP opcional (server.py)
 """
 
 __version__ = "0.2.0"

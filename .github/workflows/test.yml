@@ -31,5 +31,5 @@ jobs:
           python -c "from leo_code.core.parser import Capsule, extract_from_file"
           python -c "from leo_code.rag.classifier import classify_task"
           python -c "from leo_code.rag.compressor import compress"
-          python -c "from leo_code.rag.llm import get_provider"
-          python -c "from leo_code.sdk import KCRAGClient"
+          python -c "from leo_code.engine import compute_context"
+          python -c "from leo_code.server.mcp_server import server"

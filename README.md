@@ -8,9 +8,9 @@ Claude Code, opencode, Cursor o cualquier cliente MCP. Dos tools:
 - **`get_context`** — subgrafo del AST relevante a tu pregunta, cuerpos ya incluidos, comprimido. Sustituye a `read`/`grep`/`glob` para entender código.
 - **`graph`** — consulta determinista al grafo real (`where` / `who_calls` / `impact` / `trace` / `guard`), citada `archivo:línea`, **cero tokens de LLM, cero alucinación**.
 
-> Este repo también contiene un agente TUI (`leo-code`) construido sobre el mismo
-> motor. No es el foco de este README ni del cierre actual — el producto a entregar
-> es `leo-mcp`. Si buscás el agente, mirá `leo_code/rag/agent/`.
+> El motor también tiene un agente TUI (`leo-code`) construido encima, como
+> producto aparte — no se publica en este repo, que se queda enfocado 100% en
+> `leo-mcp`.
 
 ---
 
@@ -155,8 +155,7 @@ leo_code/
 ├── rag/
 │   ├── indexer/          # indexado incremental (build/sync)
 │   ├── compressor.py     # compresión adaptativa por tipo de tarea
-│   ├── vector_store.py, bm25.py, scorer.py, classifier.py, encoder.py
-│   └── agent/            # producto aparte (agente TUI), no es leo-mcp
+│   └── vector_store.py, bm25.py, scorer.py, classifier.py, encoder.py
 └── server/
     └── mcp_server.py     # servidor MCP (stdio): get_context + graph
 ```
@@ -166,7 +165,7 @@ leo_code/
 ## Tests
 
 ```bash
-pytest tests/ -q     # 227 tests
+pytest tests/ -q     # 225 tests
 ```
 
 `core/*`, `engine.py`, `rag/{indexer,bm25,classifier,compressor,encoder,scorer,vector_store}`
