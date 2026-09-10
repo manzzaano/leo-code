@@ -4,7 +4,7 @@
 > ANTES de cerrar contexto. Si el contexto de la conversación supera ~40%, volcar
 > estado aquí y pedir `/clear`.
 
-**Última actualización:** 2026-09-11 00:35 · **Hito activo: M2 — Multi-harness (retomado tras M2.5; publicación adelantada por pedido explícito, ver nota de sesión)**
+**Última actualización:** 2026-09-11 01:10 · **Hito activo: M2 — Multi-harness (retomado tras M2.5; publicación adelantada por pedido explícito, ver nota de sesión)**
 
 > ⚠️ **Toda la tabla histórica de falsaciones y la línea base tienen sesgo de
 > medición** (tokens de subagentes `task` no contados; OC delegaba mucho más que
@@ -223,6 +223,20 @@ Harnesses objetivo: **Claude Code, opencode, Codex**. Sin fecha límite: kanban 
   README (130 tests, cobertura del guardián 113 funciones/0 falsos).
 - No se tocó `docs/superpowers/` (specs/planes de esta sesión, valen como
   documentación de proceso) ni `benchmark/results_real/summary.json`.
+- **Ronda final (usuario: "sigue habiendo fallos... revisar absolutamente
+  todo"):** verificado con `gh api .../check-runs` que HEAD tenía los 8
+  checks en verde — los "fallos" que el usuario veía en Actions eran de
+  commits viejos ya superados, no algo nuevo. Barrido de cobertura del
+  árbol trackeado actual (28 módulos en `leo_code/`, ya sin el agente):
+  encontrado otro huérfano (`rag/conversation_history.py`, solo lo usaba
+  `rag/agent/loop.py` ya removido, 0 tests) → desenganchado igual que el
+  resto. 2 gaps reales de cobertura tapados: `logging_config.py`
+  (idempotencia de handlers, parseo de nivel — tenía lógica real, no era
+  el one-liner que parecía en M2.5) y el CLI standalone que esta misma
+  sesión le agregó a `core/guardian.py` (solo probado a mano hasta ahora).
+  **Resultado: cero módulos trackeados sin test.** 135 tests, verificado en
+  CI real (`Test` + `leo-code formal audit`, ambos success, commit
+  2120e27).
 
 **2026-09-10 tarde/noche (M2.5 cierre + publicación adelantada, fuera de orden de M3/M4 por pedido explícito del usuario):**
 - M2.5 cerrado con review final de rama completa (opus): 2 Important reales

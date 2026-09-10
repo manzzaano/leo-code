@@ -165,12 +165,14 @@ leo_code/
 ## Tests
 
 ```bash
-pytest tests/ -q     # 130 tests
+pytest tests/ -q     # 135 tests
 ```
 
-`core/*`, `engine.py`, `rag/{indexer,bm25,classifier,compressor,encoder,scorer,vector_store}`
-y `server/*` — el camino completo de `get_context`/`graph` — tienen cobertura
-directa. Ver `docs/PLAN.md` para el detalle de qué se prueba dónde.
+Cada módulo trackeado de `leo_code/` tiene al menos un test directo o por
+subprocess (`core/*`, `engine.py`, `filectx.py`, `logging_config.py`,
+`rag/{indexer,bm25,classifier,compressor,encoder,scorer,vector_store}`,
+`server/*`) — el camino completo de `get_context`/`graph` incluido. Ver
+`docs/PLAN.md` para el detalle de qué se prueba dónde.
 
 ---
 
