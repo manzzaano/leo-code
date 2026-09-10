@@ -4,7 +4,7 @@
 > ANTES de cerrar contexto. Si el contexto de la conversación supera ~40%, volcar
 > estado aquí y pedir `/clear`.
 
-**Última actualización:** 2026-09-10 20:45 · **Hito activo: M2 — Multi-harness (retomado tras M2.5; publicación adelantada por pedido explícito, ver nota de sesión)**
+**Última actualización:** 2026-09-11 00:35 · **Hito activo: M2 — Multi-harness (retomado tras M2.5; publicación adelantada por pedido explícito, ver nota de sesión)**
 
 > ⚠️ **Toda la tabla histórica de falsaciones y la línea base tienen sesgo de
 > medición** (tokens de subagentes `task` no contados; OC delegaba mucho más que
@@ -161,6 +161,68 @@ Harnesses objetivo: **Claude Code, opencode, Codex**. Sin fecha límite: kanban 
 - 2026-07-14 (cierre M1): **las "6 falsaciones" estaban contaminadas por el sesgo de subagentes** — con contabilidad completa y config bc1400, OCMCP gana en pooled (−30,1%) y empata en mediana (+1,9%). Config final: MCP 2 tools (get_context dieta + graph) + swap pasivo AST body-chars 1400 + steering v2. La promesa e2e del README debe ser la medida: **mediana por tarea ≈ neutra, pooled −30% (el ahorro viene de tareas pesadas), score y velocidad iguales o mejores, corrección estructural garantizada**.
 
 ## Notas de sesión
+
+**2026-09-10/11 noche (reestructuración del repo público — solo motor+MCP):**
+- Usuario: repo "tiene demasiadas cosas", publicar solo motor+leo-mcp. Método
+  acordado: `git rm --cached` (desenganchar del árbol actual, NO reescribir
+  historia) — queda todo en disco local, solo desaparece del listado público
+  de HEAD. Agente TUI se queda solo local, no se movió a otro repo.
+- Sacado del árbol trackeado (~91 archivos, PLAN.md, benchmark/results_real/
+  y docs/superpowers/ intactos): `leo_code/rag/{agent,cli,llm}`, `plugins/`,
+  `meter/`, `tui/`, `session/`, `learning/`, `sdk/`, `skills/`,
+  `packaging/leo-code/` (el agente); 15 scripts de `benchmark/` que dependen
+  del agente (`agent_vs_agent.py`, `audit.py`, `bench_qdrant.py`, `judge*.py`,
+  `leo_*runner.py`, `retrieval_bench.py`, `run_cc.py`, `run_real.py`,
+  `run_signal.ps1`, `run_validation.ps1`, `config.json`, `tasks.json`) —
+  quedan los que auditan SOLO el motor (`audit_formal.py`, `oracle.py`,
+  `ts_oracle.*`, `coverage_oracle.py`, `mutation.py`, `token_efficiency*.py`,
+  `mcp_client_bench.py`, los que corren en CI); 18 tests acoplados al agente
+  (import a nivel de módulo, verificado con grep antes de tocar — no a ciegas);
+  `AGENTS.md`, `PACKAGING.md`, `CHANGES.md`, `docs/{BENCHMARK_PLAN,
+  OPTIMIZATION_REPORT,mkdocs.yml,index.md}`, `install.{sh,ps1}` (superados
+  por README.md/PLAN.md o específicos del agente).
+- `tests/test_incremental_index.py` NO se sacó entero: tenía 2 tests con
+  import LOCAL de `AgentLoop` (no top-level, no rompía collection) mezclados
+  con 5 tests de `Indexer` puro — se recortaron solo esos 2. Lección: grep
+  de imports a nivel de módulo (`^from`) para decidir archivo entero vs
+  cirugía, no de cualquier import.
+- **Lección operativa cara:** `git rm --cached` no borra del disco local —
+  pytest local seguía viendo y coleccionando los 17+ archivos "sacados"
+  porque siguen físicamente ahí. Verificar con pytest local NO prueba nada
+  sobre lo que ve un clone fresco (CI). Desde la 2ª vuelta se verificó todo
+  con un `git clone` real a un directorio aparte antes de cada push — así se
+  agarró `tests/test_benchmark_tokens.py` (importaba `benchmark.run_real`,
+  se me escapó porque solo greppeé imports de `leo_code.*`, no de
+  `benchmark.*`).
+- **3 roturas reales encontradas y arregladas** (todas confirmadas en CI real,
+  no solo en el clone local):
+  1. `pyproject.toml` raíz tenía 4 `[project.scripts]` y deps (click, rich,
+     pyyaml, textual, prompt_toolkit, providers openai/anthropic/etc.)
+     exclusivas del agente — recortado a lo que el motor+MCP usa de verdad
+     (verificado con grep por módulo antes de sacar cada uno).
+  2. `.github/workflows/guardian.yml` llamaba `leo-code guardian` (CLI del
+     agente) para una feature 100% del motor (blast radius + cobertura, cero
+     LLM) — se agregó una CLI standalone a `core/guardian.py`
+     (`python -m leo_code.core.guardian --base/--staged/-s`, replica exacta
+     del wrapper del agente) y se actualizó el workflow.
+  3. `Dockerfile` instalaba `.[all]` (extra que ya no existe) → `pip install -e .`
+     plano. `test.yml` importaba `rag.llm`/`sdk` (removidos) → cambiado a
+     `engine`/`server.mcp_server`.
+- **Hallazgo real de la propia auditoría formal:** el chequeo (b) —guardián
+  vs `coverage.py` real— audita leo-code como una de sus 4 muestras. Al sacar
+  `tui/status.py` (único caller de `MetricsTracker.snapshot()` estáticamente
+  trazable) quedó 1 falso SIN-test: los otros 3 callers en `server.py` solo
+  se ejercitaban vía `TestClient` → ASGI → handler, un salto que el guardián
+  estático de leo no puede seguir (dispatch por ruta HTTP, no llamada Python
+  directa) — límite real y honesto del guardián, no un bug introducido.
+  Arreglado con un test que llama `MetricsTracker.snapshot()` directo
+  (`tests/test_server_metrics.py`), no maquillando el número.
+- **Resultado final verificado en CI real (no local):** `Test` verde en
+  3.11/3.12/3.13, `leo-code formal audit` verde de nuevo (`FORMAL: 5/5 →
+  IRREFUTABLE`, commit a9d6a25) con números post-reestructuración en el
+  README (130 tests, cobertura del guardián 113 funciones/0 falsos).
+- No se tocó `docs/superpowers/` (specs/planes de esta sesión, valen como
+  documentación de proceso) ni `benchmark/results_real/summary.json`.
 
 **2026-09-10 tarde/noche (M2.5 cierre + publicación adelantada, fuera de orden de M3/M4 por pedido explícito del usuario):**
 - M2.5 cerrado con review final de rama completa (opus): 2 Important reales
