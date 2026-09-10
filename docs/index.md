@@ -57,4 +57,4 @@ print(ctx.context)
 
 ---
 
-**Repo**: [github.com/manzzaano/leo-code](https://github.com/manzzaano/leo-code) • **Licencia**: MIT
+**Repo**: [github.com/manzzaano/leo-code](https://github.com/manzzaano/leo-code)

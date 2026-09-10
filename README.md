@@ -23,6 +23,21 @@ los de leo** (el `ast` de Python, el compilador `tsc` de TypeScript) y compara
 arista a arista. Corre gateado en CI (`.github/workflows/audit.yml`) — una
 regresión no mergea.
 
+Última corrida verde en CI ([`leo-code formal audit`](https://github.com/manzzaano/leo-code/actions/workflows/audit.yml), 2026-07-09, `FORMAL: 5/5 → IRREFUTABLE`):
+
+| Check | Repos/escala | Resultado real medido |
+|---|---|---|
+| (a) Grafo Python vs `ast` | leo-code, django, sympy, scipy (~99.500 símbolos, ~475.700 aristas) | **100,000% precisión · 100,000% recall** (0 falsas, 0 perdidas) |
+| (a-ts) Grafo TS/JS vs `tsc` | repo del compilador TypeScript (41.270 símbolos) | **99,965% precisión · 99,959% recall** (31 falsas / 36 perdidas sobre 87,5k aristas) |
+| (b) Cobertura del guardián vs `coverage.py` | 146 funciones ejecutadas | **0 falsos** en ambas direcciones |
+| (c) Blast radius vs mutation testing real | `compress` (12 tests fallaron, 120 predichos) · `classify_task` (16 fallaron, 118 predichos) | Todos los fallos **⊆** lo predicho |
+| (d) SLA a escala | 291.631 símbolos indexados | query peor caso **1,78ms** (<50ms) · guardián **12ms** (<2s) |
+
+El único check que no da 100,000% exacto es el de TS/JS (99,96%) — se deja el
+número real en vez de redondear para arriba; el resto de la garantía formal
+(Python, guardián, blast radius, SLA) sí es 100%/0-falsos medido. Reproducible:
+`python benchmark/audit_formal.py <repos>`.
+
 ## Números medidos (validación 3×, config final)
 
 La tabla de criterio de éxito, medida y cerrada el 2026-07-14 (ver `docs/PLAN.md`
@@ -167,8 +182,3 @@ Code** y **opencode**; **Codex** pendiente. Ver `docs/PLAN.md` para el kanban
 completo y las decisiones tomadas con su porqué — es la fuente de verdad del
 proyecto, no este README.
 
----
-
-## Licencia
-
-MIT.
