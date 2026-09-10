@@ -16,6 +16,21 @@ def test_metrics_prometheus_content_type_and_body():
     assert "leo_code_uptime_seconds" in body
 
 
+def test_metrics_tracker_snapshot_reflects_recorded_queries():
+    """Llamada directa a MetricsTracker.snapshot() — antes solo se ejercitaba
+    indirecto via el endpoint /metrics/prometheus (TestClient -> ASGI -> handler),
+    un salto que el guardian estatico de leo no puede trazar (dispatch por ruta,
+    no llamada Python directa) — el audit formal lo marcaba falso SIN-test."""
+    from leo_code.core.metrics import MetricsTracker
+
+    tracker = MetricsTracker()
+    tracker.record_query(tokens=100, latency_ms=50)
+    snap = tracker.snapshot()
+
+    assert snap.queries_total == 1
+    assert snap.avg_latency_ms == 50
+
+
 def test_snapshot_to_prometheus_format():
     from leo_code.core.metrics import MetricsSnapshot
     snap = MetricsSnapshot(queries_total=5, avg_latency_ms=12.5)
