@@ -23,20 +23,20 @@ los de leo** (el `ast` de Python, el compilador `tsc` de TypeScript) y compara
 arista a arista. Corre gateado en CI (`.github/workflows/audit.yml`) — una
 regresión no mergea.
 
-Última corrida verde en CI ([`leo-code formal audit`](https://github.com/manzzaano/leo-code/actions/workflows/audit.yml), 2026-07-09, `FORMAL: 5/5 → IRREFUTABLE`):
+Última corrida verde en CI ([`leo-code formal audit`](https://github.com/manzzaano/leo-code/actions/workflows/audit.yml), 2026-09-10, `FORMAL: 5/5 → IRREFUTABLE`):
 
 | Check | Repos/escala | Resultado real medido |
 |---|---|---|
-| (a) Grafo Python vs `ast` | leo-code, django, sympy, scipy (~99.500 símbolos, ~475.700 aristas) | **100,000% precisión · 100,000% recall** (0 falsas, 0 perdidas) |
-| (a-ts) Grafo TS/JS vs `tsc` | repo del compilador TypeScript (41.270 símbolos) | **99,965% precisión · 99,959% recall** (31 falsas / 36 perdidas sobre 87,5k aristas) |
-| (b) Cobertura del guardián vs `coverage.py` | 146 funciones ejecutadas | **0 falsos** en ambas direcciones |
-| (c) Blast radius vs mutation testing real | `compress` (12 tests fallaron, 120 predichos) · `classify_task` (16 fallaron, 118 predichos) | Todos los fallos **⊆** lo predicho |
-| (d) SLA a escala | 291.631 símbolos indexados | query peor caso **1,78ms** (<50ms) · guardián **12ms** (<2s) |
+| (a) Grafo Python vs `ast` | leo-code + 3 repos externos (~100.600 símbolos, ~483.600 aristas) | **100,000% precisión · 100,000% recall** (0 falsas, 0 perdidas) |
+| (a-ts) Grafo TS/JS vs `tsc` | repo del compilador TypeScript (36.739 símbolos) | **99,950% precisión · 99,926% recall** (31 falsas / 46 perdidas sobre 62,2k aristas) |
+| (b) Cobertura del guardián vs `coverage.py` | 204 funciones ejecutadas | **0 falsos** en ambas direcciones |
+| (c) Blast radius vs mutation testing real | `compress` (24 tests fallaron, 115 predichos) · `classify_task` (18 fallaron, 128 predichos) | Todos los fallos **⊆** lo predicho |
+| (d) SLA a escala | 272.656 símbolos indexados | query peor caso **1,11ms** (<50ms) · guardián **10ms** (<2s) |
 
-El único check que no da 100,000% exacto es el de TS/JS (99,96%) — se deja el
-número real en vez de redondear para arriba; el resto de la garantía formal
-(Python, guardián, blast radius, SLA) sí es 100%/0-falsos medido. Reproducible:
-`python benchmark/audit_formal.py <repos>`.
+El único check que no da 100,000% exacto es el de TS/JS (~99,93-99,95%) — se
+deja el número real en vez de redondear para arriba; el resto de la garantía
+formal (Python, guardián, blast radius, SLA) sí es 100%/0-falsos medido.
+Reproducible: `python benchmark/audit_formal.py <repos>`.
 
 ## Números medidos (validación 3×, config final)
 
