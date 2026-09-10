@@ -8,7 +8,7 @@ version = "0.2.0"
 description = "El motor KC-RAG de leo-code como servidor MCP para cualquier agente."
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["leo-code-core==0.2.0", "mcp>=1.0", "fastapi>=0.115", "uvicorn>=0.30"]
+dependencies = ["leo-code-core==0.2.0", "mcp>=1.0,<2.0", "fastapi>=0.115", "uvicorn>=0.30"]
 [project.scripts]
 leo-code-mcp-stdio = "leo_code.server.mcp_server:run_stdio"
 leo-code-mcp = "leo_code.server.server:main"
