@@ -6,7 +6,7 @@
 // v5: un read de archivo entero devuelve la versión comprimida del AST
 // (leo_code.filectx) en vez del crudo. Mismos turnos, menos contenido; el
 // agente ni se entera. Rango offset/limit = crudo (editar exige líneas).
-// get_context/graph siguen disponibles vía MCP (steering en AGENTS.md).
+// get_context/graph siguen disponibles vía MCP.
 //
 // Gated: solo actúa con LEO_FORCE=1 (benchmark lo pone en OCMCP; OC vanilla
 // y usuarios sin opt-in quedan intactos).

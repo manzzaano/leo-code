@@ -1,6 +1,6 @@
 """Smoke test del CLI standalone `python -m leo_code.core.guardian` (agregado
-para que guardian.yml no dependa del CLI del agente, ver PLAN.md) — via
-subprocess, igual que tests/test_filectx.py."""
+para que guardian.yml no dependa del CLI del agente) — via subprocess,
+igual que tests/test_filectx.py."""
 
 import os
 import subprocess
