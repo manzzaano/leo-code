@@ -67,6 +67,9 @@ opencode.json.bench_bak
 benchmark/results_real/*.json
 !benchmark/results_real/summary.json
 
+# Diario de desarrollo + reglas de sesion + specs de proceso: privados, no en el repo publico
+docs/PLAN.md
+
 # Agente TUI (producto aparte, fuera de este repo público — solo leo-mcp se publica)
 leo_code/rag/agent/
 leo_code/rag/cli/
