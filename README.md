@@ -40,8 +40,8 @@ Reproducible: `python benchmark/audit_formal.py <repos>`.
 
 ## Números medidos (validación 3×, config final)
 
-La tabla de criterio de éxito, medida y cerrada el 2026-07-14 (ver `docs/PLAN.md`
-para el historial completo de falsaciones que llevó a esta config):
+Tabla de criterio de éxito, medida y cerrada el 2026-07-14 tras 6 configuraciones
+falsadas (steering, autosuficiencia, veto de relecturas, sustitución forzada...):
 
 | Métrica | Umbral | Resultado medido |
 |---|---|---|
@@ -54,9 +54,9 @@ para el historial completo de falsaciones que llevó a esta config):
 La promesa honesta no es "ahorra tokens en cada turno" — es: **el ahorro real es
 por consulta y viene de las tareas pesadas (pooled −30%); en la mediana por
 tarea es neutro; lo que no tiene vanilla es la corrección estructural
-garantizada.** Seis configuraciones anteriores probaron y fallaron un objetivo de
-"−40% end-to-end" antes de que esta fuera la conclusión — el detalle completo
-está en `docs/PLAN.md`.
+garantizada.** Un objetivo inicial de "−40% end-to-end" se descartó tras medir
+seis configuraciones distintas, todas peor o neutras — el ahorro real vive en
+las consultas caras, no en el turno promedio.
 
 ---
 
@@ -171,15 +171,12 @@ pytest tests/ -q     # 135 tests
 Cada módulo trackeado de `leo_code/` tiene al menos un test directo o por
 subprocess (`core/*`, `engine.py`, `filectx.py`, `logging_config.py`,
 `rag/{indexer,bm25,classifier,compressor,encoder,scorer,vector_store}`,
-`server/*`) — el camino completo de `get_context`/`graph` incluido. Ver
-`docs/PLAN.md` para el detalle de qué se prueba dónde.
+`server/*`) — el camino completo de `get_context`/`graph` incluido.
 
 ---
 
 ## Estado del proyecto
 
 En desarrollo activo, pre-v1. Instalación y smoke test verificados en **Claude
-Code** y **opencode**; **Codex** pendiente. Ver `docs/PLAN.md` para el kanban
-completo y las decisiones tomadas con su porqué — es la fuente de verdad del
-proyecto, no este README.
+Code** y **opencode**; **Codex** pendiente.
 
