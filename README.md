@@ -1,6 +1,28 @@
+<div align="center">
+
 # leo-mcp
 
-**Servidor MCP que le da a tu agente de código un grafo estructural con prueba, en vez de dejarlo adivinar leyendo archivos.**
+**Servidor MCP que le da a tu agente de código un grafo estructural con prueba,**
+**en vez de dejarlo adivinar leyendo archivos.**
+
+[![Tests](https://github.com/manzzaano/leo-code/actions/workflows/test.yml/badge.svg)](https://github.com/manzzaano/leo-code/actions/workflows/test.yml)
+[![Formal Audit](https://github.com/manzzaano/leo-code/actions/workflows/audit.yml/badge.svg)](https://github.com/manzzaano/leo-code/actions/workflows/audit.yml)
+[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)](pyproject.toml)
+[![Protocol](https://img.shields.io/badge/protocol-MCP-6b4fbb)](https://modelcontextprotocol.io)
+
+<table>
+<tr>
+<td align="center" width="220"><b>80–97%</b><br/><sub>menos tokens por consulta<br/>vs. leer los archivos a mano</sub></td>
+<td align="center" width="220"><b>100%</b><br/><sub>precisión y recall del grafo<br/>vs. <code>ast</code> / <code>tsc</code> reales</sub></td>
+<td align="center" width="220"><b>−14,2%</b><br/><sub>duración vs. un agente<br/>sin <code>leo-mcp</code></sub></td>
+</tr>
+</table>
+
+*Números medidos y reproducibles — metodología y fuente en la tabla de benchmarks más abajo.*
+
+</div>
+
+---
 
 `leo-mcp` es el motor KC-RAG de este repo expuesto como servidor MCP (stdio) para
 Claude Code, opencode, Cursor o cualquier cliente MCP. Dos tools:
