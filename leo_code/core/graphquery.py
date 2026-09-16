@@ -91,6 +91,16 @@ class GraphQuery:
             for callee in (getattr(c, "calls", None) or []):
                 self.callers.setdefault(callee, []).append(c)
                 self.callers.setdefault(_bare(callee), []).append(c)
+        # Familias de lenguaje por nombre, precomputadas: _edge_ok se llama UNA VEZ POR
+        # ARISTA y resolverlas ahí costaba un _resolve() (con sort) por arista — a escala
+        # real (296k símbolos, nombres muy repetidos) eso disparó who_calls ×54 e impact
+        # ×42 y tumbó el SLA del chequeo (d). Aquí es O(1) por arista.
+        self._fams: dict[str, set] = {}
+        for c in self.caps.values():
+            if self._is_def(c):
+                fam = _family(c)
+                self._fams.setdefault(c.name, set()).add(fam)
+                self._fams.setdefault(_bare(c.name), set()).add(fam)
 
     # ---- helpers ----
     def _cite(self, c) -> Cite:
@@ -122,10 +132,13 @@ class GraphQuery:
     # Una arista solo vale dentro de la misma familia de lenguaje o si es HTTP explícita
     # (boundary → properties["xlang_calls"]). En repos de un solo lenguaje no cambia nada.
     def _edge_ok(self, caller, callee: str) -> bool:
-        if _bare(callee) in _xlang_targets(caller):
+        fams = self._fams.get(callee) or self._fams.get(_bare(callee))
+        if not fams:
+            return True                      # callee externo (sin definición indexada)
+        caller_fam = _family(caller)
+        if not caller_fam or "" in fams or caller_fam in fams:
             return True
-        defs = self._resolve(callee)
-        return not defs or any(_same_family(caller, d) for d in defs)
+        return _bare(callee) in _xlang_targets(caller)   # solo aristas HTTP explícitas
 
     def _callers_of(self, name: str) -> list:
         callers = self.callers.get(name) or self.callers.get(_bare(name)) or []
