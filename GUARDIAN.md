@@ -26,11 +26,11 @@ python -m leo_code.core.guardian --staged
 
 Salida (ejemplo, cero LLM):
 ```
-cambias `get_report`  [✗ SIN test]
-  → afecta a 3 símbolos, 2 SIN test (riesgo)
-    · Dashboard (component) @ web/app.tsx:14   [✗ SIN test]   ← rotura cross-lenguaje
-    · render_page (function) @ views.py:88     [✓ test]
-guardian · 1 cambios · 3 afectados · 2 SIN test (riesgo) — determinista, con prueba, cero LLM
+changing `get_report`  [✗ NO test]
+  → affects 3 symbol(s), 2 with NO test (risk)
+    · Dashboard (component) @ web/app.tsx:14   [✗ NO test]   ← rotura cross-lenguaje
+    · render_page (function) @ views.py:88     [✓ tested]
+guardian · 1 changed · 3 affected · 2 with NO test (risk) — deterministic, with proof, zero LLM
 ```
 
 ## GitHub Action
@@ -54,11 +54,10 @@ cubierto por tests — con el detalle y la prueba en el log. Cero coste de LLM.
 
 ## Vía MCP (para tu agente / Claude Code / opencode)
 
-El servidor MCP expone la tool determinista **`guard`**: antes de que el agente edite un
-símbolo, llama `guard <símbolo>` y recibe el radio de explosión + cobertura con prueba,
-sin gastar tokens de LLM. Así el agente edita con red de seguridad.
+El servidor MCP expone el guardián como **`graph` con `op=guard`**: antes de que el agente
+edite un símbolo, llama `graph(op="guard", symbol="<símbolo>")` y recibe el radio de
+explosión + cobertura con prueba, sin gastar tokens de LLM.
 
-```json
-{ "mcpServers": { "leo-code": {
-    "command": "python", "args": ["-m", "leo_code.server.mcp_server"] } } }
+```bash
+claude mcp add leo-mcp -- npx -y leo-mcp
 ```
