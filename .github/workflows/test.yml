@@ -33,3 +33,7 @@ jobs:
           python -c "from leo_code.rag.compressor import compress"
           python -c "from leo_code.engine import compute_context"
           python -c "from leo_code.server.mcp_server import server"
+          leo-mcp --version
+
+      - name: npm launcher test
+        run: node --test npm/bin/leo-mcp.test.js

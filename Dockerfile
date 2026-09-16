@@ -10,9 +10,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc g++ && \
     rm -rf /var/lib/apt/lists/*
 
-# Instalar leo-code desde el repo local (modo editable)
+# Servidor HTTP (leo-code-mcp): fastapi/uvicorn/httpx viven en el extra `http`
 COPY . /app
-RUN pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir -e ".[http]"
 
 # Cache dir para Qdrant local e índices
 RUN mkdir -p /cache
