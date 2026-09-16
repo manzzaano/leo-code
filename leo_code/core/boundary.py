@@ -53,7 +53,12 @@ def _server_routes(capsules: dict) -> dict[str, list]:
     """plantilla_ruta -> [cápsulas endpoint que la sirven]."""
     routes: dict[str, list] = {}
     for c in capsules.values():
-        text = (getattr(c, "content", "") or "") + " " + (getattr(c, "signature", "") or "")
+        # El parser AST de Python deja los decoradores FUERA de content/signature, en
+        # properties["decorators"] ("app.get('/api/x')"): sin mirarlos, ninguna ruta
+        # FastAPI/Flask de un repo real se cosía (medido en NEXUS, 2026-09-15).
+        props = getattr(c, "properties", None) or {}
+        text = " ".join(((getattr(c, "content", "") or ""), (getattr(c, "signature", "") or ""),
+                         str(props.get("decorators", ""))))
         for m in _SERVER_ROUTE.finditer(text):
             routes.setdefault(_norm(m.group(1)), []).append(c)
     return routes

@@ -27,21 +27,11 @@ def main():
     import io
     real_stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     sys.stdout = sys.stderr
-    # _CACHE_DIR del engine es relativa al CWD: situarse en el repo ANTES de importar.
-    os.chdir(repo)
-    from leo_code.engine import (_get_indexer, _load_index_from_disk, _indexed_repos,
-                                 _index_lock, _save_index_to_disk, _save_indexed_repos)
+    from leo_code.engine import _get_indexer, ensure_structural
 
-    with _index_lock:
-        _load_index_from_disk()
-        if repo not in _indexed_repos:
-            _get_indexer().build(repo)
-            _indexed_repos.add(repo)
-            # Persistir: cada read del plugin lanza un proceso nuevo — sin esto,
-            # una copia aislada (ruta distinta a la del cache sembrado) re-indexa
-            # el repo entero en CADA read.
-            _save_index_to_disk()
-            _save_indexed_repos()
+    # Índice persistido por repo en la caché de usuario: cada read del plugin es un
+    # proceso nuevo y solo paga load + sync incremental, no un build completo.
+    ensure_structural(repo)
 
     caps = [c for c in _get_indexer().get_capsules().values()
             if os.path.abspath(c.file_path) == target]

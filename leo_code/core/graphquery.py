@@ -46,13 +46,30 @@ class Proof:
 
     def render(self) -> str:
         if not self.cites:
-            return f"[{self.kind}] sin resultados para '{self.query}'."
-        head = f"[{self.kind}] {self.query} — {len(self.cites)} resultado(s), con prueba:"
+            return f"[{self.kind}] no results for '{self.query}'."
+        head = f"[{self.kind}] {self.query} — {len(self.cites)} result(s), with proof:"
         lines = [head] + [f"  · {c}" for c in self.cites]
         if self.edges:
-            lines.append("  aristas: " + " → ".join(
+            lines.append("  edges: " + " → ".join(
                 dict.fromkeys([self.edges[0][0]] + [e[1] for e in self.edges])))
         return "\n".join(lines)
+
+
+_JS_FAMILY = {"javascript", "typescript", "js", "ts", "jsx", "tsx"}
+
+
+def _family(c) -> str:
+    lang = (getattr(c, "language", "") or "").lower()
+    return "js" if lang in _JS_FAMILY else lang
+
+
+def _same_family(a, b) -> bool:
+    fa, fb = _family(a), _family(b)
+    return not fa or not fb or fa == fb   # sin lenguaje conocido → no se filtra
+
+
+def _xlang_targets(c) -> set:
+    return {_bare(x.get("to", "")) for x in ((getattr(c, "properties", None) or {}).get("xlang_calls") or [])}
 
 
 def _bare(name: str) -> str:
@@ -100,12 +117,26 @@ class GraphQuery:
         out.sort(key=lambda c: 0 if self._is_def(c) else 1)
         return out
 
+    # La resolución es por NOMBRE: en un repo mixto `d.get()` de Python contaba como
+    # caller de un `get()` de TypeScript (medido en NEXUS: `get` con 25 "callers").
+    # Una arista solo vale dentro de la misma familia de lenguaje o si es HTTP explícita
+    # (boundary → properties["xlang_calls"]). En repos de un solo lenguaje no cambia nada.
+    def _edge_ok(self, caller, callee: str) -> bool:
+        if _bare(callee) in _xlang_targets(caller):
+            return True
+        defs = self._resolve(callee)
+        return not defs or any(_same_family(caller, d) for d in defs)
+
+    def _callers_of(self, name: str) -> list:
+        callers = self.callers.get(name) or self.callers.get(_bare(name)) or []
+        return [c for c in callers if self._edge_ok(c, name)]
+
     # ---- queries deterministas ----
     def where(self, name: str) -> Proof:
         return Proof("where", name, [self._cite(c) for c in self._resolve(name)])
 
     def who_calls(self, name: str, limit: int = 50) -> Proof:
-        callers = self.callers.get(name) or self.callers.get(_bare(name)) or []
+        callers = self._callers_of(name)
         seen, uniq = set(), []
         for c in callers:
             if c.id not in seen:
@@ -137,7 +168,7 @@ class GraphQuery:
         seen, q, order, edges = {_bare(start)}, deque([start]), [], []
         while q:
             cur = q.popleft()
-            for caller in (self.callers.get(cur) or self.callers.get(_bare(cur)) or []):
+            for caller in self._callers_of(cur):
                 key = _bare(caller.name)
                 if key not in seen:
                     seen.add(key)
@@ -172,6 +203,8 @@ class GraphQuery:
                 hit = cur; break
             for c in self._resolve(cur):
                 for callee in (getattr(c, "calls", None) or []):
+                    if not self._edge_ok(c, callee):
+                        continue
                     if _bare(callee) == dst_bare:
                         prev[callee] = cur; hit = callee; q.clear(); break
                     if callee not in prev:

@@ -89,6 +89,37 @@ _DEF_NODES = {
     "abstract_class_declaration": "class",
 }
 
+# TS/JS idiomático declara funciones como variables u objetos de funciones, no con
+# `function`: `const Page = () => …`, `const load = useCallback(() => …)`,
+# `export const api = { jobs: () => get("/api/jobs") }`. Sin esto, en un frontend React
+# real casi nada era un símbolo (medido en NEXUS: el trace frontend→backend no cruzaba).
+# MISMA regla en el oráculo tsc (benchmark/ts_oracle.js): VariableDeclaration /
+# PropertyAssignment cuyo initializer es arrow/function, o una llamada que envuelve una
+# (patrón useCallback/useMemo/memo).
+_FN_VALUES = {"arrow_function", "function_expression"}
+# Envoltorios que DEVUELVEN la función (siguen siendo una función con nombre). Lista
+# blanca a propósito: `const idx = xs.findIndex(t => …)` o `useMemo(() => …)` devuelven
+# un VALOR, no una función, y colarlos inventaba símbolos (visto en NEXUS: `idx`, `widths`).
+_FN_WRAPPERS = {"useCallback", "memo", "forwardRef", "observer", "useEventCallback", "useMemoizedFn"}
+
+
+def _fn_value(node):
+    """El nodo-función de un initializer, si lo hay (directo o vía envoltorio conocido)."""
+    if node is None:
+        return None
+    if node.type in _FN_VALUES:
+        return node
+    if node.type == "call_expression":
+        fn = node.child_by_field_name("function")
+        callee = fn.text.decode("utf-8", "replace").split(".")[-1] if fn is not None else ""
+        if callee not in _FN_WRAPPERS:
+            return None
+        args = node.child_by_field_name("arguments")
+        for child in (args.children if args is not None else []):
+            if child.type in _FN_VALUES:
+                return child
+    return None
+
 
 def extract_from_tree_sitter(content: str, file_path: str, language: str) -> list[Capsule]:
     grammar = "javascript" if language == "javascript" else (
@@ -101,9 +132,35 @@ def extract_from_tree_sitter(content: str, file_path: str, language: str) -> lis
         nm = node.child_by_field_name("name")
         return nm.text.decode("utf-8", "replace") if nm is not None else None
 
+    def emit(name: str, kind: str, node) -> None:
+        start = node.start_point[0] + 1
+        end = node.end_point[0] + 1
+        ctype = "class" if kind == "class" else ("method" if kind == "method" else "function")
+        body = "\n".join(lines[start - 1:end])
+        caps.append(Capsule(
+            id=f"{file_path}:{start}:{name}",
+            type=ctype, name=name, file_path=file_path,
+            start_line=start, end_line=end,
+            language=language, signature=f"{kind} {name}",
+            content=body[:3000], calls=_calls_in(node),
+            properties={"lineas": end - start + 1},
+        ))
+
     stack = [tree.root_node]
     while stack:
         n = stack.pop()
+        if n.type == "variable_declarator":
+            # `const f = () => …` / `const f = function(){}` / `const f = useCallback(() => …)`
+            name_node = n.child_by_field_name("name")
+            if (name_node is not None and name_node.type == "identifier"
+                    and _fn_value(n.child_by_field_name("value")) is not None):
+                emit(name_node.text.decode("utf-8", "replace"), "function", n)
+        elif n.type == "pair":
+            # objeto de funciones: `export const api = { jobs: () => get("/api/jobs") }`
+            key = n.child_by_field_name("key")
+            if (key is not None and key.type in ("property_identifier", "identifier")
+                    and _fn_value(n.child_by_field_name("value")) is not None):
+                emit(key.text.decode("utf-8", "replace"), "function", n)
         kind = _DEF_NODES.get(n.type)
         if kind:
             name = name_of(n)

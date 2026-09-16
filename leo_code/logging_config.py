@@ -9,12 +9,14 @@ _MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 _BACKUP_COUNT = 2
 
 
-def setup_logging(repo: str | None = None, level: str | None = None) -> Path:
+def setup_logging(repo: str | None = None, level: str | None = None,
+                  log_dir: str | Path | None = None) -> Path:
     """Configura el logger raiz "leo" con un RotatingFileHandler. Idempotente.
 
     Args:
         repo: raíz del repo bajo la que vive .leo-code/logs/. Si None, usa cwd.
         level: nivel de logging (DEBUG, INFO, WARNING, ERROR). Default desde LEO_LOG_LEVEL env var o INFO.
+        log_dir: directorio explícito (el MCP usa la caché de usuario: no escribir en el repo).
 
     Returns:
         Path del fichero de log.
@@ -22,7 +24,7 @@ def setup_logging(repo: str | None = None, level: str | None = None) -> Path:
     logger = logging.getLogger("leo")
 
     repo_path = Path(repo).resolve() if repo else Path.cwd()
-    log_dir = repo_path / ".leo-code" / "logs"
+    log_dir = Path(log_dir) if log_dir else repo_path / ".leo-code" / "logs"
     log_file = log_dir / "leo-code.log"
 
     if any(isinstance(h, RotatingFileHandler) and getattr(h, "baseFilename", None) == str(log_file)
