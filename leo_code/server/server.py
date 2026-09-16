@@ -33,6 +33,7 @@ from pydantic import BaseModel
 import uvicorn
 
 from leo_code.core.metrics import get_metrics, MetricsSnapshot
+from leo_code import __version__
 from leo_code.logging_config import setup_logging
 
 # El MOTOR vive en leo_code/engine.py (sin FastAPI). server.py es solo el wrapper
@@ -126,7 +127,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "leo-code-mcp", "version": "0.2.0"}
+    return {"status": "ok", "service": "leo-code-mcp", "version": __version__}
 
 
 @app.post("/context", response_model=ContextResponse)

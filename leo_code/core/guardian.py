@@ -29,7 +29,7 @@ class Affected:
     covered: bool          # ¿lo alcanza algún test?
 
     def __str__(self) -> str:
-        mark = "✓ test" if self.covered else "✗ SIN test"
+        mark = "✓ tested" if self.covered else "✗ NO test"
         return f"{self.cite}  [{mark}]"
 
 
@@ -45,14 +45,14 @@ class ChangeReport:
         return [a for a in self.affected if not a.covered]
 
     def render(self) -> str:
-        lines = [f"cambias `{self.symbol}`"
-                 + ("  [✓ con test]" if self.changed_covered else "  [✗ SIN test]")]
+        lines = [f"changing `{self.symbol}`"
+                 + ("  [✓ tested]" if self.changed_covered else "  [✗ NO test]")]
         if not self.affected:
-            lines.append("  → no rompe a nadie indexado.")
+            lines.append("  → breaks nothing that is indexed.")
             return "\n".join(lines)
         risk = len(self.uncovered)
-        lines.append(f"  → afecta a {len(self.affected)} símbolo(s)"
-                     + (f", {risk} SIN test (riesgo)" if risk else ", todos con test ✓"))
+        lines.append(f"  → affects {len(self.affected)} symbol(s)"
+                     + (f", {risk} with NO test (risk)" if risk else ", all tested ✓"))
         for a in self.affected[:40]:
             lines.append(f"    · {a}")
         return "\n".join(lines)
@@ -263,12 +263,12 @@ if __name__ == "__main__":
 
     reports, summ = guard_repo(args.repo, staged=args.staged, base=args.base)
     if not reports:
-        print("guardian: sin simbolos cambiados en el diff.")
+        print("guardian: no changed symbols in the diff.")
         sys.exit(0)
     for r in reports:
         print(r.render())
         print()
     risk = summ["uncovered_risk"]
-    print(f"guardian · {summ['changed']} cambios · {summ['affected']} afectados · "
-          f"{risk} SIN test (riesgo) — determinista, con prueba, cero LLM")
+    print(f"guardian · {summ['changed']} changed · {summ['affected']} affected · "
+          f"{risk} with NO test (risk) — deterministic, with proof, zero LLM")
     sys.exit(1 if risk else 0)

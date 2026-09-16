@@ -307,6 +307,11 @@ def _compress_code_gen(all_capsules: list[Capsule]) -> str:
 
 
 
+# Tipos que NO deben abrir el contexto con cuerpo: no son código (cabeceras de archivo,
+# módulos, variables/constantes/atributos sueltos). Todo lo demás sí puede liderar.
+_NOT_LEAD = {"file_header", "module", "variable", "constant", "attribute", "image"}
+
+
 def _compress_query(top_capsules: list[Capsule], budget_tokens: int) -> str:
     """Top-N adaptativo: primer resultado con cuerpo completo, el resto con firma+docstring."""
     if not top_capsules:
@@ -317,15 +322,26 @@ def _compress_query(top_capsules: list[Capsule], budget_tokens: int) -> str:
     total_chars = 0
     seen: set[str] = set()
 
+    # El primer elemento es el único que sale con CUERPO: que sea código, no un bloque de
+    # imports ni un file_header (medido en NEXUS: "how does CV tailoring work" abría con el
+    # header de pdf_factory, código muerto, y la pregunta del Mentor con una línea de import).
+    # Lista NEGRA a propósito: con una lista blanca de tipos, un `endpoint` (o `component`,
+    # `async_function`…) no contaba como código y el líder se iba a otro símbolo.
+    lead = next((i for i, c in enumerate(top_capsules)
+                 if c.content and c.type not in _NOT_LEAD
+                 and not c.content.lstrip().startswith(("import ", "from "))), 0)
+    if lead:
+        top_capsules = [top_capsules[lead]] + top_capsules[:lead] + top_capsules[lead + 1:]
+
     for i, c in enumerate(top_capsules):
         if c.name in seen:
             continue
         seen.add(c.name)
 
-        # Primera cápsula relevante: incluir cuerpo completo si cabe.
-        # "method" incluido: es el tipo mayoritario del repo; sin él, toda query
-        # sobre un método devolvía solo firma (cero precisión sobre su lógica).
-        if i == 0 and c.content and c.type in ("function", "method", "class", "document", "file_header"):
+        # Primera cápsula relevante: incluir cuerpo completo si cabe. Cualquier tipo de
+        # código lo merece: con la lista blanca anterior, preguntar por un `endpoint`
+        # devolvía solo su firma (medido: el caso get_context del gate, 561 tok sin cuerpo).
+        if i == 0 and c.content and (c.type not in _NOT_LEAD or c.type == "file_header"):
             if c.type == "document":
                 body_text = f"[{c.name}|doc] {c.file_path}\n{c.content}"
             elif c.type == "file_header":

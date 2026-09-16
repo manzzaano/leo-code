@@ -190,6 +190,27 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
                 properties=props,
             ))
 
+            # Atributos de clase como cápsulas buscables: los campos de configuración
+            # (pydantic Settings, dataclasses, constantes de clase) son lo que la gente
+            # pregunta ("¿dónde se define min_match_score?") y no eran símbolos — `where`
+            # no los encontraba. Sin `calls`: no añaden aristas al grafo auditado.
+            for a in node.body:
+                if not isinstance(a, (ast.Assign, ast.AnnAssign)):
+                    continue
+                for t in (a.targets if isinstance(a, ast.Assign) else [a.target]):
+                    if not isinstance(t, ast.Name):
+                        continue
+                    raw = ast.get_source_segment(content, a) or ast.unparse(a)
+                    capsules.append(Capsule(
+                        id=_make_id(file_path, a.lineno, f"attribute {node.name}.{t.id}"),
+                        type="attribute", name=t.id, file_path=file_path,
+                        start_line=a.lineno, end_line=a.end_lineno or a.lineno,
+                        language="python", signature=raw if len(raw) <= 120 else f"{t.id} = ...",
+                        content=raw,
+                        properties={"class": node.name, "qualified": f"{node.name}.{t.id}",
+                                    "module": module_name},
+                    ))
+
             # Emitir cada método como cápsula buscable (antes solo vivían en props["metodos"]).
             for m in node.body:
                 if not isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)):
