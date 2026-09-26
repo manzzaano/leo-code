@@ -99,8 +99,18 @@ def cmd_doctor(args) -> int:
         row("typescript", False, f"tree-sitter unavailable, falling back to regex: {e}")
     row("semantic", None, "on (sentence-transformers)" if engine.SEMANTIC
         else "off (optional: install leo-mcp[semantic] or set LEO_SEMANTIC=1 with npx)")
-    row("cache", None, str(engine._CACHE_DIR))
+    # El watcher decide si cada llamada re-escanea el repo: sin él, en un árbol grande
+    # se pagan segundos por llamada. Diagnosticarlo aquí y no en un cuelgue raro.
     repo = os.path.abspath(args.repo)
+    if not engine._WATCH:
+        row("watch", None, "off (LEO_WATCH=0) - every call rescans the tree")
+    elif engine._get_indexer().watch(repo):
+        row("watch", True, "filesystem events - a call with no changes does no rescan")
+        engine._get_indexer().stop_watch(repo)
+    else:
+        row("watch", None, "unavailable here - falling back to rescanning the tree "
+                           "(watchdog missing, or the OS ran out of watches)")
+    row("cache", None, str(engine._CACHE_DIR))
     idx_path = engine.repo_index_path(repo)
     row("repo", None, f"{repo} - " + ("indexed" if idx_path.exists() else "not indexed yet (run: leo-mcp index)"))
     if util.find_spec("sentence_transformers") and not engine.SEMANTIC:
