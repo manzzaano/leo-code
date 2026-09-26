@@ -1,0 +1,47 @@
+name: Beta feedback
+description: You tried leo-mcp in your daily agent. Tell me if it earned its place.
+labels: ["beta-feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Three questions. Short answers are fine — "no" with a reason is the most useful answer there is.
+  - type: input
+    id: setup
+    attributes:
+      label: Setup
+      description: Agent, OS and repo size, so I can read the rest in context.
+      placeholder: Claude Code, Windows 11, monorepo ~40k files (TS + Python)
+    validations:
+      required: false
+  - type: textarea
+    id: would-you-keep-it
+    attributes:
+      label: 1. Would you keep it installed?
+      description: If not, say where it lost you — the install, the first answer, the noise, the latency.
+    validations:
+      required: true
+  - type: textarea
+    id: missing
+    attributes:
+      label: 2. What is missing?
+      description: The question you wanted to ask the graph and could not.
+    validations:
+      required: true
+  - type: textarea
+    id: superfluous
+    attributes:
+      label: 3. What is superfluous?
+      description: Output you skipped, a tool you never called, a field you ignored.
+    validations:
+      required: true
+  - type: textarea
+    id: wrong
+    attributes:
+      label: Anything it got wrong (optional)
+      description: |
+        A wrong or missing edge is the one bug I care about most — it breaks the only
+        promise the product makes. Paste the `graph` call and what you expected.
+      render: text
+    validations:
+      required: false
