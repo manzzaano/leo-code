@@ -110,6 +110,17 @@ def cmd_doctor(args) -> int:
     else:
         row("watch", None, "unavailable here - falling back to rescanning the tree "
                            "(watchdog missing, or the OS ran out of watches)")
+    # "no me avisa" tiene dos causas posibles y ninguna es obvia: el hook no está
+    # instalado, o lo está apagado. Que se vea aquí.
+    hook = Path(repo) / ".claude" / "settings.json"
+    installed = hook.exists() and "leo_code.guard_hook" in hook.read_text(encoding="utf-8",
+                                                                         errors="replace")
+    if os.getenv("LEO_GUARD_HOOK") == "0":
+        row("guard hook", None, "off (LEO_GUARD_HOOK=0)")
+    elif installed:
+        row("guard hook", True, "warns before editing a symbol whose dependents have no test")
+    else:
+        row("guard hook", None, "not installed here (run: leo-mcp init)")
     row("cache", None, str(engine._CACHE_DIR))
     idx_path = engine.repo_index_path(repo)
     row("repo", None, f"{repo} - " + ("indexed" if idx_path.exists() else "not indexed yet (run: leo-mcp index)"))
@@ -122,6 +133,65 @@ def cmd_doctor(args) -> int:
     print(f"  any client    leo-mcp init --client {{{','.join(CLIENTS)}}}")
     print("\n" + ("Ready." if ok else "Fix the ERR rows above."))
     return 0 if ok else 1
+
+
+def _hook_command() -> str:
+    """Comando del hook de guard, apuntando a ESTE intérprete.
+
+    No pasa por `npx`/`uvx` a propósito: el hook corre en cada edición y un arranque de
+    npx por edición no cabe en el presupuesto (medido con el intérprete directo: 0,28 s
+    sobre un índice de 1.220 símbolos). Si mueves o reinstalas el entorno, vuelve a
+    ejecutar `leo-mcp init`.
+    """
+    exe = sys.executable
+    return f'"{exe}" -m leo_code.guard_hook' if " " in exe else f"{exe} -m leo_code.guard_hook"
+
+
+def _install_guard_hook(root: Path) -> int:
+    """Añade el hook PreToolUse al settings.json del proyecto, sin pisar lo que haya."""
+    target = root / ".claude" / "settings.json"
+    data = {}
+    if target.exists():
+        try:
+            data = json.loads(target.read_text(encoding="utf-8") or "{}")
+        except json.JSONDecodeError as e:
+            print(f"{target} is not valid JSON ({e}); not touching it.", file=sys.stderr)
+            return 1
+    entries = data.setdefault("hooks", {}).setdefault("PreToolUse", [])
+    command = _hook_command()
+    for group in entries:
+        for h in group.get("hooks", []):
+            if "leo_code.guard_hook" in str(h.get("command", "")):
+                if h.get("command") != command:
+                    h["command"] = command   # el entorno cambió de sitio: repuntar
+                    _write_json(target, data)
+                    print(f"Updated the leo-mcp guard hook in {target}")
+                    return 0
+                print(f"leo-mcp guard hook already in {target}")
+                return 0
+    entry = {"matcher": "Edit|Write",
+             "hooks": [{"type": "command", "command": command}]}
+    entries.append(entry)
+    _write_json(target, data)
+    print(f"Added to {target}:")
+    print(json.dumps({"hooks": {"PreToolUse": [entry]}}, indent=2))
+    print("  It warns you before Claude edits a symbol whose dependents have no test, and"
+          " stays quiet otherwise. It never blocks an edit. Turn it off with LEO_GUARD_HOOK=0"
+          " or by deleting those lines.")
+    return 0
+
+
+def _maybe_hook(args, root: Path) -> int:
+    """El hook es lo que hace que leo hable sin que el agente se acuerde de preguntar.
+    Solo Claude Code: es el único harness con PreToolUse."""
+    if args.client == "claude" and not getattr(args, "no_hook", False):
+        return _install_guard_hook(root)
+    return 0
+
+
+def _write_json(target: Path, data: dict) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
 def cmd_init(args) -> int:
@@ -150,13 +220,15 @@ def cmd_init(args) -> int:
             return 1
     servers = data.setdefault(key, {})
     if "leo-mcp" in servers:
+        # Sin return: quien ya tenía el server configurado es justo quien aún no tiene
+        # el hook, y salir aquí dejaba a todos los usuarios previos sin él.
         print(f"leo-mcp is already configured in {target}")
-        return 0
+        return _maybe_hook(args, root)
     servers["leo-mcp"] = entry
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     print(f"Added leo-mcp to {target}. Restart {args.client} to load it.")
-    return 0
+    return _maybe_hook(args, root)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -173,6 +245,8 @@ def main(argv: list[str] | None = None) -> int:
         sub.add_parser(name, help=help_).add_argument("repo", nargs="?", default=".")
     p = sub.add_parser("init", help="register leo-mcp in a project's MCP config")
     p.add_argument("--client", choices=CLIENTS, default="claude")
+    p.add_argument("--no-hook", action="store_true",
+                   help="do not install the pre-edit guard hook (Claude Code only)")
     p.add_argument("repo", nargs="?", default=".")
     args = ap.parse_args(argv)
     if args.cmd not in (None, "serve"):
