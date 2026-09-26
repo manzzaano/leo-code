@@ -736,11 +736,7 @@ def extract_from_file(path: str, language: str = "python") -> list[Capsule]:
         from leo_code.core.parser_generic import extract_generic
         return detect_frameworks(extract_generic(content, path, language))
     except ImportError:
-        pass
-    try:
-        return extract_from_tree_sitter(content, path, language)
-    except (ImportError, SyntaxError, ValueError):
-        return []
+        return []   # parser_generic va en el paquete: si falta, no hay nada que extraer
 
 
 def extract_image_capsule(path: str) -> list[Capsule]:
