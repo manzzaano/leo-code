@@ -44,16 +44,13 @@ class Indexer:
         self._dirty: set[str] = set()            # repos con cambios de FS sin sincronizar
         self._dirty_lock = threading.Lock()
 
-    def _process_one(self, path: Path, lang: str, use_tree_sitter: bool, verbose: bool, repo: Path) -> tuple[list[Capsule], str, int, str | None]:
+    def _process_one(self, path: Path, lang: str, verbose: bool, repo: Path) -> tuple[list[Capsule], str, int, str | None]:
         try:
             if lang in ("auto", "python"):
                 lang = detect_language(str(path))
-            if use_tree_sitter:
-                from leo_code.core.parser import extract_from_tree_sitter
-                content = path.read_text(encoding="utf-8")
-                capsules = extract_from_tree_sitter(content, str(path), lang)
-            else:
-                capsules = extract_from_file(str(path), lang)
+            # extract_from_file ya elige el parser: ast (Python), tree-sitter (TS/JS) o
+            # regex genérica. No hay un modo "tree-sitter" que forzar desde fuera.
+            capsules = extract_from_file(str(path), lang)
             build_call_graph(capsules)
             return capsules, lang, len(capsules), None
         except Exception as e:
@@ -161,7 +158,7 @@ class Indexer:
         return junk
 
     def build(self, repo_path: str, languages: Optional[list[str]] = None,
-              use_tree_sitter: bool = False, verbose: bool = False) -> int:
+              verbose: bool = False) -> int:
         """Indexa todos los archivos de un repo en paralelo. Retorna número de cápsulas."""
         if languages is None:
             languages = self.CODE_LANGUAGES if self.hygiene else ["python"]
@@ -191,7 +188,7 @@ class Indexer:
 
         with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
             futures = {
-                executor.submit(self._process_one, path, lang, use_tree_sitter, verbose, repo): (path, lang)
+                executor.submit(self._process_one, path, lang, verbose, repo): (path, lang)
                 for path, lang in files
             }
             for future in as_completed(futures):
@@ -327,7 +324,7 @@ class Indexer:
         touched_capsules: list[Capsule] = []
         repo = Path(repo_path)
         for p, lang in to_parse.values():
-            caps, _, n, _err = self._process_one(p, lang, False, False, repo)
+            caps, _, n, _err = self._process_one(p, lang, False, repo)
             if n:
                 with self._capsules_lock:
                     for c in caps:
@@ -383,7 +380,12 @@ class Indexer:
         skip = self._SKIP_DIRS | self._PRODUCT_SKIP_DIRS
 
         class Handler(FileSystemEventHandler):
-            def on_any_event(self, event):
+            """Solo mutaciones. NO se usa `on_any_event`: en Linux inotify emite
+            `opened`/`closed_no_write` al LEER un archivo, así que el propio parseo del
+            indexer ensuciaría el repo y el sync se auto-perpetuaría (medido en WSL;
+            en Windows no pasa porque ReadDirectoryChangesW no reporta aperturas)."""
+
+            def _mark(self, event):
                 # Un evento de directorio no cambia cápsulas por sí mismo: el archivo
                 # que se creó/borró dentro llega como su propio evento.
                 if event.is_directory:
@@ -400,6 +402,8 @@ class Indexer:
                         continue
                     indexer.mark_dirty(repo_abs)
                     return
+
+            on_created = on_deleted = on_modified = on_moved = _mark
 
         try:
             obs = Observer()
