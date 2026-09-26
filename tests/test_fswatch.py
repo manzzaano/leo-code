@@ -103,3 +103,21 @@ def test_ensure_structural_no_walkea_si_el_watcher_no_vio_nada(repo, tmp_path, m
         assert any(c.name == "nueva" for c in engine._repo_caps(idx, repo_str))
     finally:
         engine._get_indexer().stop_watch()
+
+
+def test_doctor_reporta_el_estado_del_watcher(repo, tmp_path, monkeypatch, capsys):
+    """Sin esta fila, un FS que no entrega eventos se ve como "va lento" y nada más."""
+    import argparse
+
+    from leo_code import cli, engine
+
+    monkeypatch.setattr(engine, "_CACHE_DIR", tmp_path / "cache")
+    monkeypatch.setattr(engine, "_indexer", None)
+    args = argparse.Namespace(repo=str(repo))
+
+    assert cli.cmd_doctor(args) == 0
+    assert "watch" in capsys.readouterr().out
+
+    monkeypatch.setattr(engine, "_WATCH", False)
+    assert cli.cmd_doctor(args) == 0
+    assert "LEO_WATCH=0" in capsys.readouterr().out
