@@ -27,6 +27,12 @@ def fresh_engine(tmp_path, monkeypatch):
     monkeypatch.setattr(engine, "_indexer", None)
     monkeypatch.setattr(engine, "_structural_at", {})
     monkeypatch.setattr(engine, "_generation", {})
+    monkeypatch.setattr(engine, "_synced_at", {})
+    monkeypatch.setattr(engine, "_save_timers", {})
+    # Escritura del índice síncrona: en producción va diferida (ver _schedule_save), y
+    # estos tests comprueban el CONTENIDO de la caché, no cuándo se escribe. El diferido
+    # tiene sus propios tests en test_deferred_save.py.
+    monkeypatch.setattr(engine, "_SAVE_DEBOUNCE_S", 0.0)
     monkeypatch.setattr(mcp_server, "_gq_cache", {})
     monkeypatch.setattr(engine, "SEMANTIC", False)
     return tmp_path

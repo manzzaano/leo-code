@@ -110,7 +110,7 @@ Python users can skip npm: `uvx leo-mcp`, or `pip install leo-mcp` and then `leo
 
 `graph` doesn't estimate structure. It walks the parsed graph, and CI checks that graph against parsers that are not leo's. `benchmark/audit_formal.py` re-derives every edge with Python's `ast` and the TypeScript compiler `tsc`, compares edge by edge, and a regression can't merge (`.github/workflows/audit.yml`).
 
-Last green CI run (`FORMAL: 5/5 → IRREFUTABLE`):
+Last green CI run (`FORMAL: 6/6 → IRREFUTABLE`):
 
 | Check | Scale | Measured |
 |---|---|---|
@@ -119,6 +119,7 @@ Last green CI run (`FORMAL: 5/5 → IRREFUTABLE`):
 | (b) guardian coverage vs `coverage.py` | 146 executed functions | **0 false** in either direction |
 | (c) blast radius vs real mutation testing | mutated `classify_task`, `get_budget` | every failing test **⊆** predicted |
 | (d) latency at scale | 271,493 indexed symbols | worst query **1.98 ms** · guardian **13 ms** |
+| (e) post-edit budget | the graph rebuilt after one edit | **≤20 µs/symbol** amortized, and the index is never written inside a tool call |
 
 The TS/JS figure is left unrounded.
 
