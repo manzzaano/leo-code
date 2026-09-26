@@ -161,7 +161,12 @@ def _repo_caps(idx, repo_path: str) -> list:
 
 _structural_at: dict[str, float] = {}  # repo -> monotonic del último load/build/sync
 _generation: dict[str, int] = {}       # repo -> sube cuando cambian sus cápsulas (clave de caché)
-_RESYNC_S = 5.0  # ponytail: resync por walk como mucho cada 5 s; watcher de FS si el walk pesa en monorepos
+_RESYNC_S = 5.0    # intervalo MÍNIMO entre re-walks del repo
+_MAX_STALE_S = 60.0  # intervalo MÁXIMO sin re-walk aunque el watcher no haya visto nada:
+                     # red de seguridad si el FS no entrega eventos (montajes de red, algunos
+                     # contenedores). Un índice desactualizado en silencio sería peor que el walk.
+# Escotilla: LEO_WATCH=0 desactiva el watcher y deja el re-walk de siempre.
+_WATCH = os.getenv("LEO_WATCH", "1") != "0"
 
 
 # Sube cuando cambia lo que el parser extrae (nuevas cápsulas, nuevas aristas): el índice
@@ -186,16 +191,24 @@ def ensure_structural(repo: str) -> dict | None:
     necesitan `graph` y el retrieval estructural.
 
     1ª vez: build completo y se persiste. Arranques siguientes: load + sync incremental
-    (solo lo cambiado). Durante la sesión: re-sync como mucho cada _RESYNC_S, para que
-    las ediciones del agente se vean en el grafo.
+    (solo lo cambiado). Durante la sesión, para que las ediciones del agente se vean en
+    el grafo: si hay watcher de FS, se re-sincroniza SOLO cuando el watcher vio un cambio
+    real (coste 0 si no lo hubo; el walk de descubrimiento cuesta 1-2 s en un repo de
+    20.000 archivos), con un walk de seguridad cada _MAX_STALE_S por si el FS no entrega
+    eventos. Sin watcher, re-walk acotado a _RESYNC_S como siempre.
     Devuelve {action, seconds, capsules, by_language} si cargó o cambió algo; None si
     ya estaba fresco.
     """
     with _index_lock:
         last = _structural_at.get(repo)
-        if last is not None and time.monotonic() - last < _RESYNC_S:
-            return None
         idx = _get_indexer()
+        watching = idx.watch(repo) if _WATCH else False
+        if last is not None:
+            elapsed = time.monotonic() - last
+            if elapsed < _RESYNC_S:
+                return None
+            if watching and elapsed < _MAX_STALE_S and not idx.take_dirty(repo):
+                return None
         path = repo_index_path(repo)
         t0 = time.perf_counter()
         action = "sync"

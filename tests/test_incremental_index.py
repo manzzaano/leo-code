@@ -22,7 +22,7 @@ def test_sync_reparses_only_changed(tmp_path):
     assert {"foo", "bar"} <= names0
 
     cache_mtime = time.time()
-    time.sleep(0.01)
+    time.sleep(0.05)  # > tick del reloj de Windows (~15,6 ms)
     # cambia solo a.py: foo -> foo2
     _write(a, "def foo2():\n    return 9\n")
 
@@ -43,7 +43,7 @@ def test_sync_adds_new_and_removes_deleted(tmp_path):
     idx.build(str(tmp_path), languages=["python"])
 
     cache_mtime = time.time()
-    time.sleep(0.01)
+    time.sleep(0.05)  # > tick del reloj de Windows (~15,6 ms)
     b.unlink()                            # borra b.py
     _write(tmp_path / "c.py", "def baz():\n    return 3\n")  # nuevo
 
@@ -63,7 +63,7 @@ def test_sync_reresolves_call_graph(tmp_path):
     idx.build(str(tmp_path), languages=["python"])
 
     cache_mtime = time.time()
-    time.sleep(0.01)
+    time.sleep(0.05)  # > tick del reloj de Windows (~15,6 ms)
     # caller deja de llamar a helper
     _write(tmp_path / "a.py", "def caller():\n    return 0\n")
     idx.sync(str(tmp_path), since_mtime=cache_mtime, languages=["python"])

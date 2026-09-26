@@ -24,6 +24,8 @@ classifiers = [
 ]
 
 # Base = lo que usa el servidor MCP: grafo estructural + retrieval exact/BM25/scorer.
+# watchdog: eventos de FS para no re-walkear el repo en cada sync (1-2 s por llamada
+# medidos con 20.000 archivos). Si falta, el motor cae al walk de siempre.
 dependencies = [
     "mcp>=1.0,<2.0",
     "orjson>=3.9",
@@ -31,6 +33,7 @@ dependencies = [
     "tree-sitter>=0.23",
     "tree-sitter-typescript>=0.23",
     "tree-sitter-javascript>=0.23",
+    "watchdog>=4",
 ]
 
 [project.urls]
@@ -48,7 +51,6 @@ dev = [
     "leo-mcp[semantic,http]",
     "pytest>=8",
     "pytest-asyncio>=0.24",
-    "watchdog>=4",
 ]
 
 [project.scripts]

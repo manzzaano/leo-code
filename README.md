@@ -89,7 +89,7 @@ leo-mcp indexed C:\...\NEXUS  (build in 0.17s)
 - **Approximate** (regex-level): Go, Java, Rust, C/C++, C#, Ruby, PHP, Kotlin, Swift and others.
 - **Skipped:** dependencies, build output (`node_modules`, `.next`, `dist`, `target`…), minified bundles, files over 512 KB, and anything in `.gitignore` when the repo uses git.
 - **Not in the graph:** it is a static graph. Calls through WebSockets, subprocesses, queues, reflection or string-built dispatch are not edges, and using a type (a dataclass in an annotation) is not a call. Values that merely come out of a call (`const rows = items.filter(…)`) are not symbols.
-- **Your files stay put.** The index lives in your user cache (`%LOCALAPPDATA%\leo-mcp` or `~/.cache/leo-mcp`), never inside your repo. It is kept up to date incrementally as files change.
+- **Your files stay put.** The index lives in your user cache (`%LOCALAPPDATA%\leo-mcp` or `~/.cache/leo-mcp`), never inside your repo. It is kept up to date incrementally: a filesystem watcher re-parses only what actually changed, so a call that finds nothing new costs nothing (on a 20,000-file tree, re-scanning it cost 1.5-2.0 s per call).
 
 ## Configuration
 
@@ -99,6 +99,7 @@ leo-mcp indexed C:\...\NEXUS  (build in 0.17s)
 | `LEO_SEMANTIC` | off | `1` with npx installs `leo-mcp[semantic]` (sentence-transformers, ~2 GB with torch) for semantic recall in `get_context`; `graph` doesn't need it |
 | `LEO_CACHE_DIR` | user cache | where indexes and logs go |
 | `LEO_MAX_FILE_KB` | `512` | skip source files larger than this |
+| `LEO_WATCH` | `1` | filesystem watcher; `0` falls back to re-scanning the tree (network mounts that drop events) |
 | `LEO_MCP_FROM` | PyPI `leo-mcp==<version>` | install source for the npm launcher (local wheel, git URL) |
 
 Python users can skip npm: `uvx leo-mcp`, or `pip install leo-mcp` and then `leo-mcp`.

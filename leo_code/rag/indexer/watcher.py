@@ -7,7 +7,7 @@ Uso:
     indexer = Indexer()
     indexer.build("/path/to/repo", languages=["python"])
     indexer.save("kc_index.json.gz")
-    indexer.watch("/path/to/repo")
+    indexer.watch("/path/to/repo")   # eventos de FS: evita re-walkear en cada sync
 """
 
 import gzip
@@ -15,7 +15,6 @@ import json
 import os
 import subprocess
 import threading
-import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -41,6 +40,9 @@ class Indexer:
         self.max_file_kb = max_file_kb
         self._junk_seen: dict[str, float] = {}   # path -> mtime de archivos descartados
         self._empty_seen: dict[str, float] = {}  # path -> mtime de archivos sin cápsulas
+        self._observers: dict[str, object] = {}  # repo abs -> Observer de watchdog
+        self._dirty: set[str] = set()            # repos con cambios de FS sin sincronizar
+        self._dirty_lock = threading.Lock()
 
     def _process_one(self, path: Path, lang: str, use_tree_sitter: bool, verbose: bool, repo: Path) -> tuple[list[Capsule], str, int, str | None]:
         try:
@@ -352,54 +354,93 @@ class Indexer:
                 "deleted": len(deleted), "reparsed_capsules": reparsed,
                 "removed": removed, "capsules": touched_capsules}
 
-    def watch(self, repo_path: str):
-        """Inicia watchdog para reindexar archivos modificados."""
+    def watch(self, repo_path: str) -> bool:
+        """Marca el repo como sucio ante cambios reales del FS (evento nativo del SO).
+
+        Sustituye el re-walk de cada sync, que en un monorepo domina la latencia:
+        medido sobre 20.000 archivos, `_discover_files` + stat cuesta 1,2-2,2 s por
+        sync (de los cuales `git ls-files` son 20 ms: el resto es recorrer y statear),
+        y casi siempre no cambió nada. Con el watcher, un sync sin cambios cuesta 0.
+
+        Devuelve False si no se pudo observar (watchdog ausente, o el backend del SO
+        no da abasto — p. ej. inotify sin watches libres en un árbol enorme): el
+        llamador se queda con el walk de siempre, que sigue siendo correcto.
+        """
+        repo_abs = os.path.abspath(repo_path)
+        with self._dirty_lock:
+            if repo_abs in self._observers:
+                # None = ya se intentó y no se pudo: no se reintenta en cada llamada.
+                return self._observers[repo_abs] is not None
         try:
             from watchdog.observers import Observer
             from watchdog.events import FileSystemEventHandler
-
-            indexer = self
-
-            class Handler(FileSystemEventHandler):
-                def on_modified(self, event):
-                    if event.is_directory:
-                        return
-                    path = event.src_path
-                    if any(path.endswith(ext) for ext in [".py", ".js", ".ts", ".rs", ".go"]):
-                        indexer.reindex_file(path)
-
-            self._watcher = Observer()
-            self._watcher.schedule(Handler(), repo_path, recursive=True)
-            self._watcher.start()
-            print(f"[indexer] Watching {repo_path} for changes...")
-            try:
-                while True:
-                    time.sleep(1)
-            except KeyboardInterrupt:
-                self._watcher.stop()
-            self._watcher.join()
         except ImportError:
-            print("[indexer] watchdog no instalado. Ejecuta: pip install watchdog")
+            with self._dirty_lock:
+                self._observers[repo_abs] = None
+            return False
 
-    def reindex_file(self, path: str, verbose: bool = True):
-        """Reindexa un archivo tras ser modificado."""
+        indexer, exts = self, set(self._exts())
+        skip = self._SKIP_DIRS | self._PRODUCT_SKIP_DIRS
+
+        class Handler(FileSystemEventHandler):
+            def on_any_event(self, event):
+                # Un evento de directorio no cambia cápsulas por sí mismo: el archivo
+                # que se creó/borró dentro llega como su propio evento.
+                if event.is_directory:
+                    return
+                for raw in (event.src_path, getattr(event, "dest_path", None)):
+                    if not raw:
+                        continue
+                    path = Path(os.fsdecode(raw))
+                    if path.suffix.lower() not in exts:
+                        continue
+                    # .git escribe sin parar (index.lock, objetos); node_modules y
+                    # build output no se indexan: no deben despertar un sync.
+                    if any(d in skip or d.endswith(".egg-info") for d in path.parts[:-1]):
+                        continue
+                    indexer.mark_dirty(repo_abs)
+                    return
+
         try:
-            ext = Path(path).suffix
-            lang_map = {".py": "python", ".js": "javascript", ".ts": "typescript",
-                         ".rs": "rust", ".go": "go"}
-            lang = lang_map.get(ext, "python")
-            capsules = extract_from_file(path, lang)
-            build_call_graph(capsules)
-            with self._capsules_lock:
-                for c in capsules:
-                    self._capsules[c.id] = c
-            if self.vector_store:
-                self.vector_store.add(capsules)
-            if verbose:
-                print(f"[indexer] Reindexado: {path} ({len(capsules)} cápsulas)")
-        except Exception as e:
-            if verbose:
-                print(f"[indexer] Error reindexando {path}: {e}")
+            obs = Observer()
+            obs.schedule(Handler(), repo_abs, recursive=True)
+            obs.start()
+        except Exception:
+            with self._dirty_lock:
+                self._observers[repo_abs] = None
+            return False
+        with self._dirty_lock:
+            self._observers[repo_abs] = obs
+        return True
+
+    def mark_dirty(self, repo_abs: str):
+        with self._dirty_lock:
+            self._dirty.add(repo_abs)
+
+    def take_dirty(self, repo_path: str) -> bool:
+        """¿Cambió algo desde la última llamada? Lee Y limpia (los eventos que lleguen
+        durante el sync vuelven a ensuciar, así que ninguno se pierde)."""
+        repo_abs = os.path.abspath(repo_path)
+        with self._dirty_lock:
+            was_dirty = repo_abs in self._dirty
+            self._dirty.discard(repo_abs)
+            return was_dirty
+
+    def stop_watch(self, repo_path: str | None = None):
+        """Para el/los observer(s). El proceso puede salir sin esto (los hilos de
+        watchdog son daemon); existe para los tests y para cerrar limpio."""
+        with self._dirty_lock:
+            items = (list(self._observers.items()) if repo_path is None
+                     else [(os.path.abspath(repo_path), self._observers.get(os.path.abspath(repo_path)))])
+            for key, obs in items:
+                if obs is None:
+                    continue
+                self._observers.pop(key, None)
+                self._dirty.discard(key)
+        for _, obs in items:
+            if obs is not None:
+                obs.stop()
+                obs.join(timeout=2)
 
     def stats(self) -> dict:
         """Estadísticas del índice actual."""
