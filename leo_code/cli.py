@@ -160,6 +160,10 @@ def cmd_init(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Antes de imprimir nada: el texto del producto lleva `·`/`→` y la consola de
+    # Windows fuera de inglés es cp1252/cp437. `serve` re-envuelve stdout aparte.
+    from leo_code.logging_config import utf8_console
+    utf8_console()
     ap = argparse.ArgumentParser(prog="leo-mcp", description="Call graph + AST context for coding agents, over MCP.")
     ap.add_argument("--version", action="version", version=f"leo-mcp {__version__}")
     sub = ap.add_subparsers(dest="cmd")

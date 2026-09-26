@@ -14,11 +14,13 @@ El cerebro determinista (queries estructurales con prueba) vive en core/graphque
 from __future__ import annotations
 
 import asyncio
+import atexit
 import hashlib
 import importlib.util
 import json
 import os
 import re
+import sys
 import threading
 import time
 from collections import Counter
@@ -41,7 +43,10 @@ _LOCK_PATH = _CACHE_DIR / "kc_index.lock"
 _indexer = None
 _vector_stores: dict[str, object] = {}
 _indexed_repos: set[str] = set()
-_index_lock = threading.Lock()
+# RLock, no Lock: la escritura del índice (_write_index) necesita el mismo candado y a
+# veces se la llama desde dentro de ensure_structural, que ya lo tiene cogido (flush
+# síncrono). Con un Lock simple eso era un deadlock del propio hilo.
+_index_lock = threading.RLock()
 _index_executor = ThreadPoolExecutor(max_workers=1)
 _bm25_stores: dict[str, object] = {}
 
@@ -149,24 +154,54 @@ def _get_vector_store(repo_path: str):
     return _vector_stores[repo_path]
 
 
+def _in_repo(file_path: str, repo_path: str, prefix: str) -> bool:
+    """¿`file_path` cuelga de `repo_path`? (`prefix` = repo_path + separador).
+
+    Camino rápido primero: las cápsulas nacen de rutas ya absolutas (build/sync reciben
+    el repo por abspath), así que el `startswith` acierta sin normalizar. El abspath
+    —que era el 87% del coste de filtrar: 172 ms de 199 con 300k símbolos— se reserva
+    para las que NO casan, que son las de otros repos y normalmente ninguna.
+    """
+    if file_path.startswith(prefix):
+        return True
+    ap = os.path.abspath(file_path)
+    return ap.startswith(prefix) or ap == repo_path
+
+
 def _repo_caps(idx, repo_path: str) -> list:
     """Devuelve solo las capsulas del repo especificado del indexer global."""
-    repo_prefix = repo_path + os.sep
-    return [
-        v for v in idx.get_capsules().values()
-        if os.path.abspath(v.file_path).startswith(repo_prefix) or
-           os.path.abspath(v.file_path) == repo_path
-    ]
+    prefix = repo_path + os.sep
+    return [v for v in idx.get_capsules().values() if _in_repo(v.file_path, repo_path, prefix)]
 
 
 _structural_at: dict[str, float] = {}  # repo -> monotonic del último load/build/sync
 _generation: dict[str, int] = {}       # repo -> sube cuando cambian sus cápsulas (clave de caché)
+_SAVE_DEBOUNCE_S = 3.0  # espera tras el último cambio antes de escribir el índice a disco
+_save_timers: dict[str, tuple] = {}   # repo -> (Timer, ruta fijada al agendar)
+_synced_at: dict[str, float] = {}   # repo -> reloj de pared del último sync (marca de `since_mtime`)
+
 _RESYNC_S = 5.0    # intervalo MÍNIMO entre re-walks del repo
 _MAX_STALE_S = 60.0  # intervalo MÁXIMO sin re-walk aunque el watcher no haya visto nada:
                      # red de seguridad si el FS no entrega eventos (montajes de red, algunos
                      # contenedores). Un índice desactualizado en silencio sería peor que el walk.
 # Escotilla: LEO_WATCH=0 desactiva el watcher y deja el re-walk de siempre.
 _WATCH = os.getenv("LEO_WATCH", "1") != "0"
+
+
+# Techo medido (Windows, 2026-09-26): con 300k símbolos una edición cuesta ~2 s en
+# reconstruir el grafo del repo (link_http_edges + GraphQuery, ambos O(total)) y el
+# índice ocupa ~250 MB en RAM. Por encima de esto el producto sigue siendo correcto pero
+# se nota, y callarlo sería vender lo que no es: se avisa una vez por repo.
+_SYMBOL_WARN = 250_000
+_warned_big: set[str] = set()
+
+
+def _warn_if_huge(repo: str, n: int) -> None:
+    if n >= _SYMBOL_WARN and repo not in _warned_big:
+        _warned_big.add(repo)
+        print(f"[leo-mcp] {n:,} symbols indexed in {repo}: queries stay fast, but "
+              f"rebuilding the graph after each edit takes ~{n / 150_000:.0f}s at this size "
+              f"and the index needs ~{n * 0.85 / 1000:.0f} MB of RAM.", file=sys.stderr)
 
 
 # Sube cuando cambia lo que el parser extrae (nuevas cápsulas, nuevas aristas): el índice
@@ -184,6 +219,62 @@ def repo_index_path(repo: str) -> Path:
 
 def generation(repo: str) -> int:
     return _generation.get(repo, 0)
+
+
+def _write_index(repo: str, path: Path) -> None:
+    """Escribe el índice de `repo` en `path`. Coge _index_lock: `save()` itera las
+    cápsulas y un sync concurrente las mutaría.
+
+    La ruta se fija al AGENDAR, no aquí: entre el cambio y la escritura diferida la
+    caché puede haber cambiado de sitio (tests que la mueven, LEO_CACHE_DIR), y un
+    flush tardío escribiría en la caché equivocada."""
+    with _index_lock:
+        _save_timers.pop(repo, None)
+        idx = _get_indexer()
+        prefix = repo + os.sep
+        if not any(_in_repo(c.file_path, repo, prefix) for c in idx.get_capsules().values()):
+            return   # nada de este repo que cachear (repo vacío, o ya purgado)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            idx.save(str(path), repo=repo)
+        except Exception as e:   # el índice en disco es una CACHÉ: fallar al escribirla
+            print(f"[leo-mcp] could not write the index cache: {e}", file=sys.stderr)
+
+
+def _schedule_save(repo: str) -> None:
+    """Agenda la escritura del índice en _SAVE_DEBOUNCE_S, reiniciando el reloj si
+    llegan más cambios.
+
+    Por qué diferirla: `save()` reescribe el índice COMPLETO comprimido, y eso son
+    3 s a 100k símbolos y 9 s a 300k (medido) — se pagaban DENTRO de la llamada al
+    tool tras cada edición de un archivo. El disco es solo una caché: si el proceso
+    muere antes de escribir, el arranque siguiente carga el índice viejo y el sync
+    por mtime re-parsea lo que cambió. Se pierde tiempo de indexado, nunca datos.
+    """
+    path = repo_index_path(repo)
+    if not _SAVE_DEBOUNCE_S:
+        _write_index(repo, path)   # 0 = escritura síncrona (tests, CLI de un solo tiro)
+        return
+    old = _save_timers.get(repo)
+    if old is not None:
+        old[0].cancel()
+    t = threading.Timer(_SAVE_DEBOUNCE_S, _write_index, args=(repo, path))
+    t.daemon = True     # el cliente MCP mata el server sin avisar: no bloquear la salida
+    t.name = f"leo-save:{Path(repo).name}"
+    _save_timers[repo] = (t, path)
+    t.start()
+
+
+def flush_index(repo: str | None = None) -> None:
+    """Escribe ya lo que estuviera pendiente (salida del proceso, fin de un comando)."""
+    for r in ([repo] if repo else list(_save_timers)):
+        pending = _save_timers.get(r)
+        if pending is not None:
+            pending[0].cancel()
+            _write_index(r, pending[1])
+
+
+atexit.register(flush_index)
 
 
 def ensure_structural(repo: str) -> dict | None:
@@ -218,21 +309,28 @@ def ensure_structural(repo: str) -> dict | None:
                 action = "load"
             except Exception:
                 path.unlink(missing_ok=True)  # caché corrupta → rebuild
+        # Marca de "desde cuándo mirar": la del sync anterior de ESTA sesión, y si no
+        # hay, el mtime del índice en disco. No se puede leer el mtime del archivo cada
+        # vez porque ahora la escritura va diferida y esa marca se quedaría congelada.
+        # Se toma ANTES de parsear: un archivo tocado durante el parseo entra al próximo.
+        now = time.time()
+        since = _synced_at.get(repo)
         if path.exists():
-            s = idx.sync(repo, since_mtime=path.stat().st_mtime)
+            s = idx.sync(repo, since_mtime=since if since is not None else path.stat().st_mtime)
             changed = bool(s["reparsed_capsules"] or s["removed"])
         else:
             idx.build(repo)
             action, changed = "build", True
+        _synced_at[repo] = now
         if changed:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            idx.save(str(path), repo=repo)
+            _schedule_save(repo)
         if changed or last is None:
             _generation[repo] = _generation.get(repo, 0) + 1
         _structural_at[repo] = time.monotonic()
         if last is not None and not changed:
             return None
         caps = _repo_caps(idx, repo)
+        _warn_if_huge(repo, len(caps))
         return {"action": action, "seconds": round(time.perf_counter() - t0, 2),
                 "capsules": len(caps), "by_language": dict(Counter(c.language for c in caps).most_common())}
 

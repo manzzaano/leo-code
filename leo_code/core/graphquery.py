@@ -297,4 +297,6 @@ def _demo():
 
 
 if __name__ == "__main__":
+    from leo_code.logging_config import utf8_console
+    utf8_console()
     _demo()

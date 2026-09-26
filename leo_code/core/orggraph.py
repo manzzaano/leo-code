@@ -108,6 +108,8 @@ def _demo():
 
 
 if __name__ == "__main__":
+    from leo_code.logging_config import utf8_console
+    utf8_console()
     import sys
     if len(sys.argv) > 1:
         caps, stats = build_org_graph(sys.argv[1:], verbose=False)

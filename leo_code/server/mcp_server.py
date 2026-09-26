@@ -135,8 +135,22 @@ def _empty_msg(repo: str) -> str:
 
 
 # Grafo por repo (solo sus cápsulas, con aristas HTTP cosidas); se reconstruye cuando
-# el índice del repo cambia de generación.
+# el índice del repo cambia de generación. Acotado: cada entrada guarda una copia de las
+# cápsulas del repo y sus índices, así que N repos visitados en una sesión era memoria
+# ×N sin tope. El agente trabaja en uno y consulta alguno vecino: 4 sobra.
+_GQ_CACHE_MAX = 4
 _gq_cache: dict[str, tuple[int, dict, GraphQuery]] = {}
+
+
+def _evict_repo(repo: str) -> None:
+    """Suelta el grafo de un repo y su watcher: si no lo consultamos, no hay por qué
+    seguir observando su árbol ni retener sus cápsulas."""
+    _gq_cache.pop(repo, None)
+    try:
+        engine.flush_index(repo)              # no perder lo indexado de ese repo
+        engine._get_indexer().stop_watch(repo)
+    except Exception:
+        pass
 
 
 def _repo_graph(repo: str) -> tuple[dict, GraphQuery]:
@@ -144,11 +158,15 @@ def _repo_graph(repo: str) -> tuple[dict, GraphQuery]:
     gen = engine.generation(repo)
     hit = _gq_cache.get(repo)
     if hit and hit[0] == gen:
+        _gq_cache[repo] = _gq_cache.pop(repo)   # el más usado al final (LRU de inserción)
         return hit[1], hit[2]
     caps = {c.id: c for c in engine._repo_caps(engine._get_indexer(), repo)}
     link_http_edges(caps)  # idempotente: no duplica aristas ya añadidas
     gq = GraphQuery(caps)
+    _gq_cache.pop(repo, None)
     _gq_cache[repo] = (gen, caps, gq)
+    while len(_gq_cache) > _GQ_CACHE_MAX:
+        _evict_repo(next(iter(_gq_cache)))
     return caps, gq
 
 

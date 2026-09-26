@@ -180,7 +180,7 @@ class Indexer:
         repo = Path(repo_path)
 
         if not files:
-            print("[indexer] 0 archivos encontrados")
+            print("[indexer] no files found")
             return 0
 
         stats = defaultdict(lambda: {"files": 0, "capsules": 0})
@@ -195,7 +195,7 @@ class Indexer:
                 path, lang = futures[future]
                 capsules, lang_out, n, error = future.result()
                 if error and verbose:
-                    print(f"  [!] Error en {path.relative_to(repo)}: {error}")
+                    print(f"  [!] error in {path.relative_to(repo)}: {error}")
                 if n:
                     with self._capsules_lock:
                         for c in capsules:
@@ -204,19 +204,19 @@ class Indexer:
                     stats[lang]["files"] += 1
                     stats[lang]["capsules"] += n
                 if verbose and not error:
-                    print(f"  [{lang}] {path.relative_to(repo)}: {n} cápsulas")
+                    print(f"  [{lang}] {path.relative_to(repo)}: {n} symbols")
 
         if self.vector_store and self._capsules:
             self.vector_store.add(list(self._capsules.values()))
 
         total_files = sum(s["files"] for s in stats.values())
-        print(f"[indexer] {total_files} archivos, {count} cápsulas")
+        print(f"[indexer] {total_files} files, {count} symbols")
         for lang, s in sorted(stats.items()):
-            print(f"  {lang}: {s['files']} archivos, {s['capsules']} cápsulas")
+            print(f"  {lang}: {s['files']} files, {s['capsules']} symbols")
         by_type = defaultdict(int)
         for c in self._capsules.values():
             by_type[c.type] += 1
-        print(f"  Tipos: {', '.join(f'{t}={n}' for t, n in sorted(by_type.items()))}")
+        print(f"  types: {', '.join(f'{t}={n}' for t, n in sorted(by_type.items()))}")
 
         return count
 
@@ -249,7 +249,7 @@ class Indexer:
         tmp = Path(f"{path}.tmp{os.getpid()}")
         tmp.write_bytes(gzip.compress(raw))
         os.replace(tmp, path)
-        print(f"[indexer] Guardado: {path} ({len(data)} cápsulas)")
+        print(f"[indexer] saved: {path} ({len(data)} symbols)")
 
     def load(self, path: str = "kc_index.json.gz", merge: bool = False):
         """Carga un índice comprimido desde disco. merge=True conserva lo ya cargado
@@ -272,7 +272,7 @@ class Indexer:
                 called_by=d.get("called_by", []), imports=d.get("imports", []),
                 properties=d.get("properties", {}),
             )
-        print(f"[indexer] Cargado: {path} ({len(data)} cápsulas)")
+        print(f"[indexer] loaded: {path} ({len(data)} symbols)")
 
     def _rebuild_call_graph(self) -> None:
         """Re-resuelve called_by global tras un sync (los edges son cross-file)."""
@@ -344,8 +344,8 @@ class Indexer:
             # sync que toca 1 archivo no debe re-embeber las ~1400 capsulas del resto.
             if self.vector_store and touched_capsules:
                 self.vector_store.add(touched_capsules)
-            print(f"[indexer] sync: {len(changed)} cambiados, {len(new)} nuevos, "
-                  f"{len(deleted)} borrados ({reparsed} cápsulas)")
+            print(f"[indexer] sync: {len(changed)} changed, {len(new)} new, "
+                  f"{len(deleted)} deleted ({reparsed} symbols)")
 
         return {"changed": len(changed), "new": len(new),
                 "deleted": len(deleted), "reparsed_capsules": reparsed,

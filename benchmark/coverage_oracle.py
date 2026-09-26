@@ -63,6 +63,16 @@ def run():
             continue
         if "property" in (c.properties or {}).get("decorators", ""):
             continue
+        # Hooks de un framework de UI (Textual): `compose`, `on_mount`,
+        # `on_input_submitted`, `_on_key`… los invoca el framework por su NOMBRE, igual que
+        # el intérprete invoca los dunders — no hay llamada Python que un grafo estático
+        # pueda seguir. Se acota a la app TUI (`rag/cli/`) a propósito: no es una excusa
+        # general para cualquier `on_*` del repo. Sale solo si `textual` está instalado
+        # (en CI no lo está y el test se salta), así que sin esto el gate dependía del
+        # entorno en vez del código.
+        posix = (c.file_path or "").replace("\\", "/")
+        if "/leo_code/rag/cli/" in posix and (nm == "compose" or nm.lstrip("_").startswith("on_")):
+            continue
         lines = executed.get(str(Path(c.file_path).resolve()), set())
         # CUERPO ejecutado, no la línea `def` (que corre al importar al definir la función).
         ran = any(c.start_line < ln <= c.end_line for ln in lines)

@@ -40,3 +40,20 @@ def setup_logging(repo: str | None = None, level: str | None = None,
     logger.propagate = False
 
     return log_file
+
+
+def utf8_console() -> None:
+    """stdout/stderr tolerantes a Unicode, para consolas con codepage heredado.
+
+    El texto del producto lleva `·` y `→` (las pruebas del grafo). En una consola
+    cp1252/cp437 —el default en Windows fuera de inglés— un `print()` con `→` lanza
+    UnicodeEncodeError y mata el comando. Por el pipe MCP no pasa (ahí stdout va
+    envuelto en UTF-8 aparte), pero sí en `leo-mcp index/doctor` y en los self-checks.
+    Idempotente y silencioso si el stream no lo soporta (pytest lo reemplaza).
+    """
+    import sys
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError, OSError):
+            pass
