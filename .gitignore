@@ -137,3 +137,6 @@ docs/mkdocs.yml
 docs/index.md
 install.sh
 install.ps1
+
+# Local archive of the coding-agent stage docs
+docs/archive/

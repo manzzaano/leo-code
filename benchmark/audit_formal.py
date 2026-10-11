@@ -11,11 +11,14 @@ Checks:
   (c) BLAST RADIUS COMPLETO: romper un símbolo de verdad → todos los tests que fallan
       ⊆ lo que el guardián predijo (mutation testing real).
   (d) LATENCIA: cualquier query estructural <50ms a escala.
+  (e) PRESUPUESTO POST-EDICIÓN: reconstruir el grafo tras una edición ≤20 µs/símbolo
+      y sin escribir el índice dentro de la llamada al tool.
 
 Uso:  python benchmark/audit_formal.py [repo1 repo2 ...]
       (repos extra para (a)/(d) a escala; por defecto el propio leo-code)
 """
 
+import os
 import sys
 import time
 from pathlib import Path
@@ -120,6 +123,57 @@ def check_d(repos):
                 f"guardián review peor {g_worst*1000:.0f}ms (<2s)")
 
 
+def check_e(repos):
+    """PRESUPUESTO POST-EDICIÓN: lo que paga la llamada al tool justo después de que el
+    agente toque un archivo. El chequeo (d) mide la query ya construida; esto mide
+    RECONSTRUIR el grafo del repo, que es O(total símbolos) y fue el cuello de botella
+    real (medido: 15 s a 300k símbolos antes de acotarlo, 1,4 s después).
+
+    Dos cosas que no pueden volver a romperse:
+      1. la reconstrucción (filtro por repo + frontera HTTP + índices) ≤ 20 µs/símbolo;
+      2. la escritura del índice NO ocurre dentro de la llamada (reescribir el .json.gz
+         completo son ~9 s a 300k símbolos).
+    El presupuesto lleva 4× de aire sobre lo medido: es una red contra regresiones de
+    complejidad, no un benchmark de la máquina.
+    """
+    from leo_code import engine
+    from leo_code.core.boundary import link_http_edges
+    from leo_code.core.graphquery import GraphQuery
+    from leo_code.rag.indexer import Indexer
+
+    repo = max(repos, key=lambda r: sum(1 for _ in Path(r).rglob("*.py")))
+    idx = Indexer()
+    idx.build(repo, languages=["python", "typescript", "javascript"], verbose=False)
+    n = len(idx.get_capsules())
+
+    t0 = time.perf_counter()
+    caps = {c.id: c for c in engine._repo_caps(idx, os.path.abspath(repo))}
+    link_http_edges(caps)
+    GraphQuery(caps)
+    per_symbol = (time.perf_counter() - t0) / max(n, 1) * 1e6
+
+    # (2) el índice no se escribe dentro de la llamada
+    engine._indexer = idx
+    engine._structural_at.clear(); engine._synced_at.clear(); engine._save_timers.clear()
+    engine._generation.clear()
+    path = engine.repo_index_path(os.path.abspath(repo))
+    if path.exists():
+        path.unlink()
+    engine.ensure_structural(os.path.abspath(repo))
+    inline_write = path.exists()
+    engine.flush_index()
+
+    # El presupuesto se amortiza: en un repo pequeño los costes fijos (primeros accesos,
+    # cachés frías) dominan y el µs/símbolo sale alto sin que nada vaya mal. Medido:
+    # 19 µs/símbolo con 2,5k símbolos y 4,5 µs con 300k. Lo que el gate persigue es una
+    # regresión de COMPLEJIDAD, así que el límite lleva un término fijo.
+    budget = 20 + 40_000 / max(n, 1)
+    ok = per_symbol <= budget and not inline_write
+    return ok, (f"{Path(repo).name}, {n:,} símbolos: reconstrucción "
+                f"{per_symbol:.1f} µs/símbolo (<{budget:.0f}) · índice escrito dentro de la "
+                f"llamada: {'SÍ ❌' if inline_write else 'no'}")
+
+
 def main(extra):
     repos = _repos(extra)
     print("=" * 72)
@@ -132,6 +186,8 @@ def main(extra):
         ("(b) cobertura del guardián vs coverage.py (0 falsos)", check_b),
         ("(c) blast radius completo (mutation testing real)", check_c),
         ("(d) SLA a 5M+ LOC: query <50ms y guardián <2s", lambda: check_d(repos)),
+        ("(e) presupuesto post-edición: reconstrucción acotada y sin escribir en línea",
+         lambda: check_e(repos)),
     ]
     results = []
     for label, fn in checks:
@@ -149,4 +205,8 @@ def main(extra):
 
 
 if __name__ == "__main__":
+    # Imprime ✅/❌ y acentos: en una consola Windows cp1252 eso aborta la auditoría
+    # entera al primer print (en CI no se ve porque ubuntu va en UTF-8).
+    from leo_code.logging_config import utf8_console
+    utf8_console()
     sys.exit(main(sys.argv[1:]))

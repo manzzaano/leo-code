@@ -31,6 +31,24 @@ function callsIn(node) {
   return [...out];
 }
 
+// Initializer que cuenta como "función con nombre": arrow/function directa, o envuelta
+// en un wrapper que devuelve la función. Espejo exacto de _fn_value en parser_ts.py
+// (lista blanca: useMemo/findIndex devuelven un valor, no una función).
+const FN_WRAPPERS = new Set(["useCallback", "memo", "forwardRef", "observer", "useEventCallback", "useMemoizedFn"]);
+function fnValue(init) {
+  if (!init) return null;
+  if (ts.isArrowFunction(init) || ts.isFunctionExpression(init)) return init;
+  if (ts.isCallExpression(init)) {
+    const c = init.expression;
+    const callee = ts.isIdentifier(c) ? c.text : (ts.isPropertyAccessExpression(c) ? c.name.text : "");
+    if (!FN_WRAPPERS.has(callee)) return null;
+    for (const a of init.arguments) {
+      if (ts.isArrowFunction(a) || ts.isFunctionExpression(a)) return a;
+    }
+  }
+  return null;
+}
+
 const repo = process.argv[2];
 const files = [];
 walkFiles(repo, files);
@@ -45,6 +63,10 @@ for (const f of files) {
     if (ts.isFunctionDeclaration(n) && n.name) name = n.name.text;
     else if (ts.isMethodDeclaration(n) && n.name) name = n.name.getText(sf);
     else if (ts.isClassDeclaration(n) && n.name) name = n.name.text;
+    // Funciones declaradas como variable u objeto de funciones (const f = () => …,
+    // const f = useCallback(() => …), { jobs: () => … }): misma regla en parser_ts.py.
+    else if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && fnValue(n.initializer)) name = n.name.text;
+    else if (ts.isPropertyAssignment(n) && fnValue(n.initializer)) name = n.name.getText(sf);
     if (name) {
       const line = sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
       syms.push([name, line, callsIn(n)]);

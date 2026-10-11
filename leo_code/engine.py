@@ -14,17 +14,28 @@ El cerebro determinista (queries estructurales con prueba) vive en core/graphque
 from __future__ import annotations
 
 import asyncio
+import atexit
 import hashlib
+import importlib.util
 import json
 import os
 import re
+import sys
 import threading
 import time
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-_CACHE_DIR = Path(os.getenv("LEO_CACHE_DIR", "./cache"))
-_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+def _default_cache_dir() -> Path:
+    """Caché por usuario, FUERA del repo: el proyecto del usuario no se ensucia."""
+    if os.name == "nt" and os.getenv("LOCALAPPDATA"):
+        return Path(os.environ["LOCALAPPDATA"]) / "leo-mcp" / "cache"
+    return Path(os.getenv("XDG_CACHE_HOME") or Path.home() / ".cache") / "leo-mcp"
+
+
+_CACHE_DIR = Path(os.getenv("LEO_CACHE_DIR") or _default_cache_dir())
 _INDEX_PATH = _CACHE_DIR / "kc_index.json.gz"
 _REPOS_PATH = _CACHE_DIR / "kc_indexed_repos.json"
 _LOCK_PATH = _CACHE_DIR / "kc_index.lock"
@@ -32,7 +43,10 @@ _LOCK_PATH = _CACHE_DIR / "kc_index.lock"
 _indexer = None
 _vector_stores: dict[str, object] = {}
 _indexed_repos: set[str] = set()
-_index_lock = threading.Lock()
+# RLock, no Lock: la escritura del índice (_write_index) necesita el mismo candado y a
+# veces se la llama desde dentro de ensure_structural, que ya lo tiene cogido (flush
+# síncrono). Con un Lock simple eso era un deadlock del propio hilo.
+_index_lock = threading.RLock()
 _index_executor = ThreadPoolExecutor(max_workers=1)
 _bm25_stores: dict[str, object] = {}
 
@@ -42,6 +56,7 @@ _STALE_LOCK_SECONDS = 120  # ningun build/sync real tarda esto — si el lock ya
 
 
 def _acquire_file_lock(timeout: int = 30) -> bool:
+    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
     start = time.time()
     while True:
         try:
@@ -76,6 +91,7 @@ def _load_indexed_repos():
 
 
 def _save_indexed_repos():
+    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
     _REPOS_PATH.write_text(json.dumps(sorted(_indexed_repos)), encoding="utf-8")
 
 
@@ -83,14 +99,38 @@ def _get_indexer():
     global _indexer
     if _indexer is None:
         from leo_code.rag.indexer import Indexer
-        _indexer = Indexer()
+        _indexer = Indexer(hygiene=True, max_file_kb=int(os.getenv("LEO_MAX_FILE_KB", "512")))
     return _indexer
 
 
 _vs_lock = threading.Lock()
 
 
+# Recall semántico = extra opcional (`leo-mcp[semantic]`: sentence-transformers +
+# qdrant, ~2 GB con torch). Sin él el retrieval es exact + BM25 + scorer estructural
+# y `graph` no cambia. LEO_SEMANTIC=0 lo apaga aunque esté instalado.
+SEMANTIC = (os.getenv("LEO_SEMANTIC", "1") != "0"
+            and all(importlib.util.find_spec(m) for m in ("sentence_transformers", "qdrant_client")))
+
+
+class _NoVectorStore:
+    """Vector store nulo: la semántica no está instalada o está apagada."""
+    def add(self, capsules):
+        pass
+
+    def search(self, query, top_k=50):
+        return []
+
+    def count(self):
+        return 0
+
+
+_NO_VECTOR_STORE = _NoVectorStore()
+
+
 def _get_vector_store(repo_path: str):
+    if not SEMANTIC:
+        return _NO_VECTOR_STORE
     # Doble check con lock: dos threads (warmup MCP + primera tool) creaban DOS
     # clientes qdrant sobre el mismo storage → el segundo se queda bloqueado para
     # siempre en el file lock de qdrant-local (get_context colgado >3 min).
@@ -104,7 +144,7 @@ def _get_vector_store(repo_path: str):
                 stable = hashlib.md5(repo_path.encode("utf-8")).hexdigest()[:8]
                 _vector_stores[repo_path] = VectorStore(
                     collection_name=f"leo_mcp_{stable}",
-                    path=os.environ.get("LEO_QDRANT_PATH", "./cache/qdrant_leo"),
+                    path=os.environ.get("LEO_QDRANT_PATH") or str(_CACHE_DIR / "qdrant"),
                     # El hash estable YA identifica el repo; el aislamiento entre
                     # procesos concurrentes lo da LEO_QDRANT_PATH (por directorio),
                     # no un sufijo de PID en el nombre de coleccion — con PID cada
@@ -114,14 +154,185 @@ def _get_vector_store(repo_path: str):
     return _vector_stores[repo_path]
 
 
+def _in_repo(file_path: str, repo_path: str, prefix: str) -> bool:
+    """¿`file_path` cuelga de `repo_path`? (`prefix` = repo_path + separador).
+
+    Camino rápido primero: las cápsulas nacen de rutas ya absolutas (build/sync reciben
+    el repo por abspath), así que el `startswith` acierta sin normalizar. El abspath
+    —que era el 87% del coste de filtrar: 172 ms de 199 con 300k símbolos— se reserva
+    para las que NO casan, que son las de otros repos y normalmente ninguna.
+    """
+    if file_path.startswith(prefix):
+        return True
+    ap = os.path.abspath(file_path)
+    return ap.startswith(prefix) or ap == repo_path
+
+
 def _repo_caps(idx, repo_path: str) -> list:
     """Devuelve solo las capsulas del repo especificado del indexer global."""
-    repo_prefix = repo_path + os.sep
-    return [
-        v for v in idx.get_capsules().values()
-        if os.path.abspath(v.file_path).startswith(repo_prefix) or
-           os.path.abspath(v.file_path) == repo_path
-    ]
+    prefix = repo_path + os.sep
+    return [v for v in idx.get_capsules().values() if _in_repo(v.file_path, repo_path, prefix)]
+
+
+_structural_at: dict[str, float] = {}  # repo -> monotonic del último load/build/sync
+_generation: dict[str, int] = {}       # repo -> sube cuando cambian sus cápsulas (clave de caché)
+_SAVE_DEBOUNCE_S = 3.0  # espera tras el último cambio antes de escribir el índice a disco
+_save_timers: dict[str, tuple] = {}   # repo -> (Timer, ruta fijada al agendar)
+_synced_at: dict[str, float] = {}   # repo -> reloj de pared del último sync (marca de `since_mtime`)
+
+_RESYNC_S = 5.0    # intervalo MÍNIMO entre re-walks del repo
+_MAX_STALE_S = 60.0  # intervalo MÁXIMO sin re-walk aunque el watcher no haya visto nada:
+                     # red de seguridad si el FS no entrega eventos (montajes de red, algunos
+                     # contenedores). Un índice desactualizado en silencio sería peor que el walk.
+# Escotilla: LEO_WATCH=0 desactiva el watcher y deja el re-walk de siempre.
+_WATCH = os.getenv("LEO_WATCH", "1") != "0"
+
+
+# Techo medido (Windows, 2026-09-26): con 300k símbolos una edición cuesta ~2 s en
+# reconstruir el grafo del repo (link_http_edges + GraphQuery, ambos O(total)) y el
+# índice ocupa ~250 MB en RAM. Por encima de esto el producto sigue siendo correcto pero
+# se nota, y callarlo sería vender lo que no es: se avisa una vez por repo.
+_SYMBOL_WARN = 250_000
+_warned_big: set[str] = set()
+
+
+def _warn_if_huge(repo: str, n: int) -> None:
+    if n >= _SYMBOL_WARN and repo not in _warned_big:
+        _warned_big.add(repo)
+        print(f"[leo-mcp] {n:,} symbols indexed in {repo}: queries stay fast, but "
+              f"rebuilding the graph after each edit takes ~{n / 150_000:.0f}s at this size "
+              f"and the index needs ~{n * 0.85 / 1000:.0f} MB of RAM.", file=sys.stderr)
+
+
+# Sube cuando cambia lo que el parser extrae (nuevas cápsulas, nuevas aristas): el índice
+# en disco se re-parsea solo por mtime, así que sin esto una caché vieja seguiría sirviendo
+# símbolos del parser anterior para siempre (p.ej. sin arrow functions ni atributos de clase).
+_INDEX_FORMAT = 2
+
+
+def repo_index_path(repo: str) -> Path:
+    """Índice estructural de UN repo en la caché de usuario (varios proyectos abiertos
+    a la vez no se pisan: cada server guarda solo su repo)."""
+    h = hashlib.md5(repo.encode("utf-8")).hexdigest()[:8]
+    return _CACHE_DIR / "repos" / f"{Path(repo).name}-{h}" / f"index-v{_INDEX_FORMAT}.json.gz"
+
+
+def generation(repo: str) -> int:
+    return _generation.get(repo, 0)
+
+
+def _write_index(repo: str, path: Path) -> None:
+    """Escribe el índice de `repo` en `path`. Coge _index_lock: `save()` itera las
+    cápsulas y un sync concurrente las mutaría.
+
+    La ruta se fija al AGENDAR, no aquí: entre el cambio y la escritura diferida la
+    caché puede haber cambiado de sitio (tests que la mueven, LEO_CACHE_DIR), y un
+    flush tardío escribiría en la caché equivocada."""
+    with _index_lock:
+        _save_timers.pop(repo, None)
+        idx = _get_indexer()
+        prefix = repo + os.sep
+        if not any(_in_repo(c.file_path, repo, prefix) for c in idx.get_capsules().values()):
+            return   # nada de este repo que cachear (repo vacío, o ya purgado)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            idx.save(str(path), repo=repo)
+        except Exception as e:   # el índice en disco es una CACHÉ: fallar al escribirla
+            print(f"[leo-mcp] could not write the index cache: {e}", file=sys.stderr)
+
+
+def _schedule_save(repo: str) -> None:
+    """Agenda la escritura del índice en _SAVE_DEBOUNCE_S, reiniciando el reloj si
+    llegan más cambios.
+
+    Por qué diferirla: `save()` reescribe el índice COMPLETO comprimido, y eso son
+    3 s a 100k símbolos y 9 s a 300k (medido) — se pagaban DENTRO de la llamada al
+    tool tras cada edición de un archivo. El disco es solo una caché: si el proceso
+    muere antes de escribir, el arranque siguiente carga el índice viejo y el sync
+    por mtime re-parsea lo que cambió. Se pierde tiempo de indexado, nunca datos.
+    """
+    path = repo_index_path(repo)
+    if not _SAVE_DEBOUNCE_S:
+        _write_index(repo, path)   # 0 = escritura síncrona (tests, CLI de un solo tiro)
+        return
+    old = _save_timers.get(repo)
+    if old is not None:
+        old[0].cancel()
+    t = threading.Timer(_SAVE_DEBOUNCE_S, _write_index, args=(repo, path))
+    t.daemon = True     # el cliente MCP mata el server sin avisar: no bloquear la salida
+    t.name = f"leo-save:{Path(repo).name}"
+    _save_timers[repo] = (t, path)
+    t.start()
+
+
+def flush_index(repo: str | None = None) -> None:
+    """Escribe ya lo que estuviera pendiente (salida del proceso, fin de un comando)."""
+    for r in ([repo] if repo else list(_save_timers)):
+        pending = _save_timers.get(r)
+        if pending is not None:
+            pending[0].cancel()
+            _write_index(r, pending[1])
+
+
+atexit.register(flush_index)
+
+
+def ensure_structural(repo: str) -> dict | None:
+    """Índice estructural (AST, sin embeddings) de `repo` listo y al día: lo único que
+    necesitan `graph` y el retrieval estructural.
+
+    1ª vez: build completo y se persiste. Arranques siguientes: load + sync incremental
+    (solo lo cambiado). Durante la sesión, para que las ediciones del agente se vean en
+    el grafo: si hay watcher de FS, se re-sincroniza SOLO cuando el watcher vio un cambio
+    real (coste 0 si no lo hubo; el walk de descubrimiento cuesta 1-2 s en un repo de
+    20.000 archivos), con un walk de seguridad cada _MAX_STALE_S por si el FS no entrega
+    eventos. Sin watcher, re-walk acotado a _RESYNC_S como siempre.
+    Devuelve {action, seconds, capsules, by_language} si cargó o cambió algo; None si
+    ya estaba fresco.
+    """
+    with _index_lock:
+        last = _structural_at.get(repo)
+        idx = _get_indexer()
+        watching = idx.watch(repo) if _WATCH else False
+        if last is not None:
+            elapsed = time.monotonic() - last
+            if elapsed < _RESYNC_S:
+                return None
+            if watching and elapsed < _MAX_STALE_S and not idx.take_dirty(repo):
+                return None
+        path = repo_index_path(repo)
+        t0 = time.perf_counter()
+        action = "sync"
+        if last is None and path.exists():
+            try:
+                idx.load(str(path), merge=True)
+                action = "load"
+            except Exception:
+                path.unlink(missing_ok=True)  # caché corrupta → rebuild
+        # Marca de "desde cuándo mirar": la del sync anterior de ESTA sesión, y si no
+        # hay, el mtime del índice en disco. No se puede leer el mtime del archivo cada
+        # vez porque ahora la escritura va diferida y esa marca se quedaría congelada.
+        # Se toma ANTES de parsear: un archivo tocado durante el parseo entra al próximo.
+        now = time.time()
+        since = _synced_at.get(repo)
+        if path.exists():
+            s = idx.sync(repo, since_mtime=since if since is not None else path.stat().st_mtime)
+            changed = bool(s["reparsed_capsules"] or s["removed"])
+        else:
+            idx.build(repo)
+            action, changed = "build", True
+        _synced_at[repo] = now
+        if changed:
+            _schedule_save(repo)
+        if changed or last is None:
+            _generation[repo] = _generation.get(repo, 0) + 1
+        _structural_at[repo] = time.monotonic()
+        if last is not None and not changed:
+            return None
+        caps = _repo_caps(idx, repo)
+        _warn_if_huge(repo, len(caps))
+        return {"action": action, "seconds": round(time.perf_counter() - t0, 2),
+                "capsules": len(caps), "by_language": dict(Counter(c.language for c in caps).most_common())}
 
 
 async def _ensure_indexed(repo_path: str):
@@ -190,6 +401,7 @@ def _load_index_from_disk():
 
 
 def _save_index_to_disk():
+    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
     idx = _get_indexer()
     idx.save(str(_INDEX_PATH))
 
@@ -210,12 +422,51 @@ def _invalidate_cache():
         pass
 
 
+# Palabras funcionales de 2-3 letras (EN/ES): no son señal. "cv", "db", "api", "get" sí lo son.
+_SHORT_MAX_FILES = 2   # una sigla que aparece en 3+ archivos no señala nada concreto
+_SHORT_STOP = {"the", "and", "for", "how", "why", "who", "are", "was", "its", "out", "our",
+               "you", "all", "can", "but", "not", "has", "had", "did", "any", "may", "one",
+               "del", "las", "los", "que", "por", "con", "una", "uno", "sus", "sin", "mas",
+               "muy", "hay", "ser", "est", "este", "esta", "como", "dos"}
+
+
+def discriminant_short_words(short_words: set[str], caps: dict) -> set[str]:
+    """Siglas que DE VERDAD señalan un archivo: la sigla debe estar en el NOMBRE del archivo.
+
+    Medido en NEXUS: por partes de nombre de símbolo, "cv" casa con 5 archivos y "run" con 3
+    —la cardinalidad no los separa—, pero por stem de archivo "cv" → cv_morpher.py y
+    "run"/"tab"/"job" → ninguno. Sin este filtro, "run" arrastraba alembic/env.py al frente
+    con la prioridad máxima de specific_match.
+    """
+    if not short_words:
+        return set()
+    stems: dict[str, set] = {}
+    for c in caps.values():
+        stem = Path(c.file_path or "").stem.lower()
+        for w in short_words & set(re.split(r"[_\-.]", stem)):
+            stems.setdefault(w, set()).add(stem)
+    return {w for w in short_words if 0 < len(stems.get(w, ())) <= _SHORT_MAX_FILES}
+
+
+def _name_parts(name: str) -> set[str]:
+    """Partes de un símbolo: snake_case y camelCase ('CVMorpher' → {cv, morpher})."""
+    out = set()
+    for chunk in re.split(r"[_\-.]", name or ""):
+        out.update(p.lower() for p in re.findall(r"[A-Z]+(?![a-z])|[A-Z][a-z]*|[a-z]+|\d+", chunk))
+    return out
+
+
 def _get_bm25(repo: str, caps: dict) -> object:
-    if repo not in _bm25_stores:
+    # Clave = generación del índice estructural: tras un resync (el agente editó código)
+    # BM25 se reconstruye; antes se quedaba con los símbolos del arranque.
+    gen = generation(repo)
+    hit = _bm25_stores.get(repo)
+    if hit is None or hit[0] != gen:
         from leo_code.rag.bm25 import BM25Index
-        _bm25_stores[repo] = BM25Index()
-        _bm25_stores[repo].add(list(caps.values()))
-    return _bm25_stores[repo]
+        index = BM25Index()
+        index.add(list(caps.values()))
+        _bm25_stores[repo] = (gen, index)  # solo tras construirse: un add colgado/fallido no deja un índice vacío
+    return _bm25_stores[repo][1]
 
 
 def compute_context(repo: str, query: str, task_type_in: str = "auto",
@@ -272,6 +523,15 @@ def compute_context(repo: str, query: str, task_type_in: str = "auto",
 
     # Hybrid: exact match (one rep per file for path, name match) + semantic
     query_words = set(re.findall(r"\w{4,}", query.lower()))
+    # Siglas y palabras cortas ("CV", "db", "ws"): el corte en 4 las tiraba y "How does CV
+    # tailoring work?" no casaba con cv_morpher.py (medido en NEXUS: el contexto lo lideraba
+    # pdf_factory, código muerto). Solo cuentan como PARTE completa de un nombre/stem, nunca
+    # como subcadena, para no reintroducir ruido.
+    short_words = {w for w in re.findall(r"[a-z0-9]{2,3}", query.lower()) if w not in _SHORT_STOP}
+    # ...y solo si DISCRIMINAN: "cv" señala un archivo (cv_morpher.py), pero "run" o "tab"
+    # aparecen en medio repo y, con la prioridad máxima de specific_match, arrastraban
+    # archivos irrelevantes (medido en NEXUS: la pregunta del Mentor abría con alembic/env.py).
+    short_words = discriminant_short_words(short_words, caps)
     # Expandir: "retrieve_subgraph" → {"retrieve_subgraph", "retrieve", "subgraph"}
     query_words = query_words | {
         part for w in query_words for part in w.split("_") if len(part) >= 4
@@ -290,11 +550,11 @@ def compute_context(repo: str, query: str, task_type_in: str = "auto",
 
     # Detect files named explicitly in query (e.g. "pipeline.py" → all capsules from that file)
     specific_file_paths: set[str] = set()
-    for word in query_words:
-        for c in caps.values():
-            stem = Path(c.file_path).stem.lower()
-            if word == stem or word == stem.replace("_", ""):
-                specific_file_paths.add(c.file_path)
+    for c in caps.values():
+        stem = Path(c.file_path).stem.lower()
+        parts = set(re.split(r"[_\-.]", stem))
+        if any(w == stem or w == stem.replace("_", "") for w in query_words) or (short_words & parts):
+            specific_file_paths.add(c.file_path)
 
     path_seen: set[str] = set()
     specific_match: list = []  # ALL capsules from explicitly-named files (highest priority)
@@ -309,7 +569,7 @@ def compute_context(repo: str, query: str, task_type_in: str = "auto",
             if c.file_path not in path_seen:
                 path_match.append(c)
                 path_seen.add(c.file_path)
-        elif any(w in nm for w in query_words):
+        elif any(w in nm for w in query_words) or (short_words & _name_parts(c.name)):
             name_match.append(c)
     specific_match.sort(
         key=lambda c: (
@@ -332,12 +592,13 @@ def compute_context(repo: str, query: str, task_type_in: str = "auto",
     # esta query sirve solo con las patas estructurales (exact + BM25 + scorer,
     # instantáneas) y el encoder se calienta en background para las siguientes.
     # LEO_FAST_START=0 restaura el comportamiento bloqueante (esperar semántica).
-    from leo_code.rag.encoder import Encoder
     top_ids: list = []
-    if Encoder.is_warm() or os.getenv("LEO_FAST_START", "1") == "0":
-        top_ids = vs.search(query, top_k=15)
-    else:
-        Encoder.warm_bg()
+    if SEMANTIC:
+        from leo_code.rag.encoder import Encoder
+        if Encoder.is_warm() or os.getenv("LEO_FAST_START", "1") == "0":
+            top_ids = vs.search(query, top_k=15)
+        else:
+            Encoder.warm_bg()
     semantic = [caps[rid] for rid in top_ids if rid in caps and rid not in exact_ids]
 
     # BM25 sparse search — complementa Qdrant para términos exactos

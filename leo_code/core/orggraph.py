@@ -59,7 +59,7 @@ def build_org_graph(repo_paths: list[str], verbose: bool = False) -> tuple[dict,
         before = len(capsules)
         # Python vía ast (fiable, en su propio Indexer) + JS/TS vía tree-sitter.
         sub = Indexer()
-        sub.build(rp, languages=_PY, use_tree_sitter=False, verbose=verbose)
+        sub.build(rp, languages=_PY, verbose=verbose)
         py_caps = list(sub.get_capsules().values())
         for c in py_caps + _extract_ts_js(rp):
             c.properties.setdefault("repo", name)
@@ -108,6 +108,8 @@ def _demo():
 
 
 if __name__ == "__main__":
+    from leo_code.logging_config import utf8_console
+    utf8_console()
     import sys
     if len(sys.argv) > 1:
         caps, stats = build_org_graph(sys.argv[1:], verbose=False)

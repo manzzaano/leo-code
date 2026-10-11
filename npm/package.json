@@ -1,0 +1,38 @@
+{
+  "name": "leo-mcp",
+  "version": "0.3.0",
+  "description": "MCP server that gives your coding agent the real call graph of your repo (where / who_calls / impact / trace / guard, cited file:line) plus compressed AST context.",
+  "bin": {
+    "leo-mcp": "bin/leo-mcp.js"
+  },
+  "files": [
+    "bin/leo-mcp.js",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test bin/leo-mcp.test.js"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude-code",
+    "opencode",
+    "cursor",
+    "call-graph",
+    "code-intelligence",
+    "ast"
+  ],
+  "author": "Ismael Manzano Leon",
+  "homepage": "https://github.com/manzzaano/leo-code#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/manzzaano/leo-code.git",
+    "directory": "npm"
+  },
+  "bugs": {
+    "url": "https://github.com/manzzaano/leo-code/issues"
+  }
+}

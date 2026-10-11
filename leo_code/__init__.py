@@ -7,4 +7,4 @@ Submódulos:
 - leo_code.server: servidor MCP (mcp_server.py) + servidor HTTP opcional (server.py)
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
