@@ -234,8 +234,10 @@ def test_codex_snippet_is_valid_toml(capsys, tmp_path):
     assert cli.cmd_init(Namespace(client="codex", repo=str(tmp_path))) == 0
     body = capsys.readouterr().out.split("\n", 1)[1]
     parsed = tomllib.loads(body)
-    assert parsed["mcp_servers"]["leo-mcp"]["command"]
-    assert "leo-mcp" in parsed["mcp_servers"]["leo-mcp"]["args"]
+    srv = parsed["mcp_servers"]["leo-mcp"]
+    assert srv["command"]
+    # installed binary (command = .../leo-mcp) or uvx from the repo (args end in leo-mcp)
+    assert "leo-mcp" in " ".join([srv["command"], *srv["args"]])
 
 
 def test_python_and_npm_versions_match():

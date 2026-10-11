@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 import platform
+import shutil
 import sys
 from pathlib import Path
 
@@ -20,9 +21,21 @@ from leo_code import __version__
 CLIENTS = ("claude", "cursor", "opencode", "codex")
 
 
+# leo-mcp aún no está en PyPI ni en npm: sin binario instalado, se lanza desde el repo con uvx.
+REPO_SOURCE = "git+https://github.com/manzzaano/leo-code.git"
+
+
 def _launch() -> list[str]:
-    """Comando que el cliente MCP ejecutará. Windows necesita `cmd /c` para lanzar npx."""
-    return (["cmd", "/c"] if os.name == "nt" else []) + ["npx", "-y", "leo-mcp"]
+    """Comando que el cliente MCP ejecutará.
+
+    El `leo-mcp` instalado (uv tool install / pip) si está en el PATH: arranca sin red.
+    Si no, uvx desde el repo (o desde LEO_MCP_FROM). Un binario dentro de la caché de uv
+    (lo que ve un `uvx` efímero) no vale: uv puede borrarlo y la config quedaría rota.
+    """
+    exe = shutil.which("leo-mcp")
+    if exe and "archive-v" not in exe.replace("\\", "/"):
+        return [exe]
+    return ["uvx", "--from", os.environ.get("LEO_MCP_FROM", REPO_SOURCE), "leo-mcp"]
 
 
 def _quiet_index(repo: str) -> dict | None:
@@ -98,7 +111,7 @@ def cmd_doctor(args) -> int:
     except Exception as e:
         row("typescript", False, f"tree-sitter unavailable, falling back to regex: {e}")
     row("semantic", None, "on (sentence-transformers)" if engine.SEMANTIC
-        else "off (optional: install leo-mcp[semantic] or set LEO_SEMANTIC=1 with npx)")
+        else "off (optional: install the leo-mcp[semantic] extra)")
     # El watcher decide si cada llamada re-escanea el repo: sin él, en un árbol grande
     # se pagan segundos por llamada. Diagnosticarlo aquí y no en un cuelgue raro.
     repo = os.path.abspath(args.repo)
@@ -200,8 +213,9 @@ def cmd_init(args) -> int:
     if args.client == "codex":
         print("Add this to ~/.codex/config.toml:\n")
         print("[mcp_servers.leo-mcp]")
-        print(f'command = "{launch[0]}"')
-        print("args = [" + ", ".join(f'"{a}"' for a in launch[1:]) + "]")
+        # json.dumps escapa como una cadena básica de TOML (rutas de Windows con \)
+        print(f"command = {json.dumps(launch[0])}")
+        print("args = [" + ", ".join(json.dumps(a) for a in launch[1:]) + "]")
         return 0
     std = {"command": launch[0], "args": launch[1:]}
     target, key, entry = {

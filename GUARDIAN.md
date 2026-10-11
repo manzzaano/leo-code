@@ -1,43 +1,44 @@
-# python -m leo_code.core.guardian — garantía determinista de cambios
+# guardian: what a change breaks, and what isn't tested
 
-Todo agente GENERA código; ninguno PRUEBA que el cambio es seguro. El guardián sí,
-porque tiene el grafo del código. **Determinista, con prueba citable, cero tokens de LLM.**
+`python -m leo_code.core.guardian` uses the same call graph as leo-mcp to answer, before a
+change ships, which symbols depend on what you touched and which of them have no test. It is
+deterministic: no LLM, and every result is cited `file:line`.
 
-Por cada símbolo cambiado calcula:
-- **Radio de explosión** — qué se rompe (cierre transitivo de llamadores), con `archivo:línea`.
-- **Cross-lenguaje** — cruza el límite HTTP: cambiar un endpoint marca los componentes
-  React/cliente que lo consumen (vía las aristas del boundary).
-- **Cobertura** — qué afectados están cubiertos por tests y cuáles **NO** (riesgo).
+For each changed symbol it reports:
 
-Es justo lo que un revisor-LLM aluciona o se pierde.
+- **Blast radius:** the transitive callers, i.e. what can break.
+- **Across the HTTP boundary:** changing an endpoint flags the frontend components that call it,
+  through the same `fetch('/api/x')` → route edges that `trace` uses.
+- **Coverage:** which affected symbols are covered by a test and which are not.
 
 ## CLI
 
 ```bash
-# ANTES de editar: ¿qué rompo si toco esto?
+# before editing: what depends on this symbol?
 python -m leo_code.core.guardian -s compress
 
-# PR: revisa el diff vs main, sale !=0 si hay afectados SIN test
+# on a PR: check the diff against main; exits non-zero if affected code has no test
 python -m leo_code.core.guardian --base main
 
-# pre-commit: solo lo staged
+# pre-commit: only what's staged
 python -m leo_code.core.guardian --staged
 ```
 
-Salida (ejemplo, cero LLM):
+Example output:
+
 ```
 changing `get_report`  [✗ NO test]
   → affects 3 symbol(s), 2 with NO test (risk)
-    · Dashboard (component) @ web/app.tsx:14   [✗ NO test]   ← rotura cross-lenguaje
+    · Dashboard (component) @ web/app.tsx:14   [✗ NO test]
     · render_page (function) @ views.py:88     [✓ tested]
 guardian · 1 changed · 3 affected · 2 with NO test (risk) — deterministic, with proof, zero LLM
 ```
 
 ## GitHub Action
 
-Workflow incluido en `.github/workflows/guardian.yml`: en cada PR, indexa, revisa el
-diff vs la base y **falla el check** si toca código cuyo radio de explosión no está
-cubierto por tests — con el detalle y la prueba en el log. Cero coste de LLM.
+`.github/workflows/guardian.yml` runs it on every pull request: it indexes the repo, checks the
+diff against the base branch and fails the check when the change reaches code with no test,
+with the details in the log.
 
 ## pre-commit
 
@@ -46,18 +47,20 @@ cubierto por tests — con el detalle y la prueba en el log. Cero coste de LLM.
 - repo: local
   hooks:
     - id: leo-guardian
-      name: python -m leo_code.core.guardian (radio de explosión + cobertura)
+      name: guardian (blast radius + coverage)
       entry: python -m leo_code.core.guardian --staged
       language: system
       pass_filenames: false
 ```
 
-## Vía MCP (para tu agente / Claude Code / opencode)
+## From your coding agent
 
-El servidor MCP expone el guardián como **`graph` con `op=guard`**: antes de que el agente
-edite un símbolo, llama `graph(op="guard", symbol="<símbolo>")` y recibe el radio de
-explosión + cobertura con prueba, sin gastar tokens de LLM.
+The MCP server exposes the same check as `graph` with `op=guard`: the agent calls
+`graph(op="guard", symbol="<symbol>")` and gets the blast radius and coverage before it edits.
 
-```bash
-claude mcp add leo-mcp -- npx -y leo-mcp
-```
+In Claude Code, `leo-mcp init` also installs a pre-edit hook that runs this check on its own and
+warns, in one line, only when an edit reaches dependents with no test. See
+[the README](README.md#it-warns-you-before-your-agent-breaks-something).
+
+Like the rest of leo-mcp, it works on a static graph: dependencies through queues, WebSockets,
+subprocesses or names built from strings are not in it.
