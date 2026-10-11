@@ -12,7 +12,7 @@ jobs:
         with: { python-version: "3.12" }
       - uses: actions/setup-node@v4
         with: { node-version: "20" }
-      - run: pip install -e . coverage pytest
+      - run: pip install -e ".[dev]" coverage   # coverage_oracle corre la suite: necesita los extras
       - name: Oráculo TS independiente (compilador TypeScript)
         run: npm install typescript@5     # `node benchmark/ts_oracle.js` requiere tsc
       - name: Clonar repos reales a escala (Python ~2M LOC + TypeScript)

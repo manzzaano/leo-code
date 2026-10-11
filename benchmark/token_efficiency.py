@@ -37,14 +37,14 @@ UMBRAL_REC = 0.90   # fracción de tareas cuyo símbolo objetivo sobrevive
 TARGETS = [
     ("t1_code_query", "leo_code/core/parser.py",            "detect_frameworks"),
     ("t2_debug",      "leo_code/rag/compressor.py",         "compress"),
-    ("t3_test_gen",   "leo_code/session/compactor.py",      "compact_history"),
+    ("t3_test_gen",   "leo_code/engine.py",                 "ensure_structural"),
     ("t4_refactor",   "leo_code/core/parser.py",            "detect_frameworks"),
     ("t6_code_gen",   "leo_code/server/server.py",          "get_context"),
-    ("t7_code_edit",  "leo_code/rag/agent/goal.py",         "_plan"),
+    ("t7_code_edit",  "leo_code/core/graphquery.py",        "trace"),
     ("t8_review",     "leo_code/rag/compressor.py",         "compress"),
     ("t9_optimize",   "leo_code/core/parser_generic.py",    "_find_block_end"),
     ("t10_audit",     "leo_code/server/server.py",          "get_context"),
-    ("t14_cross_file","leo_code/rag/agent/loop.py",         "stream_run"),
+    ("t14_cross_file","leo_code/server/mcp_server.py",      "_get_context"),
 ]
 
 

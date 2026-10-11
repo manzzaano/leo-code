@@ -24,9 +24,9 @@ UMBRAL_RED = 0.70  # vs 1 archivo (conservador); vs multi-archivo es bastante ma
 CASES = [
     ("detect_frameworks", "leo_code/core/parser.py"),
     ("compress",          "leo_code/rag/compressor.py"),
-    ("stream_run",        "leo_code/rag/agent/loop.py"),
+    ("ensure_structural", "leo_code/engine.py"),
     ("get_context",       "leo_code/server/server.py"),
-    ("_plan",             "leo_code/rag/agent/goal.py"),
+    ("_discover_product", "leo_code/rag/indexer/watcher.py"),
     ("_find_block_end",   "leo_code/core/parser_generic.py"),
 ]
 
