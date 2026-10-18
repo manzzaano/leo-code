@@ -138,7 +138,7 @@ class Indexer:
     def _is_junk(self, path: Path) -> bool:
         """Archivo enorme o minificado (bundle, página guardada): ruido en el grafo.
 
-        ponytail: heurística de línea larga (>500 chars en los primeros 64 KB; medido
+        Heurística de línea larga (>500 chars en los primeros 64 KB; medido
         2026-09-15: código real ≤400 en NEXUS y leo-code, 59/60 bundles de una página
         guardada >500). Un bundle diminuto pasa. Subir a entropía si molesta.
         """

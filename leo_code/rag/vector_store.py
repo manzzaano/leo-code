@@ -36,7 +36,7 @@ class VectorStore:
                 # storage: qdrant-local se quedaría BLOQUEADO para siempre en su file
                 # lock. Degradamos a memoria (re-embebe, pero funciona) en vez de colgar.
                 #
-                # ponytail: el lock es a nivel de DIRECTORIO (self.path), no de
+                # El lock es a nivel de DIRECTORIO (self.path), no de
                 # coleccion — el collection_name (con o sin PID) NUNCA puede evitar
                 # esta contencion entre procesos que comparten el mismo storage dir.
                 # Multi-proceso real (2 IDEs con leo-code-mcp sobre el mismo repo):
@@ -55,7 +55,7 @@ class VectorStore:
 
     def _storage_locked(self) -> bool:
         """True si el .lock de qdrant-local está cogido por OTRO proceso (chequeo
-        no bloqueante). ponytail: hay una ventana de carrera entre chequear y crear
+        no bloqueante). Hay una ventana de carrera entre chequear y crear
         el cliente; suficiente para el caso real (procesos concurrentes de larga vida)."""
         lock_path = os.path.join(self.path, ".lock")
         if not os.path.exists(lock_path):
