@@ -12,7 +12,7 @@ medición real. Determinista al 100% (usa el compresor real con selección
 estructural de candidatos — cero embeddings, cero varianza), así sirve de
 regression guard en CI igual que retrieval_bench.py.
 
-ponytail: selección de candidatos solo-estructural (archivo nombrado + vecinos de
+Selección de candidatos solo-estructural (archivo nombrado + vecinos de
 grafo a 1 salto). Es el lower-bound honesto y reproducible; el endpoint /context
 real añade semántica (Qdrant+BM25+scorer) que solo puede SUBIR el recall. Si
 quieres medir fidelidad exacta al server, levanta el sidecar y mide /context.

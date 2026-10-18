@@ -9,7 +9,7 @@ Se integra reusando el grafo existente: a la cápsula cliente se le añade el NO
 de la cápsula-endpoint a su lista `calls`, así GraphQuery la recorre como una arista
 normal. Determinista, sin LLM.
 
-ponytail: cubre los patrones HTTP comunes (fetch/axios/.get/.post/@app/@router/
+Cubre los patrones HTTP comunes (fetch/axios/.get/.post/@app/@router/
 @route/Flask). El techo: rutas construidas dinámicamente por concatenación a runtime
 no se resuelven; ampliar el matcher si un repo real lo necesita.
 

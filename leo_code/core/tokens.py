@@ -12,7 +12,7 @@ import functools
 
 @functools.lru_cache(maxsize=8)
 def _enc(model: str):
-    import tiktoken  # ponytail: dep opcional, import perezoso
+    import tiktoken  # dep opcional, import perezoso
     return tiktoken.get_encoding(model)
 
 
@@ -23,5 +23,5 @@ def count_tokens(text: str, model: str = "cl100k_base") -> int:
     try:
         return len(_enc(model).encode(text))
     except Exception:
-        # ponytail: tiktoken opcional; heurística suficiente para el budget
+        # tiktoken opcional; heurística suficiente para el budget
         return max(1, len(text) // 4)
