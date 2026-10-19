@@ -58,6 +58,36 @@ _CLIENT_HINTS = ("fetch", "axios", "http", "request", "$.")
 _SERVER_HINTS = (".get", ".post", ".put", ".patch", ".delete", ".route")
 
 
+def _hinted_finditer(rx, text: str, low: str, hints, at_word: bool = False):
+    """= rx.finditer(text) cuando toda coincidencia EMPIEZA por una pista (o, con at_word,
+    por el `@palabra` pegado delante: `@app.get`): prueba el regex solo ahí (`low` =
+    text.lower()), no en cada posición. Medido en django: el regex cliente costaba 9,7
+    µs/símbolo de la reconstrucción y el de servidor 2,6."""
+    if len(low) != len(text):               # lower() cambió longitudes (Unicode): camino lento
+        yield from rx.finditer(text)
+        return
+    starts = set()
+    for h in hints:
+        i = low.find(h)
+        while i != -1:
+            starts.add(i)
+            if at_word:
+                j = i
+                while j and (low[j - 1].isalnum() or low[j - 1] == "_"):
+                    j -= 1
+                if j < i and j and low[j - 1] == "@":
+                    starts.add(j - 1)
+            i = low.find(h, i + 1)
+    end = 0
+    for i in sorted(starts):
+        if i < end:                         # dentro de la coincidencia anterior: finditer no solapa
+            continue
+        m = rx.match(text, i)
+        if m:
+            yield m
+            end = max(m.end(), i + 1)
+
+
 def _scan(capsules: dict) -> tuple[dict[str, list], list[tuple]]:
     """Una sola pasada: rutas de servidor y llamadas de cliente.
 
@@ -76,11 +106,12 @@ def _scan(capsules: dict) -> tuple[dict[str, list], list[tuple]]:
         sig = getattr(c, "signature", "") or ""
         server_text = " ".join((content, sig, deco))
         low = server_text.lower()
-        if any(h in low for h in _SERVER_HINTS):
-            for m in _SERVER_ROUTE.finditer(server_text):
-                routes.setdefault(_norm(m.group(1)), []).append(c)
+        for m in _hinted_finditer(_SERVER_ROUTE, server_text, low, _SERVER_HINTS, at_word=True):
+            routes.setdefault(_norm(m.group(1)), []).append(c)
         if any(h in low for h in _CLIENT_HINTS):
-            for m in _CLIENT_CALL.finditer(content):
+            # low empieza por content.lower() si lower() no cambió longitudes
+            aligned = low[:len(content)] if len(low) == len(server_text) else content.lower()
+            for m in _hinted_finditer(_CLIENT_CALL, content, aligned, _CLIENT_HINTS):
                 url = m.group(1)
                 if url.startswith(("/", "http")) or "/" in url:
                     clients.append((c, _norm(url)))
