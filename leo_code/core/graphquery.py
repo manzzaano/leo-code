@@ -86,8 +86,10 @@ def _norm(path: str) -> str:
 
 _BUILTINS = frozenset(dir(builtins))
 _NONE: dict = {}   # default de .get() compartido: `.get(k, {})` crearía un dict por llamada (GC, chequeo (e))
-_TOP_TYPES = ("function", "async_function", "class", "dataclass", "exception", "test",
-              "endpoint", "model", "route", "component")
+# No son defs llamables. Por exclusión y no por lista: el clasificador reetiqueta defs
+# (middleware, model, endpoint…) y una lista cerrada las dejaba sin resolver.
+_NOT_DEFS = frozenset({"module", "attribute", "variable", "constant", "file_header",
+                       "entrypoint", "document", "image"})
 
 
 class _PyScope:
@@ -115,7 +117,7 @@ class _PyScope:
             props = c.properties or {}
             if "bind" in props:
                 self.binds[f][props["bind"][0]] = props["bind"]
-            elif c.type in _TOP_TYPES and "class" not in props and c.content:
+            elif c.type not in _NOT_DEFS and "class" not in props and c.content:
                 self.top[f][c.name].append(c)
         # módulo con puntos → archivos. Sin raíces de sys.path: vale cualquier sufijo de la
         # ruta que empiece fuera de un paquete (su carpeta no tiene __init__.py).
