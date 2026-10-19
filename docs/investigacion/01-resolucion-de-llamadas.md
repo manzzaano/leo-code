@@ -93,6 +93,53 @@ llamadas y acierta el destino en X%.
 y demasiado lentos para el presupuesto por edición); stack graphs (archivado);
 Pyright dentro del producto (Node y segundos por índice); LLM.
 
+## 5. Línea base medida (fase 0, 19/10/2026)
+
+Oráculo (f): `benchmark/resolution_oracle.py`. Se puntúa por sitio de llamada
+(caller, línea:columna, destino), porque a nivel de arista dos errores se tapan.
+
+**Micro-benchmark PyCG** (commit `8d5dc40`, 119 programas con grafo hecho a mano):
+
+| | Resultado |
+|---|---|
+| Tests sin aristas falsas | 114/119 |
+| Tests sin aristas perdidas | 101/119 |
+| Precisión / recall en las 42 aristas puntuables | 57,7% / 35,7% |
+| Fuera de la puntuación | 188 llamadas desde nivel de módulo, 12 con lambdas o funciones anidadas |
+
+Las 27 perdidas son casi todas funciones pasadas como valor (`func(param_func)`,
+`kwargs`, `self.f = g`) y métodos implícitos (`__iter__`). Las falsas, homónimos.
+
+**A escala, con jedi 0.19.2 de juez** (muestra fija de 5.000 llamadas en django y sympy;
+NEXUS y leo-code enteros):
+
+| Repo | Llamadas juzgadas | Exactas | Precisión | Recall | Destinos perdidos |
+|---|---|---|---|---|---|
+| NEXUS | 101 | **92,1%** | 92,7% | 100% | 0 |
+| leo-code | 1.080 | **81,8%** | 52,5% | 99,4% | 7 |
+| sympy (`9b67993`) | 995 | **45,5%** | 8,6% | 99,8% | 2 |
+| django (`11af25c`) | 447 | **49,9%** | 3,9% | 99,1% | 4 |
+
+Cómo leerlo:
+- **Exactas** = leo da justo el destino correcto, ni más ni menos. Es lo que nota quien
+  usa `who_calls`.
+- La precisión baja la dominan pocos nombres con muchas definiciones: en leo-code,
+  `__init__` aporta 451 de 980 destinos falsos, y `run` y `generate` unos 130 cada uno.
+- El recall casi completo confirma que la resolución por nombre no pierde dependientes.
+  Lo que pierde son **imports con alias** (`from benchmark.oracle import run as oracle`,
+  `hermite_normal_form as _hnf`): todos los perdidos revisados son de este tipo.
+- Jedi solo da veredicto en el 9-20% de las llamadas a escala. Del resto, unas 2.000
+  por repo las une leo por nombre y nadie las puede juzgar: el número real de exactas
+  sobre todas las llamadas no se conoce.
+
+Fallos del juez encontrados y corregidos al medir: jedi devuelve el parámetro cuando se
+llama a uno (`f(...)` con `f` parámetro) y caía en la línea del `def`; la muestra no era
+reproducible porque el índice no garantiza orden. Con los dos arreglos, django da el
+mismo resultado en dos ejecuciones seguidas.
+
+scip-python 0.6.6 no funciona en Windows (`new RegExp(path.sep)` con `\`, y otro error
+al indexar NEXUS); WSL no arranca en esta máquina. Por eso el juez a escala es jedi.
+
 ## Fuentes
 
 - Salis et al., *PyCG: Practical Call Graph Generation in Python*, ICSE 2021. https://arxiv.org/abs/2103.00587

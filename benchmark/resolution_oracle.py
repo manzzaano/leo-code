@@ -130,6 +130,8 @@ def score_repo(repo: str, sample: int | None = None, seed: int = 0) -> dict:
                 name = call.func.id if isinstance(call.func, ast.Name) else call.func.attr
                 sites.append((c, path, *_site(call.func), name))
     if sample and len(sites) > sample:
+        # el índice no garantiza orden: sin ordenar, la misma semilla daba otra muestra
+        sites.sort(key=lambda s: (str(s[1]), s[2], s[3]))
         sites = random.Random(seed).sample(sites, sample)
 
     project = jedi.Project(str(root))
