@@ -51,6 +51,13 @@ def test_repo_judge_uses_jedi_targets(tmp_path):
     assert s["calls"] == 2 and s["exact"] == 0
 
 
+def test_calling_a_parameter_is_not_judged(tmp_path):
+    # jedi lleva `g` a su parámetro, que comparte línea con `def`: no es un destino
+    (tmp_path / "main.py").write_text("def apply(g):\n    g()\n", encoding="utf-8")
+    s = score_repo(str(tmp_path))
+    assert s["calls"] == 0 and s["unjudged"] == 1
+
+
 def test_module_level_callers_are_reported_apart(tmp_path):
     code = "def f():\n    pass\nf()\n"
     truth = {"main": ["main.f"], "main.f": []}

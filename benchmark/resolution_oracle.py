@@ -144,7 +144,8 @@ def score_repo(repo: str, sample: int | None = None, seed: int = 0) -> dict:
         except Exception:              # jedi falla en código raro: no hay veredicto
             found = []
         targets = {qid(defs[(Path(d.module_path).resolve(), d.line)])
-                   for d in found if d.module_path and (Path(d.module_path).resolve(), d.line) in defs}
+                   for d in found if d.type == "function" and d.module_path
+                   and (Path(d.module_path).resolve(), d.line) in defs}
         if not targets:
             unjudged += 1
             linked += name in by_bare     # leo la une por nombre y nadie puede juzgarla
