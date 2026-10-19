@@ -98,6 +98,7 @@ def score_repo(repo: str, sample: int | None = None, seed: int = 0) -> dict:
     import jedi
     from leo_code.rag.indexer import Indexer
     from leo_code.core.graphquery import _bare
+    from leo_code.core.parser import call_form
 
     root = Path(repo).resolve()
     idx = Indexer()
@@ -127,8 +128,7 @@ def score_repo(repo: str, sample: int | None = None, seed: int = 0) -> dict:
             continue
         for call in ast.walk(node):
             if isinstance(call, ast.Call) and isinstance(call.func, (ast.Name, ast.Attribute)):
-                name = call.func.id if isinstance(call.func, ast.Name) else call.func.attr
-                sites.append((c, path, *_site(call.func), name))
+                sites.append((c, path, *_site(call.func), *call_form(call.func)))
     if sample and len(sites) > sample:
         # el índice no garantiza orden: sin ordenar, la misma semilla daba otra muestra
         sites.sort(key=lambda s: (str(s[1]), s[2], s[3]))
@@ -138,7 +138,7 @@ def score_repo(repo: str, sample: int | None = None, seed: int = 0) -> dict:
     scripts = {}
     truth, leo = set(), set()
     calls = exact = unjudged = linked = 0
-    for caller, path, line, col, name in sites:
+    for caller, path, line, col, name, recv in sites:
         if path not in scripts:
             scripts[path] = jedi.Script(path=str(path), project=project)
         try:
@@ -153,7 +153,11 @@ def score_repo(repo: str, sample: int | None = None, seed: int = 0) -> dict:
             linked += name in by_bare     # leo la une por nombre y nadie puede juzgarla
             continue
         site = f"{line}:{col}"
-        guessed = {qid(d) for d in by_bare.get(name, []) if gq._edge_ok(caller, name)}
+        resolved = gq._scope.targets(caller, name, recv)
+        if resolved is None:           # sin resolver: leo la une por nombre
+            guessed = {qid(d) for d in by_bare.get(name, []) if gq._edge_ok(caller, name)}
+        else:
+            guessed = {qid(d) for d in resolved if (Path(d.file_path).resolve(), d.start_line) in defs}
         calls += 1
         exact += guessed == targets
         truth |= {(qid(caller), site, t) for t in targets}

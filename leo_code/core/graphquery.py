@@ -14,7 +14,10 @@ Self-check:  python -m leo_code.core.graphquery
 
 from __future__ import annotations
 
-from collections import deque
+import builtins
+import sys
+from collections import defaultdict, deque
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 
@@ -77,30 +80,206 @@ def _bare(name: str) -> str:
     return name.split(".")[-1]
 
 
+def _norm(path: str) -> str:
+    return (path or "").replace("\\", "/")
+
+
+_BUILTINS = frozenset(dir(builtins))
+_NONE: dict = {}   # default de .get() compartido: `.get(k, {})` crearía un dict por llamada (GC, chequeo (e))
+_TOP_TYPES = ("function", "async_function", "class", "dataclass", "exception", "test",
+              "endpoint", "model", "route", "component")
+
+
+class _PyScope:
+    """Resolución de llamadas Python por ámbito del archivo + tabla de imports.
+
+    Es la regla IMPORT de PyCG (Salis et al., ICSE 2021) sin el resto del análisis:
+    `go()` con `from util import run as go` va a util.run; `u.run()` con `import util as u`
+    también; `foo()` definida en el mismo archivo va a esa def. Lo que no se puede
+    decidir así (receptores `self`/`obj`, nombres sin enlace) devuelve None → el grafo
+    sigue uniéndolo por nombre, como antes: resolver nunca quita una arista posible.
+    """
+
+    def __init__(self, caps):
+        self.files: set[str] = set()
+        self.top = defaultdict(lambda: defaultdict(list))   # archivo → nombre → defs top-level
+        self.binds = defaultdict(dict)                      # archivo → nombre local → enlace
+        pkgs = set()
+        for c in caps:
+            if (getattr(c, "language", "") or "") != "python":
+                continue
+            f = _norm(c.file_path)
+            self.files.add(f)
+            if f.endswith("/__init__.py"):
+                pkgs.add(f.rsplit("/", 1)[0])
+            props = c.properties or {}
+            if "bind" in props:
+                self.binds[f][props["bind"][0]] = props["bind"]
+            elif c.type in _TOP_TYPES and "class" not in props and c.content:
+                self.top[f][c.name].append(c)
+        # módulo con puntos → archivos. Sin raíces de sys.path: vale cualquier sufijo de la
+        # ruta que empiece fuera de un paquete (su carpeta no tiene __init__.py).
+        # ponytail: un __init__.py vacío no deja cápsulas → esa carpeta parece raíz y puede
+        # sobrar algún candidato; se uniría a todos, como por nombre.
+        # valor str (un archivo, lo normal) o tupla (varios): ~34k claves en django y una
+        # lista por clave eran asignaciones que el GC cuenta dentro del chequeo (e)
+        self.mods: dict[str, str | tuple] = {}
+        for f in self.files:
+            parts = f[:-3].split("/") if f.endswith(".py") else []
+            if parts and parts[-1] == "__init__":
+                parts = parts[:-1]
+            for k in range(1, len(parts) + 1):
+                if "/".join(parts[:-k]) not in pkgs:
+                    key = ".".join(parts[-k:])
+                    prev = self.mods.get(key)
+                    if prev is None:
+                        self.mods[key] = f
+                    else:
+                        self.mods[key] = ((prev,) if isinstance(prev, str) else prev) + (f,)
+        self.tops = {m.split(".")[0] for m in self.mods}
+        for d in (self.top, self.binds, *self.top.values()):
+            d.default_factory = None            # ya construidos: leer una clave que falta no la crea
+        self._memo: dict[str, dict[str, list | None]] = {}   # archivo → llamada → destinos
+
+    def _mod_files(self, mod: str, level: int, here: str) -> list | None:
+        """Archivos del módulo: lista, [] = fuera del repo, None = no se sabe."""
+        if level:
+            base = here.rsplit("/", level)[0]
+            path = base + ("/" + mod.replace(".", "/") if mod else "")
+            return [f for f in (path + ".py", path + "/__init__.py") if f in self.files] or None
+        hit = self.mods.get(mod)
+        if hit:
+            return [hit] if isinstance(hit, str) else hit
+        top = mod.split(".")[0]
+        return [] if top in sys.stdlib_module_names or top not in self.tops else None
+
+    def _in_module(self, files: list, attr: str, depth: int) -> list | None:
+        """Defs `attr` de esos archivos, siguiendo re-exports (`from .b import run` en un __init__)."""
+        out, external = [], False
+        for f in files:
+            if attr in self.top.get(f, _NONE):
+                out += self.top[f][attr]
+            elif depth < 4 and attr in self.binds.get(f, _NONE):
+                r = self._bind_targets(self.binds[f][attr], f, depth + 1)
+                out += r or []
+                external |= r == []
+        return out or ([] if external else None)
+
+    def _bind_targets(self, b: list, here: str, depth: int = 0) -> list | None:
+        """Defs a las que apunta llamar un nombre importado."""
+        _, mod, attr, level = b
+        if not attr:
+            return None                     # `import x` y luego `x()`: no es una def
+        files = self._mod_files(mod, level, here)
+        return files if not files else self._in_module(files, attr, depth)
+
+    def _bind_module(self, b: list, here: str) -> list | None:
+        """Archivos del módulo al que apunta un nombre importado (`import a as X`, `from a import b`)."""
+        _, mod, attr, level = b
+        return self._mod_files(".".join(x for x in (mod, attr) if x), level, here)
+
+    def targets(self, caller, name: str, recv: str) -> list | None:
+        """Destinos de una llamada de `caller`: defs exactas, [] = va fuera del repo,
+        None = no se puede decidir aquí (se une por nombre)."""
+        by_name, resolved = [], {}
+        self.resolve(caller, [(name, recv)], by_name, resolved)
+        return None if by_name else list(resolved.values())
+
+    def resolve(self, caller, forms, by_name: list, resolved: dict) -> None:
+        """`targets` de cada forma de llamada de `caller`: el nombre va a `by_name` si no se
+        decide, sus defs a `resolved` (id → def) si sí. Ruta normalizada una vez y sin
+        objetos por llamada: corre por cada símbolo al reconstruir el grafo (chequeo (e))."""
+        here = _norm(caller.file_path)
+        if here not in self.files:
+            by_name += [n for n, _ in forms]
+            return
+        lb = (caller.properties or {}).get("local_binds")
+        local = {b[0]: b for b in lb} if lb else {}
+        top = self.top.get(here, _NONE)
+        binds = self.binds.get(here, _NONE)
+        memo = self._memo.get(here)
+        if memo is None:
+            memo = self._memo[here] = {}
+        for name, recv in forms:
+            if recv == "" and name not in local and name not in top and name not in binds:
+                if name not in _BUILTINS:
+                    by_name.append(name)
+                continue
+            if recv and recv not in local and recv not in binds:
+                by_name.append(name)          # self.foo(), obj.foo(), a.b.foo(): por nombre
+                continue
+            if (recv or name) in local:       # import dentro de la función: tapa al del archivo
+                t = self._bound(local[recv or name], name, recv, here)
+            else:
+                # mismo archivo + receptor + nombre → mismo destino. Clave str: el GC no la rastrea
+                key = f"{recv}.{name}" if recv else name
+                if key not in memo:
+                    if recv == "" and name in top:
+                        memo[key] = top[name]
+                    else:
+                        b = binds.get(recv or name) if recv not in top else None
+                        memo[key] = self._bound(b, name, recv, here) if b else None
+                t = memo[key]
+            if t is None:
+                by_name.append(name)
+            else:
+                for d in t:
+                    resolved[d.id] = d
+
+    def _bound(self, b: list, name: str, recv: str, here: str) -> list | None:
+        """Destinos de `name()` (recv '') o `recv.name()` cuando el nombre clave viene del import `b`."""
+        if not recv:
+            return self._bind_targets(b, here)
+        files = self._bind_module(b, here)
+        return files if not files else self._in_module(files, name, 0)
+
+
 class GraphQuery:
     """Índices deterministas sobre un store de cápsulas (id -> Capsule)."""
 
     def __init__(self, capsules: dict):
         self.caps = capsules or {}
-        self.by_name: dict[str, list] = {}
-        self.callers: dict[str, list] = {}     # callee_name -> [cápsulas que lo llaman]
+        # defaultdict al construir: `setdefault(k, [])` crea una lista por llamada aunque la
+        # clave exista, y esa basura dispara pasadas del GC dentro del chequeo (e).
+        self.by_name: dict[str, list] = defaultdict(list)
+        self.callers: dict[str, list] = defaultdict(list)   # callee_name -> [cápsulas que lo llaman]
         for c in self.caps.values():
-            self.by_name.setdefault(c.name, []).append(c)
-            self.by_name.setdefault(_bare(c.name), []).append(c)
+            self.by_name[c.name].append(c)
+            self.by_name[_bare(c.name)].append(c)
+        # Cada llamada con forma conocida se intenta resolver (_PyScope). Resuelta → arista
+        # exacta caller→def (`_res`, por nombre de la def); sin resolver → por nombre, como
+        # siempre. `calls` sin forma (otros lenguajes, refs que añade refgraph) → por nombre.
+        self._scope = scope = _PyScope(self.caps.values())
+        self._res: dict[str, list] = defaultdict(list)   # nombre base de la def → callers resueltos
+        pending, resolved = [], {}              # reutilizados: menos objetos → menos pasadas del GC
         for c in self.caps.values():
-            for callee in (getattr(c, "calls", None) or []):
-                self.callers.setdefault(callee, []).append(c)
-                self.callers.setdefault(_bare(callee), []).append(c)
+            calls = getattr(c, "calls", None) or []
+            props = c.properties or {}
+            forms = props.get("call_forms")
+            if forms is None:
+                by_name = calls
+            else:
+                pending.clear(); resolved.clear()
+                pending += calls[props.get("n_calls", len(calls)):]
+                scope.resolve(c, forms, pending, resolved)
+                for d in resolved.values():
+                    self._res[_bare(d.name)].append(c)
+                by_name = pending
+            for callee in by_name:
+                self.callers[callee].append(c)
+                self.callers[_bare(callee)].append(c)
         # Familias de lenguaje por nombre, precomputadas: _edge_ok se llama UNA VEZ POR
         # ARISTA y resolverlas ahí costaba un _resolve() (con sort) por arista — a escala
         # real (296k símbolos, nombres muy repetidos) eso disparó who_calls ×54 e impact
         # ×42 y tumbó el SLA del chequeo (d). Aquí es O(1) por arista.
-        self._fams: dict[str, set] = {}
+        self._fams: dict[str, set] = defaultdict(set)
         for c in self.caps.values():
             if self._is_def(c):
                 fam = _family(c)
-                self._fams.setdefault(c.name, set()).add(fam)
-                self._fams.setdefault(_bare(c.name), set()).add(fam)
+                self._fams[c.name].add(fam)
+                self._fams[_bare(c.name)].add(fam)
+        for d in (self.by_name, self.callers, self._res, self._fams):
+            d.default_factory = None            # ya construidos: leer una clave que falta no la crea
 
     # ---- helpers ----
     def _cite(self, c) -> Cite:
@@ -142,7 +321,24 @@ class GraphQuery:
 
     def _callers_of(self, name: str) -> list:
         callers = self.callers.get(name) or self.callers.get(_bare(name)) or []
-        return [c for c in callers if self._edge_ok(c, name)]
+        return [c for c in callers if self._edge_ok(c, name)] + self._res.get(_bare(name), [])
+
+    def _split(self, c, forms, calls) -> tuple[list, Iterable]:
+        """(nombres que van por nombre, defs resueltas) de las llamadas de `c`. Los nombres
+        de `calls` sin forma (refs que añaden refgraph/boundary) van por nombre."""
+        by_name = calls[(c.properties or {}).get("n_calls", len(calls)):]
+        resolved = {}
+        self._scope.resolve(c, forms, by_name, resolved)
+        return by_name, resolved.values()
+
+    def _callees_of(self, c) -> list[tuple[str, list]]:
+        """(nombre llamado, defs destino) de `c`: las resueltas con su def exacta, el resto por nombre."""
+        calls = getattr(c, "calls", None) or []
+        forms = (c.properties or {}).get("call_forms")
+        if forms is None:
+            return [(n, self._resolve(n)) for n in dict.fromkeys(calls)]
+        by_name, resolved = self._split(c, forms, calls)
+        return [(d.name, [d]) for d in resolved] + [(n, self._resolve(n)) for n in dict.fromkeys(by_name)]
 
     # ---- queries deterministas ----
     def where(self, name: str) -> Proof:
@@ -164,8 +360,8 @@ class GraphQuery:
             return Proof("callees", name)
         c = targets[0]
         out, edges, seen = [], [], set()
-        for callee in (getattr(c, "calls", None) or []):
-            for t in self._resolve(callee):
+        for _, ts in self._callees_of(c):
+            for t in ts:
                 if t.id in seen:
                     continue
                 seen.add(t.id)
@@ -215,7 +411,7 @@ class GraphQuery:
             if _bare(cur) == dst_bare and cur not in start_names:
                 hit = cur; break
             for c in self._resolve(cur):
-                for callee in (getattr(c, "calls", None) or []):
+                for callee, _ in self._callees_of(c):
                     if not self._edge_ok(c, callee):
                         continue
                     if _bare(callee) == dst_bare:

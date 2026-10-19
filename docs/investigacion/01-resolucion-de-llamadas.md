@@ -195,6 +195,44 @@ sobrescrituras en subclases, no solo el primero.
 Para hacerlo hay que guardar la forma de la llamada en la cápsula. Eso cambia el formato
 del índice, así que hay que subir su versión para que se reconstruya.
 
+## 7. Fase 1, paso 1: ámbito del archivo + imports (19/10/2026)
+
+Qué se hizo:
+
+- El parser guarda la forma de cada llamada (`foo()`, `X.foo()` o otro receptor) y el
+  enlace de cada import, con alias, nivel relativo e imports dentro de funciones.
+- `GraphQuery` resuelve:
+  - `foo()` contra el import local, luego una def del mismo archivo, luego un import
+    del archivo;
+  - `X.foo()` cuando `X` es un módulo importado;
+  - los re-exports de un `__init__.py`.
+- Un import de la stdlib o de un paquete que no está en el repo no crea aristas al repo.
+  Un builtin tampoco.
+- Lo demás sigue uniéndose por nombre: `self.foo()`, `obj.foo()`, y nombres sin enlace.
+- El índice pasa al formato 3.
+
+Resultado con el mismo oráculo (f), la misma muestra y la misma semilla que la §5:
+
+| Repo | Exactas antes → ahora | Precisión antes → ahora | Recall antes → ahora |
+|---|---|---|---|
+| NEXUS | 92.1% → 92.1% | 92.7% → 92.7% | 100% → 100% |
+| leo-code | 81.8% → 86.5% | 52.5% → 56.7% | 99.4% → 100% |
+| sympy | 45.5% → 65.1% | 8.6% → 9.5% | 99.8% → 100% |
+| django | 49.9% → 60.9% | 3.9% → 4.0% | 99.1% → 100% |
+
+Micro-benchmark de PyCG: igual que antes (114/119 completos, 101/119 sonidos). Sus fallos
+son llamadas de orden superior y MRO, que este paso no toca.
+
+Lectura:
+
+- **Exactas** sube 5-20 puntos.
+- **Recall** llega al 100% en los cuatro repos. Los destinos que se perdían eran los
+  alias de import.
+- **Precisión** casi no se mueve. Los destinos falsos vienen sobre todo de `super()`,
+  `self.foo()` y `var.foo()`, como predijo la §6, y son el objetivo de los pasos 2 y 3.
+- La cota de la §6 para los pasos 1+2 juntos era django ~76% y sympy ~82%. Con el paso 1
+  solo, sympy ya recupera dos tercios de esa ganancia y django algo menos de la mitad.
+
 ## Fuentes
 
 - Salis et al., *PyCG: Practical Call Graph Generation in Python*, ICSE 2021. https://arxiv.org/abs/2103.00587

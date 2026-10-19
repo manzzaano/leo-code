@@ -45,10 +45,11 @@ def test_repo_judge_uses_jedi_targets(tmp_path):
     # Se puntúa por sitio de llamada: a nivel de arista los dos errores se taparían.
     assert s["truth"] == {("main.py:A.start", "6:13", "main.py:A.run"),
                           ("main.py:A.start", "7:8", "util.py:run")}
-    # por nombre: self.run() une también util.run, y el alias `go` no une nada
+    # self.run() aún va por nombre (une también util.run); el alias `go` lo resuelve el import
     assert s["leo"] == {("main.py:A.start", "6:13", "main.py:A.run"),
-                        ("main.py:A.start", "6:13", "util.py:run")}
-    assert s["calls"] == 2 and s["exact"] == 0
+                        ("main.py:A.start", "6:13", "util.py:run"),
+                        ("main.py:A.start", "7:8", "util.py:run")}
+    assert s["calls"] == 2 and s["exact"] == 1
 
 
 def test_calling_a_parameter_is_not_judged(tmp_path):
