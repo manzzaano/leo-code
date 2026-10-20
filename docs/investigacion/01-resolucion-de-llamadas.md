@@ -188,9 +188,11 @@ Técnicas que encajan, de menos a más coste:
 | Tipo de los atributos y retornos | Inferencia de Pyright (unión de asignaciones) | `self.attr.foo()`, `x = crear()` | Alto: entre archivos, y Pyright avisa de que es caro |
 
 Una regla de CHA que hay que respetar para no perder dependientes: `self.foo()` dentro de
-la clase base puede ejecutar la versión de una subclase (caso `base_class_calls_child`
-del micro-benchmark). El destino de `self.foo()` es el método que da la MRO **más** las
-sobrescrituras en subclases, no solo el primero.
+la clase base puede ejecutar la versión de una subclase (patrón *template method*). El
+destino de `self.foo()` es el método que da la MRO **más** las sobrescrituras en
+subclases, no solo el primero. (Corrección del 20/10: esta nota citaba el caso
+`base_class_calls_child` del micro-benchmark, pero ahí `child` es un atributo asignado en
+las subclases, no un método. Eso es flujo de atributos, del paso 3, y la CHA no lo resuelve.)
 
 Para hacerlo hay que guardar la forma de la llamada en la cápsula. Eso cambia el formato
 del índice, así que hay que subir su versión para que se reconstruya.
@@ -233,6 +235,115 @@ Lectura:
 - La cota de la §6 para los pasos 1+2 juntos era django ~76% y sympy ~82%. Con el paso 1
   solo, sympy ya recupera dos tercios de esa ganancia y django algo menos de la mitad.
 
+## 8. Paso 2: jerarquía de clases para `self`, `cls` y `super()` (20/10/2026)
+
+### Semántica que hay que respetar
+
+Según la documentación de Python (`super()` y *The Python 2.3 Method Resolution Order*):
+
+- `obj.foo` busca `foo` en `type(obj).__mro__`, en orden.
+- `super().foo` busca en la misma MRO, pero empieza **después** de la clase que encierra
+  el método.
+- La MRO es la linealización C3 (Barrett et al., OOPSLA 1996).
+
+La documentación avisa de que, con herencia múltiple, ese orden "puede incluir clases
+hermanas desconocidas antes de la ejecución".
+
+Dos consecuencias para un análisis estático:
+
+1. `self.foo()` en la clase `C` no siempre va a `C.foo`. `self` puede ser cualquier
+   subclase `S` de `C`, y entonces va al primer `foo` de la MRO de `S`. Eso es la regla de
+   Class Hierarchy Analysis (Dean, Grove y Chambers, ECOOP 1995).
+2. `super().foo()` en `C` puede ir a una clase **hermana**. Con `class D(Left, Right)`, un
+   `super().hook()` dentro de `Left` ejecuta `Right.hook`, que no es ancestro de `Left`.
+
+### El juez no ve el despacho dinámico
+
+Comprobado con jedi 0.19: en esos dos casos `goto` devuelve solo el método de la clase
+estática (`Base.hook`). No ve la sobrescritura en la subclase ni la clase hermana. Por eso
+el oráculo (f) contará como "falsos" destinos que en ejecución son reales. El oráculo
+tiene que separarlos: un destino extra que es el mismo método en una clase emparentada
+por herencia con la del destino de jedi se cuenta aparte, como "despacho dinámico".
+
+### Regla que se implementa
+
+Para una llamada dentro de un método de la clase `C`:
+
+- **`self.foo()` / `cls.foo()`** (el receptor es el primer parámetro del método): la unión,
+  para cada `S` en `{C} ∪ subclases(C)`, del primer `foo` de `MRO(S)`.
+- **`super().foo()`**: lo mismo, pero buscando en `MRO(S)` solo **después** de `C`.
+- **`Clase.foo()`** con `Clase` una clase del repo: el primer `foo` de `MRO(Clase)`, sin
+  subclases, porque la clase es explícita.
+- Si no se encuentra `foo` (atributo asignado, base fuera del repo o desconocida), la
+  llamada va por nombre, como hoy. Nunca se quita una arista posible.
+
+Las bases se resuelven con la tabla de imports del paso 1. El parser las guarda con la
+misma forma que las llamadas (`Base`, `modulo.Base`, y de `Generic[T]` se toma `Generic`),
+en vez de partir el texto de `hereda_de`.
+
+Si C3 falla (la clase no compila en Python, o faltan bases), se usa el orden en
+profundidad de izquierda a derecha sin repetidos. Es una aproximación y queda marcada en
+el código.
+
+### Bases que no se pueden seguir (revisión)
+
+La revisión encontró dos huecos de recall en la primera versión, y se cerraron con tests:
+
+- **Base desconocida en la MRO.** `class A(a.b.Mixin)`, `class A(with_metaclass(...))` o
+  una base re-exportada con `import *` se descartaban sin más. Así, un `self.helper()`
+  podía resolverse a un override de una subclase y perder el `helper` que quizá vive en esa
+  base. Ahora una base que no se sabe qué es entra en la MRO como un nodo propio, en su
+  sitio de C3. Si la búsqueda llega a ese nodo antes de encontrar el método, la llamada va
+  por nombre. Las bases externas conocidas (builtins, stdlib, paquetes de fuera) no abren
+  la clase, porque no pueden definir un método del repo.
+- **Subclase con base desconocida.** Con `class D(mod.C)` y `mod` imposible de seguir, D
+  no aparecía entre las subclases de C y se perdían sus overrides. Ahora D cuenta como
+  subclase de cada clase del repo llamada `C`. De `with_metaclass(Meta, Base)` cuentan
+  todos sus argumentos. Esto puede añadir algún override de más, pero no quita ninguno.
+
+### El oráculo, corregido
+
+La primera regla del oráculo ("despacho dinámico" = mismo método en una clase emparentada
+con la del destino de jedi) era demasiado blanda. Mirando los ejemplos de django,
+contaba como despacho homónimos que esa llamada no puede alcanzar. Por ejemplo, para un
+`super().clean()` en `GeometryField` contaba `SimpleArrayField.clean`. Pasaba porque se
+apoyaba en las uniones por nombre de leo, que son una suposición y no herencia vista.
+
+La regla estricta exige que el destino esté en la MRO de una subclase S de la clase C
+que hace la llamada, que S contenga de verdad a C en su MRO, y que con `super()` el
+destino vaya detrás de C. Con esa regla, django pasa de 68 a 47 destinos de despacho, y
+los ejemplos son overrides reales (`Serializer.getvalue` en json/jsonl).
+
+### Resultados (20/10/2026, muestra 5000, semilla 0)
+
+| Repo | Exactas paso 1 → paso 2 | Precisión paso 1 → paso 2 | Recall | Despacho dinámico |
+|---|---|---|---|---|
+| NEXUS | 92,1% → **96,0%** | 92,7% → **96,2%** | 100% | 0 |
+| leo-code | 86,5% → **91,4%** | 56,8% → **82,5%** | 100% | 0 |
+| django | 60,9% → **72,3%** | 4,0% → **10,0%** | 100% | 47 (con ellos: 76,3% exactas) |
+| sympy | 65,1% → **79,5%** | 9,5% → **31,3%** | 100% | 69 (con ellos: 81,2% exactas) |
+
+- Destinos falsos: django pasa de 10745 a 4022 y sympy de 9721 a 2223.
+- leo-code se mide sobre sí mismo, así que su muestra cambia con cada commit.
+- PyCG micro no cambia: 114/119 completas y 101 sound.
+
+**Coste (gate (e), django).** La primera versión no pasaba el gate: daba 29–31 µs/símbolo
+con un límite de 21. Hubo dos causas:
+
+1. El GC. Las claves `(archivo, clase)` y una lista por método eran ~66k contenedores vivos
+   más. Se cambiaron por claves str y por la def suelta o una tupla.
+2. Cada despacho hacía una búsqueda por subclase. django tiene jerarquías de ~2000
+   subclases (los `Model` y `TestCase` de sus tests). Una subclase con una sola base que no
+   redefine el método tiene la MRO de su padre, que ya entra en la cuenta, así que se salta
+   sin calcularla.
+
+Tras los dos cambios: **14,2 / 17,2 / 19,5 µs/símbolo** (HEAD daba 13–18 en la misma
+máquina). Sin GC, GraphQuery cuesta 5,8 µs/símbolo, frente a 5,2–6,3 en HEAD.
+
+**Lo que queda.** Casi todos los falsos de django y sympy son llamadas sobre variables y
+atributos (`obj.foo()`, `self.x.foo()`), que siguen yendo por nombre. Eso es el paso 3:
+tipos locales.
+
 ## Fuentes
 
 - Salis et al., *PyCG: Practical Call Graph Generation in Python*, ICSE 2021. https://arxiv.org/abs/2103.00587
@@ -247,6 +358,10 @@ Lectura:
 - Feldthaus et al., *Efficient Construction of Approximate Call Graphs for JavaScript IDE Services*, ICSE 2013. https://2013.icse-conferences.org/content/efficient-construction-approximate-call-graphs-javascript-ide-services.html
 - Réplica en Rascal del ACG (CWI). https://ir.cwi.nl/pub/23115
 - Dijkstra, *Evaluation of Static JavaScript Call Graph Algorithms*, 2014. https://www.scribd.com/document/312776719/Evaluation-of-Static-Javascript-Call-Graph-Algorithms
+- Dean, Grove y Chambers, *Optimization of Object-Oriented Programs Using Static Class Hierarchy Analysis*, ECOOP 1995. https://doi.org/10.1007/3-540-49538-X_5
+- Barrett et al., *A Monotonic Superclass Linearization for Dylan*, OOPSLA 1996. https://doi.org/10.1145/236337.236343
+- Python, `super()`. https://docs.python.org/3/library/functions.html#super
+- Python, *The Python 2.3 Method Resolution Order*. https://docs.python.org/3/howto/mro.html
 - Sundaresan et al., *Practical virtual method call resolution for Java*, OOPSLA 2000. https://doi.org/10.1145/353171.353189
 - Tip y Palsberg, *Scalable propagation-based call graph construction algorithms*, OOPSLA 2000. https://access.archive-ouverte.unige.ch/access/metadata/56f27ea0-bb6c-4815-859e-dfeb42ee190d/download
 - Pyright, *Type inference*. https://github.com/microsoft/pyright/blob/main/docs/type-inference.md

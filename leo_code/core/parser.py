@@ -51,12 +51,45 @@ def _node_calls(node) -> list[str]:
 
 def call_form(f) -> tuple[str, str] | None:
     """(nombre, receptor) de la función llamada: receptor '' = `foo()`, 'X' = `X.foo()`
-    con X un nombre simple, '.' = cualquier otro receptor (`a.b.foo()`, `f().foo()`)."""
+    con X un nombre simple, 'super()' = `super().foo()`, '.' = cualquier otro receptor
+    (`a.b.foo()`, `f().foo()`)."""
     if isinstance(f, ast.Name):
         return f.id, ""
     if isinstance(f, ast.Attribute):
-        return f.attr, f.value.id if isinstance(f.value, ast.Name) else "."
+        v = f.value
+        if isinstance(v, ast.Name):
+            return f.attr, v.id
+        if isinstance(v, ast.Call) and isinstance(v.func, ast.Name) and v.func.id == "super":
+            return f.attr, "super()"
+        return f.attr, "."
     return None
+
+
+def _base_forms(bases) -> list:
+    """Bases de una clase con la forma de `call_form`: `Base` → [Base, ''], `m.Base` →
+    [Base, m]; de `Generic[T]` se toma `Generic`. Lo que no se puede seguir (`a.b.Base`,
+    `with_metaclass(Meta, Base)`) queda con receptor '.': una base desconocida, que puede
+    ser cualquier clase con ese nombre (de una llamada, cada argumento)."""
+    out = []
+    for b in bases:
+        if isinstance(b, ast.Subscript):
+            b = b.value
+        form = call_form(b)
+        if form and form[1] != "super()":
+            out.append(list(form))
+        elif isinstance(b, ast.Call):
+            out += [[f[0], "."] for f in map(call_form, b.args) if f] or [["", "."]]
+        else:
+            out.append([form[0] if form else "", "."])
+    return out
+
+
+def _self_arg(m) -> str:
+    """Primer parámetro de un método (`self`, `cls`…); '' si es @staticmethod o no tiene."""
+    if any(ast.unparse(d).split(".")[-1] == "staticmethod" for d in m.decorator_list):
+        return ""
+    args = m.args.posonlyargs + m.args.args
+    return args[0].arg if args else ""
 
 
 def _bind(stmt, alias) -> list:
@@ -216,6 +249,7 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
             props = {
                 "metodos": ", ".join(methods),
                 "hereda_de": ", ".join(bases),
+                "bases": _base_forms(node.bases),
                 "lineas": lines,
                 "module": module_name,
                 **_resolution_props(node),
@@ -265,7 +299,8 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
                 m_calls = _node_calls(m)
                 m_decos = [ast.unparse(d) for d in m.decorator_list] if m.decorator_list else []
                 m_props = {"class": node.name, "qualified": f"{node.name}.{m.name}",
-                           "module": module_name, **_resolution_props(m)}
+                           "module": module_name, "self_arg": _self_arg(m),
+                           **_resolution_props(m)}
                 if m_decos:
                     m_props["decorators"] = ", ".join(m_decos)
                 capsules.append(Capsule(

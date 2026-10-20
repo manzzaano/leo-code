@@ -97,15 +97,26 @@ class _PyScope:
 
     Es la regla IMPORT de PyCG (Salis et al., ICSE 2021) sin el resto del análisis:
     `go()` con `from util import run as go` va a util.run; `u.run()` con `import util as u`
-    también; `foo()` definida en el mismo archivo va a esa def. Lo que no se puede
-    decidir así (receptores `self`/`obj`, nombres sin enlace) devuelve None → el grafo
-    sigue uniéndolo por nombre, como antes: resolver nunca quita una arista posible.
+    también; `foo()` definida en el mismo archivo va a esa def.
+
+    Más la jerarquía de clases (CHA, Dean et al. 1995) sobre la MRO de Python (C3):
+    `self.foo()` va al primer `foo` de la MRO de la clase y de cada subclase (una subclase
+    puede sobrescribirlo); `super().foo()` igual pero buscando después de la clase que lo
+    encierra, lo que puede llegar a una clase hermana; `Clase.foo()`, a la MRO de esa clase.
+
+    Lo que no se puede decidir así (`obj.foo()`, atributos, nombres sin enlace) devuelve
+    None → el grafo sigue uniéndolo por nombre: resolver nunca quita una arista posible.
     """
 
     def __init__(self, caps):
         self.files: set[str] = set()
         self.top = defaultdict(lambda: defaultdict(list))   # archivo → nombre → defs top-level
         self.binds = defaultdict(dict)                      # archivo → nombre local → enlace
+        # Una clase se nombra con el str "archivo\0Clase" y sus métodos van como def suelta (o
+        # tupla si hay varias): claves tupla y una lista por método eran ~66k contenedores
+        # vivos más, y el GC recorriéndolos se comía el presupuesto del chequeo (e).
+        self.methods = defaultdict(dict)                    # clase → nombre → def o tupla de defs
+        self.classes: dict[str, list] = {}                  # clase → formas de sus bases
         pkgs = set()
         for c in caps:
             if (getattr(c, "language", "") or "") != "python":
@@ -117,8 +128,16 @@ class _PyScope:
             props = c.properties or {}
             if "bind" in props:
                 self.binds[f][props["bind"][0]] = props["bind"]
-            elif c.type not in _NOT_DEFS and "class" not in props and c.content:
-                self.top[f][c.name].append(c)
+            elif c.type not in _NOT_DEFS and c.content:
+                if "class" in props:
+                    m = self.methods[f"{f}\0{props['class']}"]
+                    prev = m.get(c.name)
+                    m[c.name] = c if prev is None else (
+                        prev if isinstance(prev, tuple) else (prev,)) + (c,)
+                else:
+                    self.top[f][c.name].append(c)
+                    if "bases" in props:
+                        self.classes[f"{f}\0{c.name}"] = props["bases"]
         # módulo con puntos → archivos. Sin raíces de sys.path: vale cualquier sufijo de la
         # ruta que empiece fuera de un paquete (su carpeta no tiene __init__.py).
         # ponytail: un __init__.py vacío no deja cápsulas → esa carpeta parece raíz y puede
@@ -139,9 +158,29 @@ class _PyScope:
                     else:
                         self.mods[key] = ((prev,) if isinstance(prev, str) else prev) + (f,)
         self.tops = {m.split(".")[0] for m in self.mods}
-        for d in (self.top, self.binds, *self.top.values()):
+        for d in (self.top, self.binds, self.methods, *self.top.values()):
             d.default_factory = None            # ya construidos: leer una clave que falta no la crea
         self._memo: dict[str, dict[str, list | None]] = {}   # archivo → llamada → destinos
+        # jerarquía: bases resueltas con los imports (las de fuera del repo no entran)
+        self._loose: list[tuple] = []      # (nombre de la base desconocida, clase que hereda)
+        self.bases = {k: self._class_keys(k, forms) for k, forms in self.classes.items()}
+        subs = defaultdict(list)
+        for k, bs in self.bases.items():
+            for b in bs:
+                subs[b].append(k)
+        if self._loose:
+            named = defaultdict(list)
+            for k in self.classes:
+                named[k.rsplit("\0", 1)[1]].append(k)
+            # una subclase de base desconocida cuenta como subclase de cada clase del repo con
+            # ese nombre: sobra algún override posible, pero no falta ninguno
+            for name, k in self._loose:
+                for b in named.get(name, ()):
+                    if b != k:
+                        subs[b].append(k)
+        self.subs = {k: tuple(v) for k, v in subs.items()}     # tuplas de str: el GC las suelta
+        self._mros: dict[str, tuple] = {}
+        self._descs: dict[str, tuple] = {}
 
     def _mod_files(self, mod: str, level: int, here: str) -> list | None:
         """Archivos del módulo: lista, [] = fuera del repo, None = no se sabe."""
@@ -180,6 +219,144 @@ class _PyScope:
         _, mod, attr, level = b
         return self._mod_files(".".join(x for x in (mod, attr) if x), level, here)
 
+    # ---- jerarquía de clases ----
+    def _keys_of(self, defs) -> list:
+        """Claves "archivo\0Clase" de las defs que son clases del repo."""
+        out = []
+        for d in defs or ():
+            k = f"{_norm(d.file_path)}\0{d.name}"
+            if k in self.classes and k not in out:
+                out.append(k)
+        return out
+
+    def _class_keys(self, cls: str, forms: list) -> tuple:
+        """Clases del repo a las que apuntan las bases `forms` de la clase `cls`. Una base que
+        no se sabe qué es (ni del repo ni de fuera) entra como clave que empieza por "\0":
+        ocupa su sitio en la MRO y el método podría estar en ella."""
+        here, out = cls.rsplit("\0", 1)[0], []
+        for i, (name, recv) in enumerate(forms):
+            if recv == ".":
+                defs = None
+            elif not recv:
+                b = self.binds.get(here, _NONE).get(name)
+                defs = self.top.get(here, _NONE).get(name) or (
+                    self._bind_targets(b, here) if b else [] if name in _BUILTINS else None)
+            else:
+                b = self.binds.get(here, _NONE).get(recv)
+                files = self._bind_module(b, here) if b else None
+                defs = self._in_module(files, name, 0) if files else files
+            keys = self._keys_of(defs)
+            if defs is None or (defs and not keys):     # desconocida, o una def que no es clase
+                keys = [f"\0{cls}\0{i}"]
+                if name:
+                    self._loose.append((name, cls))
+            out += [k for k in keys if k not in out]
+        return tuple(out)
+
+    def _mro(self, k: str) -> tuple:
+        """Linealización C3 (Barrett et al., OOPSLA 1996) de la clase `k` sobre sus bases del repo."""
+        hit = self._mros.get(k)
+        if hit is not None:
+            return hit
+        self._mros[k] = (k,)                # herencia cíclica (código roto): corta aquí
+        bases = self.bases.get(k, ())
+        seqs = [list(self._mro(b)) for b in bases] + [list(bases)]
+        out = [k]
+        while True:
+            seqs = [q for q in seqs if q]
+            if not seqs:
+                break
+            for q in seqs:
+                head = q[0]
+                if not any(head in t[1:] for t in seqs):
+                    break
+            else:
+                # ponytail: C3 falla (Python no crearía la clase, o faltan bases):
+                # orden en profundidad de izquierda a derecha sin repetidos
+                out = list(dict.fromkeys([k] + [x for b in bases for x in self._mro(b)]))
+                break
+            out.append(head)
+            for t in seqs:
+                if t[0] == head:
+                    del t[0]
+        self._mros[k] = tuple(out)
+        return self._mros[k]
+
+    def _desc(self, k: str) -> tuple:
+        """La clase `k` y todas sus subclases del repo."""
+        hit = self._descs.get(k)
+        if hit is None:
+            seen, todo = {k}, [k]
+            while todo:
+                for sub in self.subs.get(todo.pop(), ()):
+                    if sub not in seen:
+                        seen.add(sub)
+                        todo.append(sub)
+            hit = self._descs[k] = tuple(seen)
+        return hit
+
+    def _lookup(self, k: str, name: str, after: str | None = None):
+        """Primer `name` en la MRO de `k` (solo después de `after`, para `super()`).
+        None si antes de encontrarlo aparece una base desconocida: podría estar en ella."""
+        mro = self._mro(k)
+        if after is not None:
+            if after not in mro:
+                return ()
+            mro = mro[mro.index(after) + 1:]
+        for cls in mro:
+            ms = self.methods.get(cls, _NONE).get(name)
+            if ms:
+                return ms if isinstance(ms, tuple) else (ms,)
+            if cls[0] == "\0":
+                # ponytail: los ancestros de la base desconocida no se ven; si uno es clase del
+                # repo, la MRO real la pondría detrás (pierde precisión al cortar, no recall)
+                return None
+        return ()
+
+    def _dispatch(self, k: str, name: str, sup: bool) -> list | None:
+        """`self.name()` (o `super().name()`) en la clase `k`: la clase y cada subclase.
+        Es `_lookup` por cada subclase, en línea: con miles de subclases (los modelos de
+        django) la llamada por subclase era la mitad del chequeo (e)."""
+        methods, mros, bases, owners = self.methods, self._mros, self.bases, set()
+        for sub in self._desc(k):
+            if sub != k and name not in methods.get(sub, _NONE):
+                b = bases[sub]
+                if len(b) == 1 and b[0][0] != "\0":
+                    # una sola base y no redefine `name`: su MRO es [sub] + la del padre, que
+                    # ya cuenta. Sin esto, cada modelo de los tests de django calculaba su MRO.
+                    continue
+            mro = mros.get(sub) or self._mro(sub)
+            if sup:
+                if k not in mro:
+                    continue        # subclase unida por nombre: su MRO tras `k` no se conoce
+                mro = mro[mro.index(k) + 1:]
+            for c in mro:
+                if name in methods.get(c, _NONE):
+                    owners.add(c)   # el primer `name` de esta MRO
+                    break
+                if c[0] == "\0":   # base desconocida antes del primer `name`: podría estar ahí
+                    if sup or k in mro:
+                        return None
+                    break           # subclase unida por nombre: lo heredado ya lo cubre `k`
+        if not owners:
+            return None
+        out = {}
+        for c in owners:
+            ms = methods[c][name]
+            for d in ms if isinstance(ms, tuple) else (ms,):
+                out[d.id] = d
+        return list(out.values())
+
+    def _explicit(self, keys: list, name: str) -> list | None:
+        """`Clase.name()`: la clase es explícita, sin subclases."""
+        out = {}
+        for k in keys:
+            ms = self._lookup(k, name)
+            if ms is None:
+                return None
+            out.update((d.id, d) for d in ms)
+        return list(out.values()) or None
+
     def targets(self, caller, name: str, recv: str) -> list | None:
         """Destinos de una llamada de `caller`: defs exactas, [] = va fuera del repo,
         None = no se puede decidir aquí (se une por nombre)."""
@@ -195,20 +372,34 @@ class _PyScope:
         if here not in self.files:
             by_name += [n for n, _ in forms]
             return
-        lb = (caller.properties or {}).get("local_binds")
+        props = caller.properties or {}
+        lb = props.get("local_binds")
         local = {b[0]: b for b in lb} if lb else {}
+        cls, me = props.get("class"), props.get("self_arg")
         top = self.top.get(here, _NONE)
         binds = self.binds.get(here, _NONE)
         memo = self._memo.get(here)
         if memo is None:
             memo = self._memo[here] = {}
         for name, recv in forms:
+            if cls and recv and (recv == me or recv == "super()"):
+                key = f"{cls}\0{recv == 'super()'}\0{name}"   # despacho por la jerarquía
+                if key not in memo:
+                    k = f"{here}\0{cls}"
+                    memo[key] = self._dispatch(k, name, recv == "super()") if k in self.classes else None
+                t = memo[key]
+                if t is None:
+                    by_name.append(name)
+                else:
+                    for d in t:
+                        resolved[d.id] = d
+                continue
             if recv == "" and name not in local and name not in top and name not in binds:
                 if name not in _BUILTINS:
                     by_name.append(name)
                 continue
-            if recv and recv not in local and recv not in binds:
-                by_name.append(name)          # self.foo(), obj.foo(), a.b.foo(): por nombre
+            if recv and recv not in local and recv not in binds and recv not in top:
+                by_name.append(name)          # obj.foo(), a.b.foo(): por nombre
                 continue
             if (recv or name) in local:       # import dentro de la función: tapa al del archivo
                 t = self._bound(local[recv or name], name, recv, here)
@@ -218,9 +409,14 @@ class _PyScope:
                 if key not in memo:
                     if recv == "" and name in top:
                         memo[key] = top[name]
+                    elif recv in top:         # Clase.foo() con la clase en este archivo
+                        memo[key] = self._explicit(self._keys_of(top[recv]), name)
                     else:
-                        b = binds.get(recv or name) if recv not in top else None
-                        memo[key] = self._bound(b, name, recv, here) if b else None
+                        b = binds.get(recv or name)
+                        t = self._bound(b, name, recv, here) if b else None
+                        if t is None and recv and b:      # Clase.foo() con la clase importada
+                            t = self._explicit(self._keys_of(self._bind_targets(b, here)), name)
+                        memo[key] = t
                 t = memo[key]
             if t is None:
                 by_name.append(name)

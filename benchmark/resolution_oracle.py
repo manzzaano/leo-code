@@ -94,10 +94,17 @@ def score_repo(repo: str, sample: int | None = None, seed: int = 0) -> dict:
     """Juez a escala: jedi (`goto` siguiendo imports) dice a qué def va cada llamada.
 
     Solo se puntúan las llamadas que jedi resuelve a una def que leo indexa; el resto
-    (librerías, builtins, lo que jedi no sabe) se cuenta como `unjudged`."""
+    (librerías, builtins, lo que jedi no sabe) se cuenta como `unjudged`.
+
+    jedi no ve el despacho dinámico: para `self.hook()` da el `hook` de la clase, no los
+    overrides de sus subclases ni la hermana a la que llega `super()`. Un destino de más va
+    a `dispatch`, aparte de los falsos, solo si la ejecución puede llegar a él: llamada
+    `self.`/`cls.`/`super().` en la clase C, mismo nombre, y su clase en la MRO de alguna
+    subclase de C que tenga a C en su MRO (con `super()`, detrás de C). Las uniones por
+    nombre de leo (bases sin resolver) no cuentan: son una suposición, no herencia vista."""
     import jedi
     from leo_code.rag.indexer import Indexer
-    from leo_code.core.graphquery import _bare
+    from leo_code.core.graphquery import _bare, _norm
     from leo_code.core.parser import call_form
 
     root = Path(repo).resolve()
@@ -136,8 +143,26 @@ def score_repo(repo: str, sample: int | None = None, seed: int = 0) -> dict:
 
     project = jedi.Project(str(root))
     scripts = {}
-    truth, leo = set(), set()
-    calls = exact = unjudged = linked = 0
+    truth, leo, dispatch = set(), set(), set()
+    calls = exact = exact_dispatch = unjudged = linked = 0
+    scope = gq._scope
+
+    def cls_key(c):                  # clave de su clase en la jerarquía de leo, o None
+        cls = (c.properties or {}).get("class")
+        return cls and f"{_norm(c.file_path)}\0{cls}"
+
+    reach_memo = {}
+
+    def reach(ck, sup):
+        """Clases donde puede caer `self.x()` (o `super().x()`) escrito en la clase `ck`."""
+        if (ck, sup) not in reach_memo:
+            out = set()
+            for sub in scope._desc(ck):
+                mro = scope._mro(sub)
+                if ck in mro:
+                    out.update(mro[mro.index(ck) + 1:] if sup else mro)
+            reach_memo[ck, sup] = out
+        return reach_memo[ck, sup]
     for caller, path, line, col, name, recv in sites:
         if path not in scripts:
             scripts[path] = jedi.Script(path=str(path), project=project)
@@ -145,9 +170,10 @@ def score_repo(repo: str, sample: int | None = None, seed: int = 0) -> dict:
             found = scripts[path].goto(line, col, follow_imports=True)
         except Exception:              # jedi falla en código raro: no hay veredicto
             found = []
-        targets = {qid(defs[(Path(d.module_path).resolve(), d.line)])
-                   for d in found if d.type == "function" and d.module_path
-                   and (Path(d.module_path).resolve(), d.line) in defs}
+        tcaps = [defs[(Path(d.module_path).resolve(), d.line)]
+                 for d in found if d.type == "function" and d.module_path
+                 and (Path(d.module_path).resolve(), d.line) in defs]
+        targets = {qid(c) for c in tcaps}
         if not targets:
             unjudged += 1
             linked += name in by_bare     # leo la une por nombre y nadie puede juzgarla
@@ -155,14 +181,25 @@ def score_repo(repo: str, sample: int | None = None, seed: int = 0) -> dict:
         site = f"{line}:{col}"
         resolved = gq._scope.targets(caller, name, recv)
         if resolved is None:           # sin resolver: leo la une por nombre
-            guessed = {qid(d) for d in by_bare.get(name, []) if gq._edge_ok(caller, name)}
+            gcaps = [d for d in by_bare.get(name, []) if gq._edge_ok(caller, name)]
         else:
-            guessed = {qid(d) for d in resolved if (Path(d.file_path).resolve(), d.start_line) in defs}
+            gcaps = [d for d in resolved if (Path(d.file_path).resolve(), d.start_line) in defs]
+        guessed = {qid(d) for d in gcaps}
+        props = caller.properties or {}
+        dyn = set()
+        ck = cls_key(caller)
+        if ck and recv and recv in (props.get("self_arg") or None, "super()"):
+            ok = reach(ck, recv == "super()")
+            dyn = {qid(d) for d in gcaps
+                   if _bare(d.name) == name and qid(d) not in targets and cls_key(d) in ok}
         calls += 1
         exact += guessed == targets
+        exact_dispatch += guessed - dyn == targets
         truth |= {(qid(caller), site, t) for t in targets}
         leo |= {(qid(caller), site, g) for g in guessed}
-    return {"truth": truth, "leo": leo, "calls": calls, "exact": exact,
+        dispatch |= {(qid(caller), site, g) for g in dyn}
+    return {"truth": truth, "leo": leo, "dispatch": dispatch, "calls": calls, "exact": exact,
+            "exact_dispatch": exact_dispatch,
             "unjudged": unjudged, "linked_unjudged": linked, "sites": len(sites)}
 
 
@@ -217,6 +254,11 @@ def run_repo(repo: str, sample: int | None) -> tuple[float, float, float]:
     print(f"PRECISIÓN de resolución: {precision*100:.1f}%  ({len(s['leo']) - tp} destinos falsos)")
     print(f"RECALL de resolución:    {recall*100:.1f}%  ({len(s['truth']) - tp} destinos perdidos)")
     print(f"EXACTAS (leo da justo el destino correcto): {exact*100:.1f}%")
+    nd = len(s["dispatch"])
+    if nd:
+        print(f"  de los destinos falsos, {nd} son despacho dinámico (overrides que jedi no ve): "
+              f"contándolos válidos, precisión {(tp + nd) / len(s['leo']) * 100:.1f}% · "
+              f"exactas {s['exact_dispatch'] / s['calls'] * 100:.1f}%")
     return precision, recall, exact
 
 
