@@ -112,10 +112,11 @@ class _PyScope:
         self.files: set[str] = set()
         self.top = defaultdict(lambda: defaultdict(list))   # archivo → nombre → defs top-level
         self.binds = defaultdict(dict)                      # archivo → nombre local → enlace
-        # Una clase se nombra con el str "archivo\0Clase" y sus métodos van como def suelta (o
-        # tupla si hay varias): claves tupla y una lista por método eran ~66k contenedores
-        # vivos más, y el GC recorriéndolos se comía el presupuesto del chequeo (e).
-        self.methods = defaultdict(dict)                    # clase → nombre → def o tupla de defs
+        # Una clase se nombra con el str "archivo\0Clase" y un método con "archivo\0Clase\0nombre",
+        # en un solo dict, como def suelta (o tupla si hay varias): claves tupla, un dict por
+        # clase y una lista por método eran ~70k contenedores vivos más, y el GC recorriéndolos
+        # se comía el presupuesto del chequeo (e).
+        self.methods: dict[str, object] = {}                # "clase\0nombre" → def o tupla de defs
         self.classes: dict[str, list] = {}                  # clase → formas de sus bases
         pkgs = set()
         for c in caps:
@@ -130,9 +131,9 @@ class _PyScope:
                 self.binds[f][props["bind"][0]] = props["bind"]
             elif c.type not in _NOT_DEFS and c.content:
                 if "class" in props:
-                    m = self.methods[f"{f}\0{props['class']}"]
-                    prev = m.get(c.name)
-                    m[c.name] = c if prev is None else (
+                    mk = f"{f}\0{props['class']}\0{c.name}"
+                    prev = self.methods.get(mk)
+                    self.methods[mk] = c if prev is None else (
                         prev if isinstance(prev, tuple) else (prev,)) + (c,)
                 else:
                     self.top[f][c.name].append(c)
@@ -158,7 +159,7 @@ class _PyScope:
                     else:
                         self.mods[key] = ((prev,) if isinstance(prev, str) else prev) + (f,)
         self.tops = {m.split(".")[0] for m in self.mods}
-        for d in (self.top, self.binds, self.methods, *self.top.values()):
+        for d in (self.top, self.binds, *self.top.values()):
             d.default_factory = None            # ya construidos: leer una clave que falta no la crea
         self._memo: dict[str, dict[str, list | None]] = {}   # archivo → llamada → destinos
         # jerarquía: bases resueltas con los imports (las de fuera del repo no entran)
@@ -304,7 +305,7 @@ class _PyScope:
                 return ()
             mro = mro[mro.index(after) + 1:]
         for cls in mro:
-            ms = self.methods.get(cls, _NONE).get(name)
+            ms = self.methods.get(f"{cls}\0{name}")
             if ms:
                 return ms if isinstance(ms, tuple) else (ms,)
             if cls[0] == "\0":
@@ -313,13 +314,13 @@ class _PyScope:
                 return None
         return ()
 
-    def _dispatch(self, k: str, name: str, sup: bool) -> list | None:
+    def _dispatch(self, k: str, name: str, sup: bool):
         """`self.name()` (o `super().name()`) en la clase `k`: la clase y cada subclase.
         Es `_lookup` por cada subclase, en línea: con miles de subclases (los modelos de
         django) la llamada por subclase era la mitad del chequeo (e)."""
         methods, mros, bases, owners = self.methods, self._mros, self.bases, set()
         for sub in self._desc(k):
-            if sub != k and name not in methods.get(sub, _NONE):
+            if sub != k and f"{sub}\0{name}" not in methods:
                 b = bases[sub]
                 if len(b) == 1 and b[0][0] != "\0":
                     # una sola base y no redefine `name`: su MRO es [sub] + la del padre, que
@@ -331,7 +332,7 @@ class _PyScope:
                     continue        # subclase unida por nombre: su MRO tras `k` no se conoce
                 mro = mro[mro.index(k) + 1:]
             for c in mro:
-                if name in methods.get(c, _NONE):
+                if f"{c}\0{name}" in methods:
                     owners.add(c)   # el primer `name` de esta MRO
                     break
                 if c[0] == "\0":   # base desconocida antes del primer `name`: podría estar ahí
@@ -342,10 +343,12 @@ class _PyScope:
             return None
         out = {}
         for c in owners:
-            ms = methods[c][name]
+            ms = methods[f"{c}\0{name}"]
             for d in ms if isinstance(ms, tuple) else (ms,):
                 out[d.id] = d
-        return list(out.values())
+        # la def suelta si es una (lo normal), tupla si son varias: una lista por entrada de
+        # la memo eran ~9k contenedores vivos más para el GC del chequeo (e)
+        return next(iter(out.values())) if len(out) == 1 else tuple(out.values())
 
     def _explicit(self, keys: list, name: str) -> list | None:
         """`Clase.name()`: la clase es explícita, sin subclases."""
@@ -390,9 +393,11 @@ class _PyScope:
                 t = memo[key]
                 if t is None:
                     by_name.append(name)
-                else:
+                elif type(t) is tuple:
                     for d in t:
                         resolved[d.id] = d
+                else:
+                    resolved[t.id] = t
                 continue
             if recv == "" and name not in local and name not in top and name not in binds:
                 if name not in _BUILTINS:
