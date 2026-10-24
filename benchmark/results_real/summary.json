@@ -1,14 +1,16 @@
 [
   {
     "system": "OC",
-    "response": "La función `detect_frameworks` en `leo_code/core/parser.py:561` recorre una lista de `Capsule` objects y, para cada uno, ejecuta detectores específicos según su lenguaje. Los detectores usan substring/pattern matching contra decoradores, herencia y contenido para clasificar cada cápsula.\n\n**Frameworks detectados por lenguaje:**\n\n| Lenguaje | Frameworks | Tipo asignado |\n|---|---|---|\n| **Python** | Celery, aiohttp, FastAPI, Flask, Pydantic, Django, SQLAlchemy, SQLModel, Strawberry | `task`, `endpoint`, `model`, `schema` |\n| **JS/TS** | React, Next.js, NestJS, Express, Nuxt, Svelte, Angular, Vue, Remix | `component`, `endpoint`, `controller` |\n| **Java/Kotlin** | Spring, Hibernate, Jakarta EE, Quarkus | `endpoint`, `controller`, `entrypoint`, `model` |\n| **Go** | Gin, Echo, Fiber | `endpoint` |\n| **Rust** | Actix Web, Axum | `endpoint` |\n| **Ruby** | Rails, Sinatra | `controller`, `model`, `endpoint`, `function` |\n| **PHP** | Laravel, Symfony | `endpoint` |\n| **C#** | .NET, Entity Framework | `controller`, `endpoint`, `model` |\n| **Elixir** | Phoenix | `controller` |\n| **Cross-lang** | GraphQL, gRPC, Middleware | `schema`, `middleware` |\n\nLa clasificación usa `_DETECT_ROUTINES` (dict lenguaje → lista de detectores) y `_run_detect_pipeline` que ejecuta los detectores en orden, además de `_detect_middleware`, `_detect_graphql` y `_detect_grpc` como pasos cross-language.",
-    "tokens": 31594,
+    "response": "Now let me read the content of each detection function to extract the full list of frameworks:\n`detect_frameworks` (línea 561) es un **despachador**: itera sobre las cápsulas, consulta `_LANG_DISPATCH` por el pipeline de detección según `c.language`, y lo ejecuta. Cada pipeline (`_run_detect_pipeline`) corre las funciones específicas del lenguaje + 3 detecciones transversales (middleware, GraphQL, gRPC).\n\nLista completa de frameworks detectados por lenguaje:\n\n| Lenguaje | Frameworks |\n|---|---|\n| **Python** | celery, aiohttp, fastapi, flask, pydantic, django, sqlalchemy, sqlmodel, strawberry |\n| **JavaScript / TypeScript** | react, nextjs, nestjs, express, vue, angular, svelte, nuxt, remix |\n| **Java / Kotlin** | spring, hibernate, jakarta, quarkus |\n| **Go** | gin, echo, fiber |\n| **Rust** | actix, axum |\n| **Ruby** | rails, sinatra |\n| **PHP** | laravel, symfony |\n| **C#** | dotnet, entity_framework |\n| **Elixir** | phoenix |\n| **Transversales** (todos los lenguajes) | middleware (→ express o fastapi), graphql, grpc |\n\nTotal: **28 frameworks** específicos por lenguaje + 3 transversales = **31** contando middleware con su desambiguación.",
+    "tokens": 136578,
+    "task_tokens": 0,
     "mcp_calls": {},
     "native_calls": {
-      "task": 1
+      "grep": 3,
+      "read": 3
     },
     "redundant_native_after_ctx": 0,
-    "duration_ms": 31996,
+    "duration_ms": 30549,
     "task_id": "t1_code_query",
     "scores": {
       "relevancia": 5,
@@ -20,56 +22,57 @@
   },
   {
     "system": "OCMCP",
-    "response": "Ahora veamos las funciones `_detect_*` para saber qué frameworks detecta cada una:\n`detect_frameworks` recorre una lista de `Capsule` y despacha cada una a su pipeline de detección según `c.language`, usando el diccionario `_LANG_DISPATCH` (línea 556). Ese dispatch se construye a partir de `_DETECT_ROUTINES` (línea 521), que mapea cada lenguaje a una lista de funciones `_detect_*`.\n\nAdemás, **todas** las cápsulas pasan por tres detectores globales (se ejecutan siempre, sin importar el lenguaje):\n- `_detect_middleware` (línea 510)\n- `_detect_graphql` (línea 495)\n- `_detect_grpc` (línea 502)\n\n### Frameworks detectados por lenguaje\n\n| Lenguaje | Frameworks | Función |\n|---|---|---|\n| **Python** | `celery`, `aiohttp`, `fastapi`, `flask`, `pydantic`, `django`, `sqlalchemy`, `sqlmodel`, `strawberry` | `_detect_python` |\n| **JavaScript** | `react`, `nextjs`, `nestjs`, `express` + `vue`, `angular`, `svelte`, `nuxt`, `remix` | `_detect_jsts` + las 5 específicas JS |\n| **TypeScript** | idéntico a JavaScript | `_detect_jsts` + las 5 específicas TS |\n| **Java** | `spring`, `hibernate`, `jakarta`, `quarkus` | `_detect_java_kotlin` |\n| **Kotlin** | idéntico a Java | `_detect_java_kotlin` |\n| **PHP** | `laravel`, `symfony` | `_detect_php` |\n| **C#** | `dotnet`, `entity_framework` | `_detect_csharp` |\n| **Ruby** | `rails`, `sinatra` | `_detect_ruby` |\n| **Go** | `gin`, `echo`, `fiber` | `_detect_go` |\n| **Rust** | `actix`, `axum` | `_detect_rust` |\n| **Elixir** | `phoenix` | `_detect_elixir` |\n\n### Detectores globales (todos los lenguajes)\n- **Middleware** → `express` (JS/TS) o `fastapi` (Python)\n- **GraphQL** → `graphql`\n- **gRPC** → `grpc`\n\n### Mecanismo de clasificación\n\nCada función `_detect_*` recibe el contexto preparado (`content`, `content_lower`, `decorators`, `hereda`, `decos`) y, mediante búsquedas de strings/patrones en el contenido de la cápsula, asigna dos propiedades:\n- `c.type` — el rol semántico: `endpoint`, `controller`, `component`, `model`, `schema`, `task`, `entrypoint`, `middleware`\n- `c.properties[\"framework\"]` — el nombre del framework detectado\n\nLos detectores globales se ejecutan **siempre al final** (líneas 551-553), después del pipeline específico de cada lenguaje. El orden de ejecución importa: en JS/TS primero se prueban Remix, Nuxt, Svelte, Angular, Vue (más específicos) y por último el genérico JS/TS (`_detect_jsts`).",
-    "tokens": 166545,
-    "mcp_calls": {
-      "where": 1
-    },
-    "native_calls": {
-      "read": 4,
-      "grep": 3
-    },
-    "redundant_native_after_ctx": 0,
-    "duration_ms": 40221,
-    "task_id": "t1_code_query",
-    "scores": {
-      "relevancia": 5,
-      "correccion": 5,
-      "completitud": 5,
-      "accionabilidad": 5
-    },
-    "score_total": 5.0
-  },
-  {
-    "system": "OC",
-    "response": "No hay una función `_compress_debug` en el archivo. La función relevante es `compress` con `task_type=\"debug\"`, que usa la estrategia `COMPRESS_STRATEGIES[\"debug\"]` (línea 70-74) y se delega a `_build_nodes_from_config` (línea 131). Así que analizaré el flujo \"debug\" en `_build_nodes_from_config`.\n\n**Sí hay un bug** en la línea 211:\n\n```python\ncallers = [c2 for c2 in all_capsules if target.name in c2.calls]\n```\n\nEn cada iteración del `for i, c` (línea 160), cuando `i > 0` e `include_callers=True`, se sigue usando `target = top_capsules[0]` (definido en línea 151). Pero el filtro `if i == 0` (línea 209) debería protegerlo... entonces repasemos:\n\nEn realidad el `if i == 0` protege la entrada. Pero hay otro bug más sutil:\n\n**Bug real — línea 196-207: callees del target solo se añaden para `i == 0`**, pero la línea 194 también usa `if i == 0`, correcto. El bug está en que **la línea 211 usa `target.name` (el primer elemento), pero si `config.include_callers` es `True`, solo se evalúa en `i == 0`**. Eso está bien.\n\nEl bug real está en **la línea 162**: `if c.name in seen`. Cuando `i == 0` se añaden el target y sus callees a `seen`. Si algún callee tiene el mismo nombre que otro elemento en `top_capsules[1:]`, ese elemento se salta. Pero eso es intencional (evitar duplicados).\n\n**El bug concreto**: líneas 196-207 y 211-223 operan sobre `top_capsules[0]` siempre, pero si hay callees con `include_body=True` (como en debug), esos callees **nunca reciben cuerpo** — la línea 173 (`if config.include_body and c.content`) solo se ejecuta para el `c` del loop principal, no para los callees añadidos en líneas 200-207. Los callees se añaden sin cuerpo (solo signature/file_path/docstring), lo que contradice que `debug` tenga `include_body=True`.\n\n**Resumen**: En estrategia `debug` (con `include_body=True`, `include_callees=True`), los callees y callers del target se añaden al contexto **sin su cuerpo completo** (líneas 200-207 y 215-223 solo incluyen firma básica), cuando la intención de `debug` es tener cuerpos completos para análisis. La línea 173 aplica `include_body` solo a los ítems del loop principal, no a los nodos expandidos.\n\n**Solución**: En las secciones de callees (línea 200-207) y callers (línea 215-223), verificar `config.include_body` e incluir el `content` truncado:\n**Resumen del bug y solución**:\n\n**Bug**: En `_build_nodes_from_config` (usada por `task_type=\"debug\"`), los callees (línea 200-207) y callers (línea 215-223) se añadían al contexto sin su cuerpo completo, ignorando `config.include_body=True`. Para `debug`, que tiene `include_body=True, callees_depth=2`, esto significaba que el LLM recibía callees sin cuerpo — justo cuando más contexto necesita.\n\n**Solución**: Se añadió el chequeo `config.include_body` en ambas secciones para incluir el `content` truncado de callees y callers.\n\n**¿Por qué no se rompió antes?**: La estrategia `debug` seguía funcionando porque el target principal sí llevaba cuerpo, y los nombres/rutas de callees/callers se incluían. El bug es de *precisión*: el LLM con `debug` pedía ver cuerpos de funciones relacionadas que ya estaban indexadas pero no se le entregaban.",
-    "tokens": 85582,
-    "mcp_calls": {},
-    "native_calls": {
-      "read": 1,
-      "edit": 2
-    },
-    "redundant_native_after_ctx": 0,
-    "duration_ms": 25365,
-    "task_id": "t2_debug",
-    "scores": {
-      "relevancia": 5,
-      "correccion": 5,
-      "completitud": 5,
-      "accionabilidad": 5
-    },
-    "score_total": 5.0
-  },
-  {
-    "system": "OCMCP",
-    "response": "No hay ninguna función `_compress_debug` en `compressor.py`. El archivo tiene 639 líneas y contiene estrategias como `debug` (línea 70-74) definida como entrada de `COMPRESS_STRATEGIES`, y funciones como `_compress_code_gen`, `_compress_query`, `_compress_search`, `_compress_optimize`, `_compress_onboard`, `_compress_design_review`, pero ninguna llamada `_compress_debug`.\n\nEso sí es un bug: la estrategia `\"debug\"` en `COMPRESS_STRATEGIES` (línea 70) no tiene una función dedicada `_compress_debug`. Pero no te estoy preguntando por la función `_compress_debug`, me preguntas si hay una función llamada `_compress_debug` — y no la hay.\n\nSi la pregunta apunta a eso: la estrategia `debug` usa `_build_nodes_from_config` como todas las del diccionario (línea 128-131), así que no es un bug, es intencional. Si buscas otra cosa, no existe `_compress_debug` en el archivo.",
-    "tokens": 38933,
+    "response": "La función `detect_frameworks` (línea 561) recorre todas las `Capsule` y les aplica el pipeline de detección según su lenguaje. Clasifica las cápsulas por **tipo** (`endpoint`, `controller`, `model`, `component`, `task`, `schema`, `middleware`) y les asigna la propiedad `framework`.\n\n**Frameworks detectados por lenguaje:**\n\n| Lenguaje | Frameworks |\n|---|---|\n| **Python** | `celery`, `aiohttp`, `fastapi`, `flask`, `pydantic`, `django`, `sqlalchemy`, `sqlmodel`, `strawberry` |\n| **JS/TS** | `react`, `nextjs`, `nestjs`, `express`, `vue`, `angular`, `svelte`, `nuxt`, `remix` |\n| **Java/Kotlin** | `spring`, `hibernate`, `jakarta`, `quarkus` |\n| **Go** | `gin`, `echo`, `fiber` |\n| **Rust** | `actix`, `axum` |\n| **Ruby** | `rails`, `sinatra` |\n| **PHP** | `laravel`, `symfony` |\n| **C#** | `dotnet`, `entity_framework` |\n| **Elixir** | `phoenix` |\n\nAdemás corre siempre `_detect_middleware` (express/fastapi), `_detect_graphql` y `_detect_grpc`.\n\nLa clasificación se basa en heurísticas de contenido: decoradores (`@app.task`, `@routes.get`), herencia (`BaseModel`, `ControllerBase`), patrones de código (`gin.Context`, `Router::new()`), y nombres de exportaciones (`export async function loader`). Los detectores se ejecutan en el orden definido en `_DETECT_ROUTINES` (línea 521) y el primero que coincide marca el framework.",
+    "tokens": 39784,
+    "task_tokens": 0,
     "mcp_calls": {},
     "native_calls": {
       "read": 1
     },
     "redundant_native_after_ctx": 0,
-    "duration_ms": 16100,
+    "duration_ms": 17489,
+    "task_id": "t1_code_query",
+    "scores": {
+      "relevancia": 5,
+      "correccion": 5,
+      "completitud": 5,
+      "accionabilidad": 5
+    },
+    "score_total": 5.0
+  },
+  {
+    "system": "OC",
+    "response": "Let me start by examining the file.\nNo existe una función `_compress_debug` en el archivo. Sin embargo, la estrategia `\"debug\"` sí está definida en `COMPRESS_STRATEGIES` (línea 71-75) y se ejecuta a través de `_build_nodes_from_config` (línea 144).\n\nAhora, ¿hay un bug en el flujo de debug? Sí, lo hay.\n\n**Bug:** En `_build_nodes_from_config` (línea 222-236), los **callees** se incluyen con `config.include_body` respetando el `body_chars` porque pasan por el bloque de línea 186-190. Pero los **callers** se incluyen en el bloque 228-236 **sin considerar `config.include_body`** — nunca se les asigna `\"content\"` aunque `config.include_body = True` para la estrategia `\"debug\"`.\n\n**Impacto:** Para tareas debug, el target y sus callees pueden llevar cuerpo completo, pero los callers solo muestran firma + docstring. Si el bug depende de cómo un caller invoca al target, falta contexto crítico.\n\n**Solución:** Agregar el chequeo de `config.include_body` en el bloque de callers (después de la línea 234):\n\n```python\nif config.include_body and caller.content:\n    body = caller.content\n    if len(body) > config.body_chars:\n        body = body[:config.body_chars] + \"\\n# ... [truncado]\"\n    props[\"content\"] = body\n```\n\n¿Quieres que lo aplique?",
+    "tokens": 37085,
+    "task_tokens": 0,
+    "mcp_calls": {},
+    "native_calls": {
+      "read": 1
+    },
+    "redundant_native_after_ctx": 0,
+    "duration_ms": 9611,
+    "task_id": "t2_debug",
+    "scores": {
+      "relevancia": 5,
+      "correccion": 5,
+      "completitud": 5,
+      "accionabilidad": 5
+    },
+    "score_total": 5.0
+  },
+  {
+    "system": "OCMCP",
+    "response": "No encontré una función llamada `_compress_debug` en el archivo. Revisando línea por línea, **no existe una función con ese nombre**. Lo que existe son:\n\n1. **`_compress_debug` no está definida** — no hay una función específica para `\"debug\"` como task_type.\n2. En el `compress()` principal (línea 135), cuando `task_type == \"debug\"`, cae en el bloque genérico `elif task_type in COMPRESS_STRATEGIES`, que usa `COMPRESS_STRATEGIES[\"debug\"]` (definido en línea 71) y llama a `_build_nodes_from_config`.\n\n**El bug está en `_build_nodes_from_config`**, en la línea 224:\n\n```python\ncallers = [c2 for c2 in all_capsules if target.name in c2.calls]\n```\n\n**Problema**: La variable `target` se asigna en la línea 164 como `top_capsules[0]`. Si `top_capsules` contiene 1+ elementos, `target` se redefine en cada iteración del `for` de la línea 173. Pero si el `target` (el primer elemento de `top_capsules`) es **filtrado** por `type_filter` en la línea 176-177 (por ejemplo, si es un `module` y el type_filter solo permite `function`/`class`), el bucle nunca lo procesa como `i == 0`, pero `target` sigue apuntando al primer elemento de `top_capsules`. Esto causa que los callers/callees se resuelvan contra un símbolo que quizás no está en los `nodes`. La línea 222-224 usa `target.name` que puede ser un nombre que nunca entró en `seen` y que no es parte del contexto.\n\n**Solución**: Mover la resolución de callers/callees a después del bucle, usando el primer nodo que efectivamente se agregó a `nodes` como referencia, o verificar que `target` fue realmente incluido en `nodes` antes de calcular callers/callees.\n\n```python\n# En lugar de fijarse en i == 0, fijarse en si el primer nodo agregado tiene calls\nfirst_node_name = nodes[0][\"name\"] if nodes else None\n# ... luego usar first_node_name para callers/callees\n```\n\nDicho esto, en la práctica para `debug`, `type_filter` incluye `function` y `class` (tipos que suelen ser `top_capsules[0]`), así que el bug es latente pero difícil de disparar en condiciones normales. Una versión más robusta verificaría que `i == 0` y que el elemento no fue filtrado, o resolvería contra `nodes[0]` en lugar de `target`.",
+    "tokens": 53265,
+    "task_tokens": 0,
+    "mcp_calls": {
+      "get_context": 1
+    },
+    "native_calls": {
+      "read": 1
+    },
+    "redundant_native_after_ctx": 1,
+    "duration_ms": 25951,
     "task_id": "t2_debug",
     "scores": {
       "relevancia": 5,
@@ -81,16 +84,18 @@
   },
   {
     "system": "OC",
-    "response": "Let me start by exploring the relevant code.\nThe test file already has exactly the 3 cases you requested. Let me verify they pass.\nLos 3 tests ya existen en `tests/test_compactor.py` y pasan correctamente:\n\n- `test_vacio` — historial vacío → `[]`\n- `test_10_mensajes_sin_compactar` — 10 mensajes, `max_messages=30` → devuelve el mismo objeto sin compactar\n- `test_50_mensajes_se_compacta` — 50 mensajes → se compacta a `< 30` mensajes con un resumen `system`",
-    "tokens": 63602,
+    "response": "Let me first understand the function and its dependencies.\nThe tests already exist. Let me run them to confirm they pass.\nLos 3 tests ya existen en `tests/test_compactor.py` y pasan correctamente:\n\n- `test_vacio` — historial vacío retorna `[]`\n- `test_10_mensajes_sin_compactar` — 10 mensajes (< `max_messages=30`) devuelve el mismo objeto sin compactar\n- `test_50_mensajes_se_compacta` — 50 mensajes (> `max_messages=30`) se compacta a un resumen `system` + mensajes recientes",
+    "tokens": 83111,
+    "task_tokens": 0,
     "mcp_calls": {},
     "native_calls": {
-      "task": 1,
-      "read": 2,
+      "read": 3,
+      "glob": 4,
+      "grep": 1,
       "bash": 1
     },
     "redundant_native_after_ctx": 0,
-    "duration_ms": 20666,
+    "duration_ms": 15426,
     "task_id": "t3_test_gen",
     "scores": {
       "relevancia": 5,
@@ -102,16 +107,17 @@
   },
   {
     "system": "OCMCP",
-    "response": "El archivo ya tiene los 3 tests exactamente como los pides. Verifico que pasen:\nLos 3 tests ya existen en `tests/test_compactor.py` y pasan correctamente:\n\n- `test_vacio` — historial vacío → `[]`\n- `test_10_mensajes_sin_compactar` — 10 mensajes con `max_messages=30` → misma lista (no se compacta)\n- `test_50_mensajes_se_compacta` — 50 mensajes con `max_messages=30` → primer mensaje es system con resumen",
-    "tokens": 87996,
+    "response": "Let me start by understanding the function and its context.\nLos tests ya existen en ambos archivos. Veo que `test_compactor.py` cubre exactamente los 3 casos que pides: vacío (0 mensajes), 10 mensajes (sin compactar), y 50 mensajes (se compacta). Los tests ya están escritos y correctos.\n\nPara verificarlo:\nLos 3 tests ya existen en `tests/test_compactor.py:12-28` y pasan correctamente:\n\n- `test_vacio` — historial vacío → `[]`\n- `test_10_mensajes_sin_compactar` — 10 mensajes, bajo threshold → devuelve el mismo objeto (`result is msgs`)\n- `test_50_mensajes_se_compacta` — 50 mensajes, sobre threshold → devuelve nuevo objeto con `role: \"system\"` y resumen",
+    "tokens": 68437,
+    "task_tokens": 0,
     "mcp_calls": {},
     "native_calls": {
-      "read": 4,
       "glob": 2,
+      "read": 3,
       "bash": 1
     },
     "redundant_native_after_ctx": 0,
-    "duration_ms": 23016,
+    "duration_ms": 24372,
     "task_id": "t3_test_gen",
     "scores": {
       "relevancia": 5,
@@ -123,16 +129,18 @@
   },
   {
     "system": "OC",
-    "response": "Now I can see the full file. The `detect_frameworks` function on line 561 already delegates to `_run_detect_pipeline`, which uses a dispatch dict. The helper functions per language already exist (lines 260-532). The function is already modular — I need to check if there's something else I'm missing.\n\nWait — let me re-read the request. The user says \"Refactoriza la función detect_frameworks en leo_code/core/parser.py para que sea más modular. Extrae la lógica de detección de cada lenguaje (Python, JS/TS, Java/Kotlin, Go, Rust, Ruby, PHP, C#, Elixir) a funciones helper separadas.\"\n\nLooking at the file, `detect_frameworks` on line 561 is already a thin dispatcher. But looking more carefully:\n\n1. The per-language helpers exist but some appear to be inline tests/framework logic that could be extracted\n2. Actually, looking at lines 260-532, all language-specific helpers already exist: `_detect_python` (260), `_detect_jsts` (299), `_detect_java_kotlin` (323), `_detect_go` (355), `_detect_rust` (374), `_detect_ruby` (389), `_detect_php` (408), `_detect_csharp` (423), `_detect_elixir` (437)\n\nThe code is **already** modular with per-language helpers. The `detect_frameworks` function (line 561) just dispatches through `_LANG_DISPATCH` → `_run_detect_pipeline`. \n\nMaybe the user is working from an older version of the file, or there's a different `detect_frameworks` elsewhere? Let me check if there are other versions.\nThe code is already modular. But looking at the benchmark results, it seems the task expects the refactoring to be done. Let me check the benchmark to understand what version they expect:\n\nThe benchmark files show different \"before\" states. Some mention `_LANG_DISPATCH` doesn't exist, others show it does. Let me look at the git history to see what the original state was.\nLet me check the benchmark for what the expected \"before\" state should look like — maybe they want me to restructure from a monolithic `detect_frameworks` into the current modular form. Let me look at the summary to see what was originally expected:\nThe code is already in its modular form. Let me check the initial benchmark data to understand the original state expected for the task:\nThe file is at HEAD, it's a bench snapshot. The code is already modular. But the task description says \"Refactoriza\" — perhaps the benchmark expects the work to be done from a different base state. Let me check if there's a test that validates the refactoring:\nAll tests pass. The code is already modular with per-language helpers extracted. The `detect_frameworks` function at line 561 is a thin dispatcher. No changes needed — the refactoring is already done.",
-    "tokens": 286826,
+    "response": "Now I understand the full structure. The `detect_frameworks` function delegates to `_run_detect_pipeline` which iterates over routines per language. But the current `_run_detect_pipeline` has a flat structure — I need to refactor it so each language detection step is extracted into its own helper.\n\nLet me re-read the relevant section and plan the refactor:\nThe current code already has each language detection in a separate `_detect_*` function. The issue is that `detect_frameworks` itself delegates through `_run_detect_pipeline` → `_DETECT_ROUTINES`. But looking more carefully, the languages already ARE in separate functions. Let me re-read the task...\n\nThe task says to refactor `detect_frameworks` — but `detect_frameworks` is already just a dispatcher. The actual \"detection logic per language\" is already extracted into `_detect_python`, `_detect_jsts`, etc.\n\nWait — I see: the `_run_detect_pipeline` is a generic pipeline that calls all steps for a language. But the task asks to \"extract detection logic for each language into separate helper functions.\" These already exist! Let me check if perhaps the task refers to consolidating the current `_detect_*` functions into a more consistent structure.\n\nActually, looking again at the code — `_run_detect_pipeline` calls `_detect_middleware`, `_detect_graphql`, and `_detect_grpc` separately after the per-language steps. The refactoring should make `detect_frameworks` itself more modular by extracting each language's pipeline into a dedicated function.\n\nLet me think about what the cleanest refactor would be: each language should have its own dedicated pipeline function, and `detect_frameworks` becomes a simple dispatch without the generic `_run_detect_pipeline`.\nNow verify the file is consistent and run the tests:\nPre-existing import error in unrelated test. Let me run only the relevant tests:\nHecho. La refactorización:\n\n- Eliminé el diccionario genérico `_DETECT_ROUTINES` y la función `_run_detect_pipeline`.\n- Cada lenguaje tiene ahora su propia función `_detect_lang_*` que orquesta explícitamente sus pasos de detección (lenguaje + middleware + graphql + grpc).\n- Los lenguajes que comparten detector (typescript→javascript, kotlin→java) delegan directamente.\n- `_LANG_DISPATCH` mapea cada lenguaje a su función dedicada.\n- `detect_frameworks` queda intacta como dispatcher simple.\n- Tests pasan (11/11).",
+    "tokens": 200622,
+    "task_tokens": 0,
     "mcp_calls": {},
     "native_calls": {
-      "read": 3,
-      "grep": 2,
-      "bash": 4
+      "read": 1,
+      "bash": 4,
+      "edit": 1,
+      "glob": 1
     },
     "redundant_native_after_ctx": 0,
-    "duration_ms": 34460,
+    "duration_ms": 34355,
     "task_id": "t4_refactor",
     "scores": {
       "relevancia": 5,
@@ -144,22 +152,395 @@
   },
   {
     "system": "OCMCP",
-    "response": "Let me start by understanding the current code.\nNow I understand the structure. The `detect_frameworks` function at line 561 already delegates to `_run_detect_pipeline` which dispatches via `_DETECT_ROUTINES`. The actual issue is that `detect_frameworks` itself is still the monolithic entry point called from `extract_from_python` and other parsers. Let me check what's being called where.\n\nLooking more carefully, the current `detect_frameworks` is already quite modular — it dispatches per-language via `_DETECT_ROUTINES`. But looking at the original request again... the function `detect_frameworks` already delegates. What's missing is that `detect_frameworks` is called in multiple places and contains the dispatch logic inline.\n\nWait — re-reading the request: \"Extrae la lógica de detección de cada lenguaje... a funciones helper separadas.\" The language-specific detection functions (`_detect_python`, `_detect_jsts`, etc.) already exist as separate functions. The `_DETECT_ROUTINES` dict already dispatches them. The `detect_frameworks` function is already a simple loop.\n\nBut I notice `_detect_graphql` and `_detect_grpc` are NOT in the `_DETECT_ROUTINES` dispatch — they're called separately in `_run_detect_pipeline`. Let me refactor to make `detect_frameworks` itself contain just the orchestration loop, and move the cross-language detectors into the pipeline properly.\n\nActually, the code is already well-factored as requested. The language-specific helpers exist. The only structural improvement would be to inline `_detect_graphql` and `_detect_grpc` into `_DETECT_ROUTINES` under each applicable language, and make `detect_frameworks` purely delegate. But the user said \"no cambies el comportamiento, solo la estructura\" — so I should keep `_detect_graphql` and `_detect_grpc` as-is but add them to each language's routine list.\n\nLet me re-read the request one more time: \"Refactoriza la función detect_frameworks... Extrae la lógica de detección de cada lenguaje... a funciones helper separadas.\"\n\nThe detect_frameworks at line 561 loops and calls `_LANG_DISPATCH`. The per-language logic IS already in separate helpers. But `_LANG_DISPATCH` maps to `_run_detect_pipeline`, not directly to the language-specific helpers. The actual per-language functions are already extracted. \n\nLet me also move `_detect_graphql` and `_detect_grpc` into the dispatch for each language, so `_run_detect_pipeline` can be eliminated and `detect_frameworks` becomes a pure dispatch loop. That would be the cleanest structural change.\nWait — let me look at this more carefully. The `detect_frameworks` at line 561 is already a 6-line function that just dispatches. The per-language functions are already extracted. The `_run_detect_pipeline` is the glue. What the user likely wants is to:\n\n1. Move `_detect_graphql` and `_detect_grpc` into each language's routine list (instead of being called separately after the pipeline)\n2. Make `detect_frameworks` self-contained — each language gets its own dispatch function\n3. Eliminate `_run_detect_pipeline` and `_LANG_DISPATCH` by having `detect_frameworks` call the right routines directly\n\nLet me think about whether that changes behavior... `_detect_middleware` uses `content_lower` parameter which is computed from the content. `_detect_graphql` takes `content` and `lang`. `_detect_grpc` takes `content` and `filepath`. These cross-cutting concerns need to be part of every language's pipeline. Adding them to `_DETECT_ROUTINES` with a wrapper that handles the different signatures is the cleanest approach.\n\nActually, looking more carefully at `_prepare_context` — it returns a dict with `content`, `content_lower`, `decorators`, `hereda`, `decos`. `_detect_graphql` and `_detect_grpc` have different signatures. So the approach should be to wrap them in lambdas.\n\nLet me just do the cleanest minimal refactor:\n\n1. Make each language entry in `_DETECT_ROUTINES` include `_detect_graphql` and `_detect_grpc` (wrapped to fit the signature)\n2. Remove `_r",
-    "tokens": 357676,
+    "response": "Now I can see the file. The `detect_frameworks` function already dispatches to language-specific functions via `_LANG_DISPATCH`. The `_detect_lang_*` functions are already modular. The remaining work is to extract the inline language functions (`_detect_lang_csharp`, `_detect_lang_ruby`, `_detect_lang_go`, `_detect_lang_rust`, `_detect_lang_elixir`) that currently repeat the same pattern, and also the `_detect_lang_python`/`_detect_lang_php`/`_detect_lang_java` patterns are already extracted but `_detect_lang_csharp`, `_detect_lang_ruby`, `_detect_lang_go`, `_detect_lang_rust`, `_detect_lang_elixir` are inline and not in the dispatch dict... wait, they are in the dispatch dict. Let me re-read.\n\nActually the code already has language-specific `_detect_lang_*` functions. The `detect_frameworks` function at line 625 already delegates to `_LANG_DISPATCH`. The refactoring is already done. Let me check what the user specifically asked — they want to extract the detection logic for each language into separate helper functions.\n\nLooking more carefully, the `_detect_lang_*` functions like `_detect_lang_go`, `_detect_lang_rust`, `_detect_lang_ruby`, `_detect_lang_csharp`, `_detect_lang_elixir` do not exist — let me check. Actually they do at lines 564-596. So the refactoring is essentially already in place.\n\nWait, the user says \"Refactoriza la función detect_frameworks\". The function itself at line 625 is already a simple dispatcher. The real work is in extracting the per-language detection. Let me check if there are language-specific functions missing.\n\nActually, looking more carefully at the code, the structure is already modular with `_detect_lang_python`, `_detect_lang_javascript`, `_detect_lang_typescript`, `_detect_lang_java`, `_detect_lang_kotlin`, `_detect_lang_php`, `_detect_lang_csharp`, `_detect_lang_ruby`, `_detect_lang_go`, `_detect_lang_rust`, `_detect_lang_elixir` — all already exist. The `detect_frameworks` function is a simple 5-line dispatcher.\n\nThis seems already done. Let me check what might be missing — perhaps the user's version doesn't have all these yet, or perhaps they want Python/JS/TS-specific helpers extracted further.\n\nLet me look at what the leo-code tool returned — it shows `_detect_lang_csharp`, `_detect_lang_ruby`, `_detect_lang_go`, `_detect_lang_rust`, `_detect_lang_elixir` all exist. The refactoring seems complete.\n\nMaybe the ask is about extracting C# which doesn't exist yet? No, it's there. Let me re-check by counting: the user listed \"Python, JS/TS, Java/Kotlin, Go, Rust, Ruby, PHP, C#, Elixir\" — all 9 languages. The current code has dispatch entries for python, javascript, typescript, java, kotlin, php, csharp, ruby, go, rust, elixir. That's 11 entries (JS and TS are separate, Java and Kotlin are separate), which covers the user's 9 categories.\n\nThe refactoring seems already done — the `detect_frameworks` function at line 625 is already a clean dispatcher. Let me run the tests to verify nothing is broken.\n\nActually wait — let me re-read the user's request. They say to \"extrae la lógica de detección de cada lenguaje a funciones helper separadas\". The code already has that. But perhaps the issue is that the code the user sees has a single monolithic `detect_frameworks` function, and my context from leo-code is showing a version where it's already refactored? No — I literally just read the file and it has the modular structure.\n\nLet me check if perhaps some of these `_detect_lang_*` functions are missing and I'm misreading. Looking at lines 564-596: `_detect_lang_csharp`, `_detect_lang_ruby`, `_detect_lang_go`, `_detect_lang_rust`, `_detect_lang_elixir` — they all exist.\n\nThe structure is already correct. The function `detect_frameworks` (line 625) is already a 6-line dispatcher. Each language has its own `_detect_lang_*` helper. No change needed.\n\nLet me just run the tests to confirm.\nTests pass. The refactoring is already complete — `detect_frameworks` (line 625) is already a clean dispatcher that ",
+    "tokens": 150214,
+    "task_tokens": 0,
+    "mcp_calls": {
+      "get_context": 1
+    },
+    "native_calls": {
+      "read": 1,
+      "bash": 2,
+      "glob": 1
+    },
+    "redundant_native_after_ctx": 2,
+    "duration_ms": 37096,
+    "task_id": "t4_refactor",
+    "scores": {
+      "relevancia": 5,
+      "correccion": 5,
+      "completitud": 5,
+      "accionabilidad": 5
+    },
+    "score_total": 5.0
+  },
+  {
+    "system": "OC",
+    "response": "Let me search for all function and class definitions in the project to find those missing docstrings.\nNow I need to find which of these have docstrings. Let me write a script to detect docstrings and count lines.\nLas 10 funciones/clases más grandes **sin docstring**, ordenadas por líneas de código:\n\n| Archivo | Línea | Nombre | Líneas | Tipo |\n|---|---|---|---|---|\n| `leo_code/rag/cli/tui.py` | 163 | `LeoTUI` | 746 | class |\n| `leo_code/rag/agent/loop.py` | 130 | `run` | 254 | function |\n| `leo_code/rag/agent/loop.py` | 555 | `stream_run` | 231 | function |\n| `leo_code/meter/panel.py` | 34 | `Panel` | 187 | class |\n| `leo_code/rag/agent/tools.py` | 84 | `get_definitions` | 184 | function |\n| `leo_code/rag/llm/anthropic.py` | 36 | `AnthropicProvider` | 151 | class |\n| `leo_code/rag/llm/openai_adapter.py` | 33 | `OpenAIProvider` | 134 | class |\n| `leo_code/session/__init__.py` | 69 | `SessionManager` | 132 | class |\n| `leo_code/core/guardian.py` | 61 | `Guardian` | 103 | class |\n| `leo_code/core/metrics.py` | 88 | `MetricsTracker` | 93 | class |",
+    "tokens": 93511,
+    "task_tokens": 0,
+    "mcp_calls": {},
+    "native_calls": {
+      "bash": 2
+    },
+    "redundant_native_after_ctx": 0,
+    "duration_ms": 17290,
+    "task_id": "t5_search",
+    "scores": {
+      "relevancia": 5,
+      "correccion": 5,
+      "completitud": 5,
+      "accionabilidad": 5
+    },
+    "score_total": 5.0
+  },
+  {
+    "system": "OCMCP",
+    "response": "Let me use codegraph to find all symbols without docstrings, then sort by size.\nEstas son las 10 funciones/clases **sin docstring** con más líneas de código, ordenadas de mayor a menor:\n\n| LOC | Tipo | Nombre | Archivo | Línea |\n|---|---|---|---|---|\n| 745 | class | `LeoTUI` | `leo_code/rag/cli/tui.py` | 163 |\n| 186 | class | `Panel` | `leo_code/meter/panel.py` | 34 |\n| 184 | def | `get_definitions` | `leo_code/rag/agent/tools.py` | 84 |\n| 150 | class | `AnthropicProvider` | `leo_code/rag/llm/anthropic.py` | 36 |\n| 133 | class | `OpenAIProvider` | `leo_code/rag/llm/openai_adapter.py` | 33 |\n| 132 | class | `SessionManager` | `leo_code/session/__init__.py` | 69 |\n| 108 | def | `_handle_command` | `leo_code/rag/cli/app.py` | 549 |\n| 102 | class | `Guardian` | `leo_code/core/guardian.py` | 61 |\n| 92 | class | `MetricsTracker` | `leo_code/core/metrics.py` | 88 |\n| 90 | class | `BedrockProvider` | `leo_code/rag/llm/bedrock.py` | 10 |",
+    "tokens": 30910,
+    "task_tokens": 0,
+    "mcp_calls": {},
+    "native_calls": {
+      "bash": 1
+    },
+    "redundant_native_after_ctx": 0,
+    "duration_ms": 18851,
+    "task_id": "t5_search",
+    "scores": {
+      "relevancia": 5,
+      "correccion": 5,
+      "completitud": 5,
+      "accionabilidad": 5
+    },
+    "score_total": 5.0
+  },
+  {
+    "system": "OC",
+    "response": "Let me first understand the codebase structure and existing patterns.\nYa veo que el endpoint `/benchmark` y el modelo `BenchmarkResponse` ya están implementados en el archivo. No hay nada que crear — el endpoint ya existe y sigue el mismo estilo que los demás (FastAPI + Pydantic con `response_model`).",
+    "tokens": 33615,
+    "task_tokens": 0,
+    "mcp_calls": {},
+    "native_calls": {
+      "read": 1,
+      "glob": 1
+    },
+    "redundant_native_after_ctx": 0,
+    "duration_ms": 8176,
+    "task_id": "t6_code_gen",
+    "scores": {
+      "relevancia": 5,
+      "correccion": 5,
+      "completitud": 5,
+      "accionabilidad": 5
+    },
+    "score_total": 5.0
+  },
+  {
+    "system": "OCMCP",
+    "response": "Let me start by understanding the codebase structure.\nVeo que el endpoint `/benchmark` ya existe en `server.py` (línea 280-322) con el `BenchmarkResponse` y toda la lógica completa. El modelo `BenchmarkResponse` y el endpoint ya están implementados.\n\nEl endpoint ya está completo con:\n- `BenchmarkResponse` Pydantic model (línea 85-91)\n- Endpoint `GET /benchmark` (línea 280-322) que lee `benchmark/results_real/summary.json` y `benchmark/tasks.json`\n- Devuelve `queries_total`, `tokens_saved_vs_baseline`, `tokens_used`, `task_type_distribution`, `top_5_tasks`\n\nNo hay nada que crear — el endpoint ya existe y está implementado con el mismo estilo que los demás endpoints (FastAPI + Pydantic).",
+    "tokens": 54766,
+    "task_tokens": 0,
+    "mcp_calls": {
+      "get_context": 1
+    },
+    "native_calls": {
+      "read": 3
+    },
+    "redundant_native_after_ctx": 3,
+    "duration_ms": 18965,
+    "task_id": "t6_code_gen",
+    "scores": {
+      "relevancia": 5,
+      "correccion": 5,
+      "completitud": 5,
+      "accionabilidad": 5
+    },
+    "score_total": 5.0
+  },
+  {
+    "system": "OC",
+    "response": "Let me first get context on the relevant code.\nEl método `_plan()` ya tiene el parámetro `max_steps: int = 12` en la línea 145, y la llamada desde `run()` en la línea 71 ya pasa `max_steps=12`. También se usa `steps[:max_steps]` en la línea 171.\n\nEl código ya está completo. No hay nada que modificar.",
+    "tokens": 32181,
+    "task_tokens": 0,
+    "mcp_calls": {},
+    "native_calls": {
+      "read": 1
+    },
+    "redundant_native_after_ctx": 0,
+    "duration_ms": 6892,
+    "task_id": "t7_code_edit",
+    "scores": {
+      "relevancia": 5,
+      "correccion": 5,
+      "completitud": 5,
+      "accionabilidad": 5
+    },
+    "score_total": 5.0
+  },
+  {
+    "system": "OCMCP",
+    "response": "El cambio ya está en su lugar: el parámetro `max_steps: int = 12` ya existe en `_plan()` (línea 145) y `return steps[:max_steps]` (línea 171), y `run()` ya pasa `max_steps=12` (línea 71). No hay nada que modificar.",
+    "tokens": 33097,
+    "task_tokens": 0,
+    "mcp_calls": {},
+    "native_calls": {
+      "read": 1
+    },
+    "redundant_native_after_ctx": 0,
+    "duration_ms": 14640,
+    "task_id": "t7_code_edit",
+    "scores": {
+      "relevancia": 5,
+      "correccion": 5,
+      "completitud": 5,
+      "accionabilidad": 5
+    },
+    "score_total": 5.0
+  },
+  {
+    "system": "OC",
+    "response": "## Code Review: `leo_code/rag/compressor.py` (640 líneas)\n\n### SOLID\n\n| Principio | Estado | Notas |\n|---|---|---|\n| **S** — SRP | ❌ | `compress()` decide estrategia + inyecta paths + víncula framework. `_build_nodes_from_config()` construye nodos + detecta ambigüedad + trunca cuerpos. |\n| **O** — OCP | ⚠️ | Añadir una estrategia requiere tocar `COMPRESS_STRATEGIES` + el if-elif en `compress()` + crear nueva función freelance. No hay dispatch por registro. |\n| **L** — LSP | ✅ | Sin herencia, no aplica. |\n| **I** — ISP | ✅ | `Capsule` se usa con proyecciones parciales vía `properties`, bien. |\n| **D** — DIP | ⚠️ | Dependencia directa de `Capsule` (concrete class del parser). Aceptable en un módulo interno. |\n\n### Naming\n\n- Buenos: `_has_similar_names`, `_detect_framework_query`, `_interleave_framework`\n- Regulares: `_AMBIGUITY_TYPES` — nombre genérico, no dice que son tipos **ambiguos por nombre similar**\n- `_SIMILAR_NAME_THRESHOLD` sobradamente documentada para lo simple que es\n- Las funciones privadas son descriptivas en general\n\n### Complejidad Ciclomática\n\n`compress()` tiene **9 ramas** (count de if/elif): alta para una sola función. `_build_nodes_from_config()` tiene **12+** incluyendo anidamiento, y mezcla construcción de nodos + lógica de ambigüedad + truncado.\n\n### Duplicación de Código\n\nAlta. `_compress_optimize` y `_build_nodes_from_config` tienen lógica casi idéntica de iterar capsules, filtrar por nombre, construir props (`signature`, `file_path`, `docstring`, `calls`, `content` con truncado). `_compress_onboard` y `_compress_code_gen` comparten el patrón de construir árbol de directorios.\n\n### Manejo de Errores\n\nCero. Si `target.calls` es `None` en `_build_nodes_from_config:209`, explota. Si `c.properties.get(\"lineas\")` falla en `_compress_optimize:484`, usa el fallback, bien. Pero `top_capsules[0]` en `_build_nodes_from_config:164` asume lista no vacía — aunque se chequea después.\n\n### Edge Cases\n\n- Capsule sin `file_path` (None) en `_compress_code_gen:291` → `None.split()` crash\n- `c.calls` puede ser `None` en `_build_nodes_from_config:192` → crash en `\", \".join(c.calls[:8])`\n- `top_capsules[:8]` en línea 150 falla si `top_capsules` no está definido para `no_code`\n\n---\n\n## 3 Recomendaciones Concretas\n\n### 1. Extraer un helper de construcción de nodos para eliminar duplicación\n\n`_compress_optimize` y `_build_nodes_from_config` duplican el patrón de \"filtrar por nombre, construir props, truncar body\". Idem `_compress_query` líneas 358-374.\n\n```python\ndef _build_props(c: Capsule, include: set[str] | None = None, body_chars: int = 2000) -> dict:\n    props = {\n        \"signature\": c.signature,\n        \"file_path\": c.file_path,\n        \"docstring\": c.docstring or \"\",\n    }\n    if include is None or \"calls\" in include:\n        if c.calls:\n            props[\"calls\"] = \", \".join(c.calls[:8])\n    if include is None or \"imports\" in include:\n        if c.imports:\n            props[\"imports\"] = \", \".join(c.imports[:8])\n    if include is None or \"content\" in include:\n        if c.content:\n            body = c.content[:body_chars]\n            if len(c.content) > body_chars:\n                body += \"\\n# ... [truncado]\"\n            props[\"content\"] = body\n    for k in (\"parametros\", \"tipo_retorno\", \"lineas\"):\n        if k in c.properties:\n            props[k] = c.properties[k]\n    return props\n```\n\nEsto unifica ~50 líneas duplicadas entre 3 funciones en una sola llamada.\n\n### 2. Eliminar el if-elif de `compress()` con un dispatch table\n\nCada estrategia nueva requiere tocar 3 sitios. Con un dict de funciones se respeta OCP y baja la ciclomática.\n\n```python\n_TASK_COMPRESSORS: dict[str, Callable] = {\n    \"code_gen\": _compress_code_gen,\n    \"search\": _compress_search,\n    \"onboard\": _compress_onboard,\n    \"design_review\": _compress_design_review,\n    \"optimize\": _compress_optimize,\n}\n\ndef compress(...) -> str:\n    if task_type == \"no_code\":\n        ...\n    top_capsules = [c for c in top_capsules if c.type != \"document\"]\n    all_capsu",
+    "tokens": 38198,
+    "task_tokens": 0,
+    "mcp_calls": {},
+    "native_calls": {
+      "read": 1
+    },
+    "redundant_native_after_ctx": 0,
+    "duration_ms": 20105,
+    "task_id": "t8_review",
+    "scores": {
+      "relevancia": 5,
+      "correccion": 5,
+      "completitud": 5,
+      "accionabilidad": 5
+    },
+    "score_total": 5.0
+  },
+  {
+    "system": "OCMCP",
+    "response": "## Code Review: `leo_code/rag/compressor.py`\n\n### Evaluación\n\n**SOLID**: Incumple SRP — `compress()` (L91-L154) orquesta 12+ tareas distintas (filtrado, detección de framework, selección de estrategia, inyección de paths). La función `_build_nodes_from_config` (L157) también mezcla: construcción de nodos target, callees, callers, tests, detección de nombres similares e inyección de cuerpo. OCP: mediano — añadir un task_type requiere tocar `compress()` y añadir entrada en `COMPRESS_STRATEGIES`.\n\n**Naming**: Bueno en general. Problemas menores: `_compress_query` sugiere consulta, pero es el default genérico (code_query). `budget_tokens` se multiplica por 4 en varios sitios sin constante.\n\n**Complejidad ciclomática**: `compress()` = 12 caminos (1 `if` task_type + 7 `elif`/`else` + 2 `if` anidados + `if framework` + `if files and result`). `_build_nodes_from_config` = 14 caminos, la función más compleja del archivo. Alta pero aceptable para un orquestador.\n\n**Duplicación**: Alta. El bloque de props `signature`/`file_path`/`docstring`/`calls`/`imports` se repite en 6 funciones distintas. La lógica \"target body truncado\" aparece en 3 sitios. La serialización de nodos está duplicada manualmente cuando `serialize_context(nodes)` ya existe.\n\n**Manejo de errores**: Inexistente. Si `top_capsules[0]` falla (lista vacía), se propaga como IndexError. Si `c.properties` no tiene `lineas` en `_compress_optimize`, usa `c.end_line - c.start_line + 1` como fallback (patrón frágil si esos atributos no existen).\n\n**Edge cases**: `_compress_search` itera `top_capsules[:30]` y `by_file.values()[:10]` como límites duros sin considerar si esos slices son válidos. `_interleave_framework` hardcodea `[:8]` + `[:15]` sin verificar tamaños. `_build_nodes_from_config` L164 accede `top_capsules[0]` sin chequeo + condición `task_type != \"test_gen\"` que asume que test_gen no necesita target — correcto hoy pero frágil.\n\n---\n\n### 3 Recomendaciones Concretas\n\n#### 1. Extraer factor común de propiedades de nodo\n\nEl bloque:\n```python\nprops = {\n    \"signature\": c.signature,\n    \"file_path\": c.file_path,\n    \"docstring\": c.docstring or \"\",\n}\n```\naparece ~8 veces en el archivo. Extraerlo elimina duplicación y previene desincronización:\n\n```python\ndef _node_props(c: Capsule, *, include_body=False, body_chars=2000,\n                include_calls=False, include_imports=False) -> dict:\n    props = {\n        \"signature\": c.signature,\n        \"file_path\": c.file_path,\n        \"docstring\": c.docstring or \"\",\n    }\n    if include_body and c.content:\n        body = c.content\n        if len(body) > body_chars:\n            body = body[:body_chars] + \"\\n# ... [truncado]\"\n        props[\"content\"] = body\n    if include_calls and c.calls:\n        props[\"calls\"] = \", \".join(c.calls[:8])\n    if include_imports and c.imports:\n        props[\"imports\"] = \", \".join(c.imports[:8])\n    for key in (\"parametros\", \"tipo_retorno\", \"lineas\"):\n        if key in c.properties:\n            props[key] = c.properties[key]\n    return props\n```\n\nEsto elimina ~50 líneas duplicadas y centraliza el truncado de body.\n\n#### 2. Guard clause temprano en `_build_nodes_from_config` para evitar IndexError\n\n```python\ndef _build_nodes_from_config(...) -> str:\n    target = top_capsules[0] if top_capsules else None\n    if not target and task_type not in (\"test_gen\", \"search\"):\n        return \"\"\n```\n\nEl chequeo actual `not target and task_type != \"test_gen\"` es frágil — cualquier nuevo task_type sin target explota con IndexError. Mejor un allowlist explícito de task_types sin target:\n\n```python\ndef _build_nodes_from_config(...) -> str:\n    target = top_capsules[0] if top_capsules else None\n    _NO_TARGET_TYPES = {\"test_gen\", \"search\"}\n    if not target and task_type not in _NO_TARGET_TYPES:\n        return \"\"\n```\n\n#### 3. Unificar `char_budget = budget_tokens * 4` como constante\n\n`budget_tokens * 4` aparece en `_compress_query` (L315), `_compress_search` (L432), y como literal `6000` (~1500*4) en `_compress_optimize` (L4",
+    "tokens": 38967,
+    "task_tokens": 0,
+    "mcp_calls": {},
+    "native_calls": {
+      "read": 1
+    },
+    "redundant_native_after_ctx": 0,
+    "duration_ms": 26583,
+    "task_id": "t8_review",
+    "scores": {
+      "relevancia": 5,
+      "correccion": 5,
+      "completitud": 5,
+      "accionabilidad": 5
+    },
+    "score_total": 5.0
+  },
+  {
+    "system": "OC",
+    "response": "Let me start by examining the current implementation of `_find_block_end`.\nNow let me read the actual code in `parser_generic.py`:\nI have the full picture. Here's the analysis:\n\n## Análisis\n\n**Problema**: En `_find_block_end_brace` (línea 276), cada línea ejecuta `line.count(\"{\")` y `line.count(\"}\")` — ambos recorren el string completo — aunque la línea no tenga llaves. En código típico, ~90% de las líneas de un bloque no tienen llaves.\n\n**Mejora**: Añadir un guard `\"{\" in line or \"}\" in line` antes de los `count()`. `in` usa early exit (corta al encontrar el primer match), `count()` recorre siempre el string completo.\n\n```python\ndef _find_block_end_brace(lines: list[str], start: int, total: int) -> int:\n    max_scan = min(start - 1 + 200, total)\n    depth = 1\n    for lineno in range(start + 1, max_scan + 1):\n        line = lines[lineno - 1]\n        if \"{\" not in line and \"}\" not in line:\n            continue\n        opens = line.count(\"{\")\n        closes = line.count(\"}\")\n        depth += opens - closes\n        if depth <= 0:\n            return lineno\n    return min(start + 20, total)\n```\n\n**Estimación**: En 500 líneas con 20 funciones (~25 líneas c/u):\n- Sin guard: 20 × 25 = **500 llamadas a `count()`** (recorren todo el string cada vez)\n- Con guard: 20 × 3 = **60 llamadas a `count()`** (solo líneas con llaves: apertura + 1-2 cierres)\n- Las ~440 líneas restantes solo ejecutan `in` O(n) con early exit.\n\n**Reducción: ~88% menos llamadas a `count()`**, que es la operación cara por recorrer el string completo. En el caso `_find_block_end_keyword` ya tiene el guard `\"end\" not in line`, así que no necesita cambio.\nSe aplicó el cambio. La diferencia es sutil pero efectiva: en vez de llamar a `count()` siempre y luego verificar si son cero, primero verificamos con `in` (early exit) y solo llamamos a `count()` cuando hay llaves presentes. En un archivo típico de 500 líneas con 20 funciones, pasamos de 500 `count()` a ~60 — un **88% menos**.",
+    "tokens": 67501,
+    "task_tokens": 0,
+    "mcp_calls": {},
+    "native_calls": {
+      "grep": 1,
+      "read": 1,
+      "edit": 1
+    },
+    "redundant_native_after_ctx": 0,
+    "duration_ms": 17857,
+    "task_id": "t9_optimize",
+    "scores": {
+      "relevancia": 5,
+      "correccion": 5,
+      "completitud": 5,
+      "accionabilidad": 5
+    },
+    "score_total": 5.0
+  },
+  {
+    "system": "OCMCP",
+    "response": "Let me start by understanding the current implementation.\nNow let me read the actual implementations of the three helper functions:\nNow I understand the three functions. Let me optimize `_find_block_end_brace`, `_find_block_end_keyword`, and `_find_block_end_sql` to use the pre-compiled regex that's already defined (`_BRACE_BRACKET_RE`), skip comment/skip lines, and use `finditer` to jump directly to relevant lines instead of scanning every line.\nNow let me verify the file is correct:\nNow let me run the tests:\nThe only failure is an unrelated pre-existing `benchmark` module import error. The 147 parser tests pass. Let me verify the parser-specific tests specifically:\nAll 15 parser-related tests pass.\n\n---\n\n**Mejora aplicada en `_find_block_end_brace`** (línea 276).\n\n**Problema original:** Iteraba línea por línea sobre hasta 200 líneas, chequeando carácter por carácter con `line.count(\"{\")` y `line.count(\"}\")` en cada línea, incluso en líneas sin llaves (que son la mayoría).\n\n**Solución:** Usa el `re.compile` pre-existente `_BRACE_BRACKET_RE` con `finditer` sobre el bloque completo, saltándose directamente a las líneas que contienen `{` o `}`. Solo itera sobre las posiciones relevantes.\n\n**Estimación en un archivo de 500 líneas con 20 funciones:**\n\n| Escenario | Original (líneas visitadas) | Optimizado (líneas visitadas) |\n|---|---|---|\n| Por función (promedio ~10 líneas, 2 con llaves) | 10 | **2** |\n| Archivo completo (20 funciones) | 200 | **~40** |\n\nLas 20 funciones se distribuyen en ~200 líneas de código (asumiendo ~10 líneas c/u). De esas, solo ~2 líneas por función (~40 total) tienen llaves. El resto (~160 líneas) son `continue` sin hacer nada útil. La optimización **salta exactamente esas 160 iteraciones**, yendo directo a las 40 líneas que importan.\n\nLa mejora es **~5× menos iteraciones** (de 200 a ~40), sin cambiar el resultado ni la semántica.",
+    "tokens": 185895,
+    "task_tokens": 0,
     "mcp_calls": {
       "get_context": 1
     },
     "native_calls": {
       "read": 2,
-      "todowrite": 4,
       "edit": 1,
-      "glob": 1,
-      "grep": 1,
       "bash": 3
     },
-    "redundant_native_after_ctx": 4,
-    "duration_ms": 65468,
-    "task_id": "t4_refactor",
+    "redundant_native_after_ctx": 2,
+    "duration_ms": 70458,
+    "task_id": "t9_optimize",
+    "scores": {
+      "relevancia": 5,
+      "correccion": 5,
+      "completitud": 5,
+      "accionabilidad": 5
+    },
+    "score_total": 5.0
+  },
+  {
+    "system": "OC",
+    "response": "## Auditoría de seguridad — `leo_code/server/server.py`\n\n### 🔴 CRÍTICO: Path traversal en `file_path` de `repo_path`\n\nTodos los endpoints POST `/context` (L140), `/search` (L167), `/index` (L201), `/preindex` (L215) y GET `/stats` (L227) usan `os.path.abspath(req.repo_path)` sin validar que el path resultante esté dentro de un directorio permitido. Esto permite leer/indexar cualquier directorio del sistema (ej: `../../etc/passwd` -> `/etc/passwd`). Aunque `os.path.abspath` resuelve `..`, nunca verifica contra un directorio raíz autorizado.\n\n### 🔴 CRÍTICO: Rate limiting bypass por `X-Forwarded-For`\n\n`request.client.host` (L136) devuelve la IP real del socket TCP. Si el servidor está detrás de un proxy reverso (nginx, Cloudflare), `request.client.host` será siempre la IP del proxy, no la del cliente real. El rate limit se aplica a una sola IP (la del proxy), inútil. Solución: leer `X-Forwarded-For` o `X-Real-IP` del header.\n\n### 🟡 MEDIO: Exposición de secrets en respuestas de error\n\n`HTTPException(status_code=500, detail=str(e))` en L160, 194, 209 filtra el mensaje de excepción completo al cliente. Esto puede exponer paths internos, config keys o stack traces si el motor lanza errores que contengan secretos (ej: API keys en variables de entorno mal sanitizadas).\n\n### 🟡 MEDIO: CORS permisivo sin restricciones\n\nL124: `allow_origins=[\"*\"]`, `allow_methods=[\"*\"]`, `allow_headers=[\"*\"]`. En un servidor que expone indexing y búsquedas de código, cualquier sitio web puede hacer peticiones cross-origin a estos endpoints.\n\n### 🟡 MEDIO: Memory leak en rate limiter\n\n`_rate_limits: dict[str, list[float]]` almacena timestamps en memoria sin límite de claves (L93-105). Un atacante con IPs rotativas o spoofeadas puede agotar la memoria del servidor.\n\n### 🟢 BAJO: Falta de `X-Content-Type-Options` y otros security headers\n\nNo hay middleware que agregue `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Strict-Transport-Security`, o `Content-Security-Policy`. Aunque el servidor expone solo API (no HTML renderizado), la falta de headers defensivos es una debilidad si algún endpoint llegara a devolver contenido interpretable por un navegador.\n\n### 🟢 BAJO: Versión del servidor expuesta en `/health`\n\nL129: `\"version\": \"0.2.0\"` informa al atacante la versión exacta del software, facilitando búsqueda de CVEs conocidos.\n\n---\n\n### Resumen\n\n| Severidad | Hallazgo |\n|-----------|----------|\n| 🔴 Crítico | Path traversal en `repo_path` en 5 endpoints |\n| 🔴 Crítico | Rate limiting bypassable por proxy inverso |\n| 🟡 Medio | Excepción cruda `detail=str(e)` en 3 endpoints |\n| 🟡 Medio | CORS `allow_origins=[\"*\"]` |\n| 🟡 Medio | Rate limiter sin límite de entradas (memory leak) |\n| 🟢 Bajo | Falta security headers defensivos |\n| 🟢 Bajo | Versión expuesta en `/health` |",
+    "tokens": 34150,
+    "task_tokens": 0,
+    "mcp_calls": {},
+    "native_calls": {
+      "read": 1
+    },
+    "redundant_native_after_ctx": 0,
+    "duration_ms": 14986,
+    "task_id": "t10_audit",
+    "scores": {
+      "relevancia": 5,
+      "correccion": 5,
+      "completitud": 5,
+      "accionabilidad": 5
+    },
+    "score_total": 5.0
+  },
+  {
+    "system": "OCMCP",
+    "response": "## Auditoría de seguridad — `leo_code/server/server.py`\n\n### 🔴 Crítico (3)\n\n**1. Path traversal en `file_path` — `/context`, `/search`, `/stats`, `/index`, `/preindex`**\n\n`repo_path` viene del usuario y se pasa a `os.path.abspath()` y luego a `_ensure_indexed`, `_do_index`, `compute_context` sin validar que el path resuelto esté dentro de un directorio permitido. Un atacante puede leer/indexar archivos arbitrarios del sistema (`../../etc/passwd`).\n\n**2. Exposición de `detail=str(e)` en HTTP 500 — todos los endpoints POST, `/stats`**\n\nLos bloques `except Exception as e: raise HTTPException(500, detail=str(e))` devuelven el mensaje de error interno al cliente. Esto puede filtrar paths del sistema, config, stack traces (vía módulos que el engine importa) o datos del repositorio.\n\n**3. Sin autenticación ni autorización en ningún endpoint**\n\nTodo endpoint es anónimo y accesible desde cualquier origen (`allow_origins=[\"*\"]`). Cualquiera con acceso a la red puede indexar, consultar, leer stats del servidor, y hacer scraping del conocimiento del código.\n\n### 🟡 Medio (4)\n\n**4. Rate limiting por IP spoofeable**\n\n`request.client.host` es vulnerable si hay proxies reversos (nginx, Cloudflare) — la IP real está en `X-Forwarded-For`. Además, el rate limit es por-worker en memoria. Con `--workers 4`, cada worker tiene su propio `_rate_limits` vacío → 120 req/ventana efectivas en vez de 30.\n\n**5. CORS totalmente abierto**\n\n`allow_origins=[\"*\"]`, `allow_methods=[\"*\"]`, `allow_headers=[\"*\"]` sin `allow_credentials` ni `expose_headers`. Permite a cualquier página web desde cualquier origen hacer peticiones al servidor.\n\n**6. Sin Content-Security-Policy ni otros headers de seguridad**\n\nNinguna respuesta incluye `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Content-Security-Policy`, `Strict-Transport-Security`, ni `X-XSS-Protection`. Aunque es un servicio interno, estos headers se heredan por defecto de Starlette/FastAPI (que no los pone).\n\n**7. Cache key con `repo_path` del usuario sin sanitizar**\n\nLínea 143: `cache_key = f\"{req.query}|{repo}|{req.task_type}|{req.budget_tokens}\"`. Si `repo_path` contiene caracteres especiales (saltos de línea, pipes), puede colisionar o corromper la cache de Redis.\n\n### 🟢 Bajo (2)\n\n**8. Falta de límite de tamaño en inputs**\n\n`ContextRequest.query` y `SearchRequest.query` pueden ser cadenas arbitrariamente largas (ataque de denegación de servicio por payload enorme). Lo mismo para `repo_path` y `languages`.\n\n**9. Modo debug no controlado**\n\n`uvicorn.run(app, ... log_level=\"info\")` — si alguien cambia este valor a `debug`, se loggean cuerpos de requests completos, incluyendo paths del sistema y queries de usuarios.\n\n---\n\n**Resumen:** ninguna validación de entrada, cero autenticación, headers de seguridad ausentes, y errores internos expuestos al cliente. El path traversal y la fuga de errores son los más urgentes.",
+    "tokens": 54890,
+    "task_tokens": 0,
+    "mcp_calls": {},
+    "native_calls": {
+      "read": 1,
+      "bash": 1
+    },
+    "redundant_native_after_ctx": 0,
+    "duration_ms": 26735,
+    "task_id": "t10_audit",
+    "scores": {
+      "relevancia": 5,
+      "correccion": 5,
+      "completitud": 5,
+      "accionabilidad": 5
+    },
+    "score_total": 5.0
+  },
+  {
+    "system": "OC",
+    "response": "I'll start by exploring the codebase to understand the architecture.\nAquí tienes la explicación completa:\n\n---\n\n## Arquitectura de leo-code\n\n### Estructura de directorios\n\n```\nleo_code/                  # Paquete principal\n├── core/                  # Motor estructural: AST parsing, grafo, queries deterministas\n├── rag/                   # RAG + agente: clasificación, recuperación, compresión, LLMs, loop\n│   ├── agent/             # AgentLoop (orquestación) + ToolRegistry (18 herramientas)\n│   ├── cli/               # CLI Click (app.py) y TUI (tui.py)\n│   ├── indexer/           # Indexación incremental del código fuente\n│   └── llm/               # 12 providers (Anthropic, OpenAI, Google, Ollama...)\n├── server/                # FastAPI HTTP + MCP stdio\n├── session/               # Persistencia SQLite multi-turno\n├── plugins/               # Sistema de plugins (builtin, subprocess, MCP)\n├── skills/                # Auto-skills basados en markdown\n├── engine.py              # KERNEL COMPARTIDO: compute_context(), la función que todos llaman\n├── learning/              # Memoria persistente (Mem0) e instintos aprendidos\n├── meter/                 # Panel flotante Windows\n├── sdk/                   # SDK Python para integración externa\n└── tui/                   # LeoStatus bar\n```\n\n### Entrypoints (4, definidos en `pyproject.toml`)\n\n| Comando | Script | Propósito |\n|---|---|---|\n| `leo-code` | `rag.cli.app:cli` | CLI principal: `ask`, `chat`, `tui`, `index`, `guardian`, `setup` |\n| `leo-code-mcp` | `server.server:main` | Servidor HTTP FastAPI (puerto 9898, 12 endpoints) |\n| `leo-code-mcp-stdio` | `server.mcp_server:run_stdio` | Servidor MCP sobre stdio (2 herramientas) |\n| `leo-code-meter` | `meter.main:main` | Panel flotante para Windows |\n\n### Flujo de una query (ruta CLI)\n\n```\nUsuario escribe → [1] AgentLoop.run()\n  → [2] Clasifica tarea (classifier.py: 13 tipos, asigna presupuesto de tokens)\n  → [3] engine.compute_context():\n       → [3a] Indexa si es necesario (tree-sitter/ast, 28 lenguajes)\n       → [3b] Filtra cápsulas del repo\n       → [3c] Match estructural exacto (path, nombre de símbolo)\n       → [3d] Búsqueda semántica (Qdrant HNSW + MiniLM-L6, 384-dim)\n       → [3e] Búsqueda BM25 dispersa\n       → [3f] Scorer estructural (TF-IDF + PageRank en grafo de llamadas)\n       → [3g] Fusión RRF de 4 rankers\n       → [3h] Compresión adaptativa por tipo de tarea\n  → [4] LLM genera respuesta (con herramientas disponibles)\n  → [5] Si hay tool calls → ejecuta → vuelve a [4] (hasta 12 iteraciones)\n  → [6] Finaliza → guarda en sesión SQLite + memoria Mem0 → responde al usuario\n```\n\n### Los 3 módulos principales\n\n**`core/`** — Motor determinista (cero tokens LLM):\n- `parser.py` — Extrae cápsulas (`Capsule`: id, type, name, calls, imports...) vía AST/tree-sitter\n- `graphquery.py` — Queries de grafo: `where`, `who_calls`, `impact`, `trace`, `guard`\n- `guardian.py` — Análisis de impacto para CI: `blast_radius()`, `test_closure()`\n- `boundary.py` — Puentes HTTP cross-language (frontend→backend)\n\n**`rag/`** — RAG + agente:\n- `classifier.py` — Clasifica queries en 13 tipos con presupuesto de tokens\n- `compressor.py` — 13 estrategias de compresión adaptativa según el tipo de tarea\n- `encoder.py` / `vector_store.py` / `bm25.py` / `scorer.py` — Pipeline de recuperación híbrida (4 rankers)\n- `agent/loop.py` — `AgentLoop`: loop iterativo con detección de loops, compactación de contexto, effort routing\n- `agent/tools.py` — 18 herramientas (read/write/edit/search/exec)\n- `llm/` — 12 providers con catálogo de 50+ modelos y routing por complejidad\n\n**`server/`** — Superficies de red:\n- `server.py` — FastAPI (POST `/context`, `/search`, `/index`, `/health`, etc.)\n- `mcp_server.py` — MCP stdio con 2 tools: `get_context` (KC-RAG) y `graph` (queries deterministas)\n\n### Patrón arquitectónico clave\n\nEs un **kernel + múltiples superficies**. `engine.py` + `core/` + `rag/` forman el kernel, y los 3 entrypoints (CLI, HTTP, MCP stdio) son wrappers que llaman ",
+    "tokens": 509274,
+    "task_tokens": 472752,
+    "mcp_calls": {},
+    "native_calls": {
+      "task": 1
+    },
+    "redundant_native_after_ctx": 0,
+    "duration_ms": 129810,
+    "task_id": "t11_onboard",
+    "scores": {
+      "relevancia": 5,
+      "correccion": 5,
+      "completitud": 5,
+      "accionabilidad": 5
+    },
+    "score_total": 5.0
+  },
+  {
+    "system": "OCMCP",
+    "response": "Aquí tienes una visión general de la arquitectura de **leo-code**:\n\n---\n\n## Estructura de directorios\n\n```\nleo_code/\n├── core/          # Módulo 1: núcleo determinista (parser AST, graphquery, metrics, cache, guardian)\n├── rag/           # Módulo 2: retrieval-augmented generation\n│   ├── cli/       #   CLI app (click): ask, chat, tui, index, setup\n│   ├── agent/     #   AgentLoop: bucle LLM + tools + KC-RAG\n│   ├── indexer/   #   Indexer: tree-sitter → cápsulas, persistencia gzip, sync incremental\n│   ├── llm/       #   Proveedores LLM (openai, anthropic, google, ollama…)\n│   ├── classifier.py   # classify_task(): clasifica query en code_query/debug/audit/…\n│   ├── compressor.py   # compress(): selecciona y ordena cápsulas para el prompt\n│   ├── encoder.py      # sentence-transformers para embeddings semánticos\n│   ├── vector_store.py # Qdrant local para búsqueda semántica\n│   ├── bm25.py         # BM25 sparse search (complementa Qdrant)\n│   └── scorer.py       # Scorer estructural (PageRank + TF-IDF sobre identificadores)\n├── server/        # Módulo 3: sidecar HTTP (FastAPI) + MCP stdio\n├── engine.py      # MOTOR compartido: compute_context(), indexado, vector stores, BM25\n├── session/       # Persistencia multi-turn (SQLite)\n├── plugins/       # Plugin system\n├── learning/      # Aprendizaje continuo (instincts, minería de observaciones)\n├── sdk/           # SDK para integración externa\n├── skills/        # Skill system\n├── tui/           # Textual TUI cockpit\n└── meter/         # Medición y benchmark\n```\n\n## Entrypoints\n\n| Comando | Punto de entrada | Qué hace |\n|---|---|---|\n| `leo-code` | `leo_code/rag/cli/app.py:cli` | CLI interactiva (ask, chat, tui, index, setup, guardian, audit) |\n| `leo-code-mcp` | `leo_code/server/server.py:main` | Sidecar HTTP (FastAPI, puerto 9898) |\n| `leo-code-mcp-stdio` | `leo_code/server/mcp_server.py:run_stdio` | Servidor MCP sobre stdio para Claude Desktop |\n\n## Flujo de una query (CLI)\n\n```\n1. Usuario escribe: leo-code ask \"refactor auth to async\"\n2. app.py:ask() → crea AgentLoop, llama a stream_run()\n3. AgentLoop:\n   a. _init_llm() — resuelve provider+model\n   b. classify_task(query) — detecta intención: \"code_edit\"\n   c. _build_context() → engine.compute_context():\n      - engine._do_index(repo) si no está indexado\n      - get_capsules() + VectorStore.search() + BM25.search()\n      - ScoreCapsules() → RRF fusion → compress() → contexto comprimido (~80% menos tok)\n   d. Inyecta contexto KC-RAG como mensaje system\n   e. Llama al LLM con tool definitions\n   f. Ciclo: LLM response → tool calls → ejecutar → append result → repetir\n4. _render_stream() emite tokens al terminal con syntax highlighting\n5. Al terminar: _finalize() consolida respuesta, persiste sesión, registra métricas\n```\n\n## Los 3 módulos principales\n\n### 1. `core/` — Núcleo determinista\n- **Parser**: extrae cápsulas (funciones, clases, imports) vía tree-sitter (28 lenguajes)\n- **GraphQuery**: grafo de dependencias con `where`/`who_calls`/`trace`/`impact`/`guard`\n- **Metrics/Snapshots**: cuántos tokens ahorró KC-RAG, latencia, cache hits\n- **Cache**: Redis opcional para resultados de contexto\n- **Guardian**: radio de explosión de cambios + cobertura de tests, todo sin LLM\n\n### 2. `rag/` — Retrieval-Augmented Generation\n- **Indexer** (`rag/indexer/`): tree-sitter → cápsulas, build/sync incremental, persistencia gzip\n- **Retrieval híbrido**: exact match (path/name) + Qdrant (semántico) + BM25 (sparse) + PageRank scorers → RRF fusion\n- **Compressor**: selecciona y ordena las N cápsulas más relevantes dentro de un presupuesto de tokens\n- **AgentLoop** (`rag/agent/loop.py`): bucle LLM + tools con detección de loops, effort routing, compactación de historial, y fallback determinista\n- **LLM** (`rag/llm/`): 12 providers con interfaz unificada (OpenAI-compatible)\n\n### 3. `server/` — Sidecar HTTP + MCP\n- FastAPI con endpoints REST: `/context`, `/search`, `/index`, `/preindex`, `/stats`, `/metrics`, `/sessions`\n- MCP stdio server para Clau",
+    "tokens": 210666,
+    "task_tokens": 0,
+    "mcp_calls": {
+      "get_context": 2
+    },
+    "native_calls": {
+      "read": 10
+    },
+    "redundant_native_after_ctx": 10,
+    "duration_ms": 51208,
+    "task_id": "t11_onboard",
+    "scores": {
+      "relevancia": 5,
+      "correccion": 5,
+      "completitud": 5,
+      "accionabilidad": 5
+    },
+    "score_total": 5.0
+  },
+  {
+    "system": "OC",
+    "response": "Let me start by reading both files.\n## Análisis de diseño y copy\n\n### README.md\n\n**Fortalezas**: El claim principal (`\"La primera inteligencia de código DEMOSTRADA, no estimada\"`) es potente y diferenciador. La tabla de auditoría formal con métricas (100% precisión, 100% recall) es un golpe de autoridad.\n\n**Debilidades**:\n\n| Problema | Ejemplo actual | Sugerencia |\n|---|---|---|\n| **Jerarquía visual plana** | El hero block (#1–18) es un muro de texto sin una subida del eyeball. | Rompé el hero en: 1 headline corto, 1 subhead de 8–10 palabras, 1 proof point en bold, la tabla. |\n| **Headline sin punch inmediato** | `\"La primera inteligencia de código DEMOSTRADA, no estimada.\"` — arranca con el concepto, no con el dolor del usuario. | `\"Que los agentes alucinen estructura ya no es tu problema.\"` |\n| **Falta CTA en la primera pantalla** | El primer CTA (`curl ... install.sh`) aparece en línea 89, muy abajo. | Añadir al final del hero: `⬇️ [Instala en 30s](##instalación)` o botón de copia directa. |\n| **CTAs débiles / escondidos** | No hay CTAs explícitos de \"pruébalo\" o \"compara\". | `▶️ Ver demo (contrafactual en vivo)` y `🧪 Benchmark del auditor en 1 comando`. |\n| **Copy sobrecargado** | Líneas 5–12 contienen 4 claims distintos en una sola idea. | Simplificar: \"leo-code es el único agente que **prueba** que entiende tu código. Aquí están los números auditados en CI.\" |\n\n**Propuesta de hero block**:\n\n```\n# leo-code\n\n**Que los agentes alucinen estructura ya no es tu problema.**\n\nleo-code demuestra —no estima— la relación entre cada símbolo de tu repo.\n100% precisión · 100% recall · cero tokens de LLM · probado en ~6M LOC.\n\n>`trace`, `impact`, `who_calls` no adivinan: recorren el grafo real\n> y firman cada respuesta con `archivo:línea`. Auditado en CI contra\n> el AST de Python y el compilador de TypeScript.\n\n⬇️ [curl -fsSL → instala en 30s](##instalación)     🧪 `python benchmark/audit_formal.py`\n```\n\n**Falta de CTAs intermedias**: Entre la tabla de eficiencia y la instalación hay un largo bloque de \"cerebro determinista\" que podría tener un CTA de acción antes de la instalación.\n\n---\n\n### docs/index.md\n\n**Fortalezas**: Estructura limpia de tabla de contenidos con guías + conceptos + referencia.\n\n**Debilidades**:\n\n| Problema | Ejemplo actual | Sugerencia |\n|---|---|---|\n| **Headlines funcionales, no persuasivos** | `\"leo-code — Docs\"` | `\"leo-code: la demo no es marketing, es matemática\"` |\n| **Propuesta de valor oculta** | El subhead da dos features sin contexto: ~90% relevante vs 20% chunking tradicional. | `\"100% precisión estructural. ~90% menos tokens. Y un auditor en CI que lo prueba.\"` |\n| **CTA único y genérico** | `Empieza aquí: instala en 30 segundos →` — es correcto pero no vende el diferenciador. | `▶️ Ver benchmark en vivo (sin instalar nada)` + `⚡ Instalar y probar en 30s` |\n| **Sección \"Conceptos clave\" sin urgencia** | Explica cápsulas y KC-RAG sin conectarlo a un beneficio para el lector. | Añadir columna \"Beneficio\": `Cápsula → contexto completo de la función, no fragmentos rotos`. |\n\n**Propuesta de hero alternativo**:\n\n```\n# leo-code\n\n**100% precisión estructural. ~90% menos tokens. Auditor en CI que lo verifica.**\n\nSin adivinanzas. Sin LLM en preguntas de estructura.\nSolo el grafo real de tu código, citado `archivo:línea`.\n\n▶️ [Benchmark en vivo →](benchmark.md)      ⚡ [Instalar en 30s](instalacion.md)\n```\n\n---\n\n### Resumen de acciones concretas\n\n| # | Acción | Archivo |\n|---|---|---|\n| 1 | Reescribir hero: dolor → promesa → prueba → CTA | README.md:1–18 |\n| 2 | Añadir CTA al final del hero (instalación) | README.md:18 |\n| 3 | Añadir CTA intermedio \"Benchmark en 1 comando\" después de tabla eficiencia | README.md:~68 |\n| 4 | docs/index.md: headline con proof point numérico | docs/index.md:1–5 |\n| 5 | docs/index.md: dos CTAs: \"demo sin instalar\" + \"instalar\" | docs/index.md:6 |\n| 6 | docs/index.md: columna \"Beneficio\" en tabla conceptos | docs/index.md:~30–34 |",
+    "tokens": 34062,
+    "task_tokens": 0,
+    "mcp_calls": {},
+    "native_calls": {
+      "read": 2
+    },
+    "redundant_native_after_ctx": 0,
+    "duration_ms": 22112,
+    "task_id": "t12_design_review",
+    "scores": {
+      "relevancia": 5,
+      "correccion": 5,
+      "completitud": 5,
+      "accionabilidad": 5
+    },
+    "score_total": 5.0
+  },
+  {
+    "system": "OCMCP",
+    "response": "Let me first read the files to analyze.\nEsto es un análisis de copy y estructura de documentación markdown, no una interfaz visual. No necesito el flujo completo de impeccable. Voy al análisis directo.\n\n---\n\n## Análisis de README.md\n\n### ✅ Aciertos\n- **Tagline inicial** es potente y diferencial: \"demostrada, no estimada\" engancha.\n- **La tabla de garantías (líneas 50-57)** es el activo más fuerte. Específica, medible, creíble.\n- **Comparación implícita** con el status quo (GPT-5, Claude, Copilot) bien colocada.\n\n### ❌ Problemas y mejoras\n\n**1. Jerarquía visual — demasiado plano**\n- El bloque citado (líneas 7-12) es crítico pero está en cursiva/cita, visualmente se salta.\n- No hay separación clara entre \"el problema\" y \"la solución\".\n\n**2. Headline — pierde fuerza inmediatamente**\n\nActual: `# 🧠 leo-code` | `La primera inteligencia de código DEMOSTRADA, no estimada.`\n\nPropuesta (más agresivo, más claro):\n> # 🧠 Leo Code  \n> **El único agente de código que prueba lo que responde.**  \n> GPT, Claude y Copilot *estiman* la estructura de tu repo. Leo la *demuestra* con 100% de precisión en cada `archivo:línea` que devuelve.\n\n**3. Subhead / problema-dolor — diluido**\n\nEl párrafo \"El cuello de botella...\" (línea 35) es el gancho correcto, pero está enterrado bajo 30 líneas de introducción. Debería subir al hero:\n\n```\n# 🧠 Leo Code\n## Los agentes de código no fallan por el modelo. Fallan porque leen el repo equivocado.\n```\n\n**4. CTAs inexistentes o débiles**\n\nNo hay un solo CTA visible en el README. \"Instalación\" (línea 85) aparece como sección de documentación, no como llamado a la acción.\n\nPropuesta de CTAs en posiciones estratégicas:\n\n- **Después del hero:**\n  ```\n  [Empieza en 30 segundos →](#instalación)  ·  [Ver la prueba formal →](benchmark/audit_formal.py)  ·  [Docs →](docs/index.md)\n  ```\n- **Después de la tabla de garantías:**\n  ```\n  **¿No me crees?** `python benchmark/audit_formal.py` corre contra oráculos independientes. Exit 0 o no pasa CI.\n  ```\n- **Cierre:**\n  ```\n  ## Próximo paso\n  pip install leo-code && leo-code tui\n  ```\n\n**5. \"Dos productos\" (línea 20-28) — confuso**\n\nLa tabla producto/usuario es informativa pero frena el momentum. El README debería presentar UNA cosa primero (el agente), y luego mencionar que el motor también se vende como MCP. Hoy presenta dos productos como iguales antes de que el lector entienda qué hace uno solo.\n\n**6. Copy hinchado**\n\n- \"Eso es una categoría nueva: inteligencia de código con prueba formal (*proof-carrying code intelligence*)\" — el paréntesis inglés sobra, el lector ya entendió.\n- \"Se entrega como dos productos open source sobre un motor compartido\" — \"se entrega\" es voz pasiva y suena a release notes, no a landing page.\n\n---\n\n## Análisis de docs/index.md\n\n### ✅ Aciertos\n- Primer CTA visible: \"Empieza aquí: instala en 30 segundos →\"\n- Estructura de tablas clara y scaneable.\n\n### ❌ Problemas\n\n**1. Headline plano**\n\nActual: `# leo-code — Docs`\n\nPropuesta:\n> # Documentación de Leo Code  \n> **Tu agente de código con garantías, no con adivinanzas.**\n\nO más directo:\n> # Guía rápida de Leo Code  \n> **Contexto estructural al ~90% de relevancia. Cero alucinaciones de estructura.**\n\n**2. Falta de gancho persuasivo**\n\nLínea 3-4, el subhead con funciones/dependencias es correcto pero frío. Necesita una frase que conecte con el dolor del lector:\n\nActual:\n> Funciones completas con sus dependencias, no fragmentos de 500 tokens.\n> ~90% de contexto relevante vs ~20% del chunking tradicional.\n\nPropuesta:\n> **Tus prompts de \"contexto\" le pasan a Claude funciones enteras, no migajas de 500 tokens.**\n> **~90% de relevancia estructural vs ~20% del chunking tradicional. Y cada símbolo viene con `archivo:línea`.**\n\n**3. El bloque de SDK (líneas 47-56) está fuera de lugar**\n\nAparece sin contexto. \"¿Qué es `leo_code.sdk`? ¿Dónde está ese servidor?\" El lector de docs recién llega. El SDK debería estar en una página separada o al final como \"uso programático\".\n\n---\n\n## Resumen de cambios prioritarios\n\n| Pr",
+    "tokens": 57794,
+    "task_tokens": 0,
+    "mcp_calls": {},
+    "native_calls": {
+      "read": 2,
+      "skill": 1
+    },
+    "redundant_native_after_ctx": 0,
+    "duration_ms": 31493,
+    "task_id": "t12_design_review",
+    "scores": {
+      "relevancia": 5,
+      "correccion": 5,
+      "completitud": 5,
+      "accionabilidad": 5
+    },
+    "score_total": 5.0
+  },
+  {
+    "system": "OC",
+    "response": "I'll explore the leo-code server codebase to answer your questions.\n**El servidor HTTP tiene 12 endpoints** (todos en `leo_code/server/server.py`).\n\n**Frameworks:** FastAPI, Pydantic, uvicorn. **No usa SQLAlchemy.**\n\n**Endpoints que NO usan `response_model`** (8 de 12):\n\n| Endpoint | Línea |\n|---|---|\n| `GET /health` | 127 |\n| `POST /index` | 197 |\n| `POST /preindex` | 212 |\n| `GET /metrics` | 255 |\n| `GET /metrics/prometheus` | 273 |\n| `GET /sessions` | 325 |\n| `GET /plugins` | 354 |\n| `GET /skills` | 368 |\n\nLos 4 que sí lo usan son: `POST /context`, `POST /search`, `GET /stats`, `GET /benchmark`.",
+    "tokens": 97773,
+    "task_tokens": 67518,
+    "mcp_calls": {},
+    "native_calls": {
+      "task": 1
+    },
+    "redundant_native_after_ctx": 0,
+    "duration_ms": 31283,
+    "task_id": "t13_framework",
+    "scores": {
+      "relevancia": 5,
+      "correccion": 5,
+      "completitud": 5,
+      "accionabilidad": 5
+    },
+    "score_total": 5.0
+  },
+  {
+    "system": "OCMCP",
+    "response": "**12 endpoints** en `leo_code/server/server.py`.\n\n**Frameworks:** FastAPI, Pydantic, Uvicorn, Redis (opcional). También MCP Python SDK, httpx, sentence-transformers, qdrant-client, tree-sitter.\n\n**Sin `response_model` (8 de 12):**\n\n| Método | Ruta | Función |\n|--------|------|---------|\n| GET | `/health` | `health` |\n| POST | `/index` | `index_repo` |\n| POST | `/preindex` | `preindex` |\n| GET | `/metrics` | `metrics` |\n| GET | `/metrics/prometheus` | `metrics_prometheus` |\n| GET | `/sessions` | `list_sessions` |\n| GET | `/plugins` | `list_plugins` |\n| GET | `/skills` | `list_skills` |\n\nLos 4 que **sí** lo usan: `/context`, `/search`, `/stats`, `/benchmark`.",
+    "tokens": 139560,
+    "task_tokens": 93373,
+    "mcp_calls": {
+      "get_context": 1
+    },
+    "native_calls": {
+      "task": 1
+    },
+    "redundant_native_after_ctx": 0,
+    "duration_ms": 42271,
+    "task_id": "t13_framework",
     "scores": {
       "relevancia": 5,
       "correccion": 5,
@@ -173,7 +554,7 @@
     "response": "[Timeout]",
     "tokens": 0,
     "duration_ms": 180000,
-    "task_id": "t5_search",
+    "task_id": "t14_cross_file",
     "scores": {
       "relevancia": 1,
       "correccion": 1,
@@ -184,379 +565,17 @@
   },
   {
     "system": "OCMCP",
-    "response": "Aquí están las 10 funciones/clases más grandes sin docstring, ordenadas por líneas de código descendente:\n\n| Archivo | Línea | Símbolo | Líneas |\n|---|---|---|---|\n| `leo_code/rag/cli/tui.py` | 163 | `LeoTUI` | 744 |\n| `leo_code/meter/panel.py` | 34 | `Panel` | 185 |\n| `leo_code/rag/agent/tools.py` | 84 | `get_definitions` | 183 |\n| `leo_code/rag/llm/anthropic.py` | 36 | `AnthropicProvider` | 149 |\n| `leo_code/rag/llm/openai_adapter.py` | 33 | `OpenAIProvider` | 132 |\n| `leo_code/rag/cli/app.py` | 549 | `_handle_command` | 107 |\n| `leo_code/core/guardian.py` | 61 | `Guardian` | 101 |\n| `leo_code/core/metrics.py` | 88 | `MetricsTracker` | 91 |\n| `leo_code/rag/llm/bedrock.py` | 10 | `BedrockProvider` | 89 |\n| `leo_code/rag/cli/app.py` | 744 | `_handle_goal` | 83 |",
-    "tokens": 47121,
+    "response": "Now let me trace the LLM provider calls:\nNow let me also check the `_build_context` path — specifically `engine.compute_context` and `_do_index`:\nPerfecto. Ya tengo toda la cadena. Aquí está la traza completa:\n\n---\n\n## Cadena: `AgentLoop.stream_run()` → LLM\n\n### Fase 0 — Setup (loop.py:555-646)\n\n1. `stream_run()` recibe query, model, use_kc_rag, etc.\n2. `self._init_llm(model)` → `leo_code/rag/llm/__init__.py:60` `get_provider()` → instancia `OpenAIProvider` con `api_key`, `base_url`, `model` — esto es **OpenAI** → `openai_adapter.py:38`\n3. Construye `messages[]`: system prompt (`_system_prompt()`), history opcional, user content (`_build_user_content()`)\n4. **KC-RAG** (si `use_kc_rag=True`):\n   - `classify_task(query)` → `leo_code/rag/classifier.py`\n   - `_is_breadth(query, task_type)` → decide verbosity/effort\n   - `self._build_context(query, repo_path, task_type)` → **loop.py:807**\n\n### Fase 1 — Indexación + Contexto (loop.py:807-841)\n\n5. `_build_context()`:\n   - `engine._do_index(repo)` → `leo_code/engine.py:164` → `_index_once()` → `Indexer.build()` o `Indexer.sync()` + `VectorStore.add()` (Qdrant)\n   - `self.tools.set_index(capsules)` — cablea el índice a las tools\n   - `engine.compute_context(repo, query, task_type)` → **engine.py:221**\n   - Devuelve contexto comprimido + timings\n\n### Fase 2 — Compute Context (engine.py:221-387)\n\n6. `compute_context()`:\n   - Filtra cápsulas del repo desde el indexer global\n   - **Exact match**: path/name matching → `specific_match`, `path_match`, `name_match`\n   - **Semantic search**: `VectorStore.search(query, top_k=15)` → Qdrant\n   - **BM25 sparse search**: `BM25Index.search(query, top_k=15)`\n   - **Structural scorer**: `score_capsules(pool, query)` → PageRank + TF-IDF\n   - **RRF fusion**: mezcla los 4 rankings con Reciprocal Rank Fusion\n   - **compress()** → `leo_code/rag/compressor.py` — comprime cápsulas top-N al presupuesto de tokens\n\n### Fase 3 — Loop de iteraciones (loop.py:654-769)\n\n7. Por cada iteración (hasta `max_iterations`):\n   - `_compact_messages()` → recorta historial preservando pares assistant+tool\n   - **Llamada streaming al LLM**: `self.llm.stream(messages, active_tools, effort)` → **openai_adapter.py:113**\n\n### Fase 4 — Provider HTTP (openai_adapter.py:113-166)\n\n8. `OpenAIProvider.stream()`:\n   - Construye kwargs: `model`, `messages`, `temperature`, `max_tokens`, `tools`, `stream=True`\n   - `self.client.chat.completions.create(**kwargs)` → **openai** sync SDK → HTTP POST a `base_url/v1/chat/completions`\n   - Itera chunks SSE:\n     - `delta.content` → `yield str` (tokens de texto)\n     - `delta.tool_calls` → acumula en `tool_calls_acc`\n     - `delta.reasoning_content` → acumula en `reasoning_acc`\n   - Al final: si hay `reasoning_acc` → `yield {\"type\": \"reasoning\", ...}`\n   - Si hay tool_calls → `yield {\"type\": \"tool_call\", ...}` por cada una\n\n### Fase 5 — Procesamiento de respuesta (loop.py:674-769)\n\n9. `stream_run()` recibe los chunks y los re-yield al caller:\n   - `str` → `yield {\"type\": \"token\", \"text\": chunk}`\n   - `tool_call` dict → acumula en `tool_calls[]`\n   - `reasoning` dict → acumula en `reasoning`\n\n10. **Si no hay tool_calls**: considera respuesta final → `yield {\"type\": \"done\", \"respuesta\": text, ...}` y retorna\n\n11. **Si hay tool_calls**:\n    - Construye mensaje assistant con `_assistant_tool_msg()` (spec OpenAI)\n    - Por cada tool_call:\n      - Permission check (`self.perms.check()`)\n      - Loop detection (`_loop_key()` + contador)\n      - `self.tools.execute(name, args, repo_path)` → ejecuta la tool\n      - `yield {\"type\": \"tool_result\", ...}` con el resultado\n    - Siguiente iteración del loop\n\n### Fase 6 — Finalización (loop.py:770-781)\n\n12. Si se agotan iteraciones sin respuesta o la respuesta está truncada:\n    - `self._finalize(messages, query)` → **loop.py:477** — 1-2 llamadas SIN tools a `self.llm.generate()` → `OpenAIProvider.generate()` → `client.chat.completions.create()` (no streaming)\n    - Si aún así falla: `_fallback_summary()` → resum",
+    "tokens": 255592,
+    "task_tokens": 0,
     "mcp_calls": {
-      "get_context": 1
-    },
-    "native_calls": {
-      "task": 1
-    },
-    "redundant_native_after_ctx": 0,
-    "duration_ms": 37975,
-    "task_id": "t5_search",
-    "scores": {
-      "relevancia": 5,
-      "correccion": 5,
-      "completitud": 5,
-      "accionabilidad": 5
-    },
-    "score_total": 5.0
-  },
-  {
-    "system": "OC",
-    "response": "Let me start by exploring the codebase to understand the existing patterns.\nI can see the endpoint already exists (lines 280-322). The `BenchmarkResponse` model and the `benchmark` handler are both fully implemented. Let me verify it works by checking if the referenced files exist and then running the server briefly.\nEl endpoint `/benchmark` ya existe completamente implementado en `server.py:280-322` con el modelo `BenchmarkResponse` (líneas 85-91) y el handler que:\n\n- Lee `benchmark/tasks.json` para mapear task_id → tipo\n- Lee `benchmark/results_real/summary.json` para las ejecuciones históricas\n- Calcula `task_type_distribution` y devuelve `top_5_tasks` ordenados por score\n- Incluye `queries_total`, `tokens_saved_vs_baseline` y `tokens_used` del snapshot de métricas en vivo\n\nNo hay nada que crear — el endpoint ya está listo con el estilo exacto que pides (FastAPI + Pydantic). Puedes verificarlo ejecutando:\n\n```\ncurl http://localhost:9898/benchmark\n```",
-    "tokens": 71431,
-    "mcp_calls": {},
-    "native_calls": {
-      "read": 3,
-      "glob": 1
-    },
-    "redundant_native_after_ctx": 0,
-    "duration_ms": 12937,
-    "task_id": "t6_code_gen",
-    "scores": {
-      "relevancia": 5,
-      "correccion": 5,
-      "completitud": 5,
-      "accionabilidad": 5
-    },
-    "score_total": 5.0
-  },
-  {
-    "system": "OCMCP",
-    "response": "El endpoint ya existe en el servidor (líneas 85-91 el modelo, líneas 280-322 el handler). Solo falta verificar que el modelo `BenchmarkResponse` esté correcto y que el endpoint use `snap` para los campos de métricas en vivo. El código se ve completo. ¿Quieres que agregue o modifique algo específico?",
-    "tokens": 51094,
-    "mcp_calls": {
-      "get_context": 1
-    },
-    "native_calls": {
-      "read": 1
-    },
-    "redundant_native_after_ctx": 1,
-    "duration_ms": 20959,
-    "task_id": "t6_code_gen",
-    "scores": {
-      "relevancia": 5,
-      "correccion": 5,
-      "completitud": 5,
-      "accionabilidad": 5
-    },
-    "score_total": 5.0
-  },
-  {
-    "system": "OC",
-    "response": "The code already has `max_steps: int = 12` in `_plan()` (line 145) and `max_steps=12` in the call from `run()` (line 71). No changes needed.",
-    "tokens": 32131,
-    "mcp_calls": {},
-    "native_calls": {
-      "read": 1
-    },
-    "redundant_native_after_ctx": 0,
-    "duration_ms": 6931,
-    "task_id": "t7_code_edit",
-    "scores": {
-      "relevancia": 5,
-      "correccion": 5,
-      "completitud": 5,
-      "accionabilidad": 5
-    },
-    "score_total": 5.0
-  },
-  {
-    "system": "OCMCP",
-    "response": "Ya veo el código. En el AST el texto salió truncado al final, pero puedo ver que `_plan` ya tiene `max_steps: int = 12` como parámetro y `return steps[:ma...` (truncado). Veamos el final exacto y la llamada en `run()`:\nYa está todo hecho. El código ya tiene:\n\n1. `_plan()` con `max_steps: int = 12` (línea 145)\n2. `return steps[:max_steps]` (línea 171)\n3. La llamada desde `run()` ya pasa `max_steps=12` (línea 71)\n\nNo hay nada que modificar — el cambio ya está implementado.",
-    "tokens": 68935,
-    "mcp_calls": {
-      "get_context": 1
-    },
-    "native_calls": {
-      "read": 3
-    },
-    "redundant_native_after_ctx": 3,
-    "duration_ms": 26512,
-    "task_id": "t7_code_edit",
-    "scores": {
-      "relevancia": 5,
-      "correccion": 5,
-      "completitud": 5,
-      "accionabilidad": 5
-    },
-    "score_total": 5.0
-  },
-  {
-    "system": "OC",
-    "response": "## Code Review: `leo_code/rag/compressor.py` (639 líneas)\n\n### Diagnóstico\n\n| Dimensión | Nota | Observaciones |\n|---|---|---|\n| **SOLID (SRP/OCP)** | ⚠️ | 1 clase funcional: `CompressConfig` es un data bag útil; pero `compress()` + `_build_nodes_from_config()` son god functions que entienden todas las estrategias. Violación de OCP: para añadir una estrategia hay que tocar 3 sitios (`COMPRESS_STRATEGIES`, `compress()`, y posiblemente añadir una función `_compress_*`). |\n| **Naming** | ✅ | Mayoría claro y en español consistente. `budget_tokens` vs `char_budget` con factor 4 es confuso (no hay constante que explique la relación). |\n| **Complejidad ciclomática** | 🔴 | `_build_nodes_from_config()`: ~12 caminos lineales + 3 niveles de anidamiento + 2 `if i == 0` para callees/callers. `_compress_query()`: ~10 ramas (header/truncado/skip/resumen/edges). |\n| **Duplicación** | 🔴 | El bloque \"incluir callees\" y \"incluir callers\" en `_build_nodes_from_config` (líneas 194-235) es **casi idéntico**: mismo patrón de props/body/truncado/append. La construcción de `props` con signature, docstring, y truncado de body aparece 4 veces en el mismo método. |\n| **Errores/edge cases** | ⚠️ | `all_by_name` (dict clave nombre) pierde cápsulas con mismo nombre (ej. dos `__init__`). `_compress_query` itera `c.calls` pero usa `c.name` como lookup — si hay homónimos, edges apuntan a cualquiera. `_compress_search` filtra por `f\"/{d}/\"` pero ignora matches en raíz. `dir_filter` puede ser `None` sin crash (bien) pero el cast a `set[str]` no es válido en runtime si no se pasa (bien por `None` check). `end_line - start_line + 1` en `_compress_optimize` puede fallar si `end_line` o `start_line` son `None` (no verificados). |\n| **Cobertura de edge cases** | ⚠️ | No hay manejo de `top_capsules` vacío en varias rutas (ej. `_build_nodes_from_config` retorna `\"\"` si no hay target, bien; pero `_compress_query` crash sin `.file_path` si hay 0 items → línea 357). `_compress_code_gen` no maneja `file_path` vacío. |\n\n---\n\n### 3 Recomendaciones Concretas\n\n#### 1. Extraer la lógica duplicada de props/body truncado en un helper\n\nEl patrón props + body truncado aparece **4 veces** en `_build_nodes_from_config`:\n\n```python\n# Antes: duplicado en líneas 167-191, 200-213, 221-235, 269-275\nprops = {\n    \"signature\": c.signature,\n    \"file_path\": c.file_path,\n    \"docstring\": c.docstring or \"\",\n}\nif config.include_body and c.content:\n    body = c.content\n    if len(body) > 2000:\n        body = body[:2000] + \"\\n# ... [truncado]\"\n    props[\"content\"] = body\n```\n\n```python\n# Después: helper reutilizable\ndef _capsule_props(c: Capsule, *, include_body: bool = False) -> dict:\n    props = {\n        \"signature\": c.signature,\n        \"file_path\": c.file_path,\n        \"docstring\": c.docstring or \"\",\n    }\n    if include_body and c.content:\n        body = c.content[:2000]\n        if len(c.content) > 2000:\n            body += \"\\n# ... [truncado]\"\n        props[\"content\"] = body\n    return props\n```\n\nEsto elimina ~30 líneas duplicadas y unifica el criterio de truncado.\n\n#### 2. Estrategia como clase polimórfica (OCP)\n\nHoy añadir \"security_review\" requiere tocar 3 lugares. Con un `Protocol`:\n\n```python\nfrom typing import Protocol\n\nclass CompressionStrategy(Protocol):\n    def compress(self, top: list[Capsule], all_: list[Capsule]) -> str: ...\n\nclass CodeEditStrategy:\n    config = CompressConfig(max_items=5, ...)\n    def compress(self, top, all_):\n        return _build_nodes_from_config(top, all_, self.config, \"code_edit\")\n\nSTRATEGIES: dict[str, CompressionStrategy] = {\n    \"code_edit\": CodeEditStrategy(),\n    \"refactor\": RefactorStrategy(),\n    ...\n}\n```\n\nRegistrar una nueva estrategia es añadir una clase + una línea en el dict — sin tocar `compress()`.\n\n#### 3. Proteger contra homónimos en `all_by_name`\n\n`all_by_name` es un `dict[str, Capsule]` que sobreescribe si dos cápsulas tienen el mismo nombre (ej. dos `__init__`). Usar `dict[str, list[Capsule]]`:\n\n```python\nfrom collections import defaul",
-    "tokens": 37953,
-    "mcp_calls": {},
-    "native_calls": {
-      "read": 1
-    },
-    "redundant_native_after_ctx": 0,
-    "duration_ms": 21537,
-    "task_id": "t8_review",
-    "scores": {
-      "relevancia": 5,
-      "correccion": 5,
-      "completitud": 5,
-      "accionabilidad": 5
-    },
-    "score_total": 5.0
-  },
-  {
-    "system": "OCMCP",
-    "response": "## Code Review: `leo_code/rag/compressor.py`\n\n### 1. SOLID\n\n**Principio abierto/cerrado (OCP) violado.** `compress()` es un `if/elif/else` con 7+ ramas que hay que tocar cada vez que se agrega una tarea nueva. Lo mismo para `_FRAMEWORK_QUERIES` (diccionario plano, no extensible).\n\n### 2. Naming\n\nInconsistente: `_compress_query` vs `_build_nodes_from_config` — unas usan verbo+objeto, otras no. `top_capsules` sugiere prioridad pero en `_compress_search` se usa igual que `all_capsules`.\n\n### 3. Complejidad ciclomática\n\n**`_build_nodes_from_config`** (línea 144) tiene complejidad ~15 (3 bloques anidados con condicionales + caso especial `test_gen` + inyección de ambigüedad). El bloque de callees y callers está duplicado 3 veces (líneas 196-213, 217-235, 245-253) con la misma lógica de construcción de props.\n\n### 4. Duplicación de código\n\nEl bloque \"construir props\" aparece **4 veces** en `_build_nodes_from_config` (target, callee, caller, test) y otra vez en `_compress_query`. El truncado `body[:2000] + ... [truncado]` aparece **6 veces** en todo el archivo.\n\n### 5. Manejo de errores\n\n**Cero.** Ningún `try/except`. Si `top_capsules[0]` existe pero `c.calls` no es iterable, `c.content` es `None`, o `c.properties` no tiene una clave esperada, son AttributeError/KeyError silenciosos o crashes.\n\n### 6. Edge cases no cubiertos\n\n- `top_capsules` vacío + `task_type` con estrategia → `target = None` → `target.name` crash en `_build_nodes_from_config:217`\n- `budget_tokens = 0` → `char_budget = 0` → loop nunca entra → resultado vacío sin aviso\n- `c.calls[:8]` asume que `c.calls` es lista; si es `None`, crash\n- `_detect_framework_query` con `query` no-string → crash en `.lower()`\n\n---\n\n### 3 recomendaciones concretas\n\n#### 1. Extraer el builder de props para eliminar duplicación\n\n```python\ndef _build_capsule_props(\n    c: Capsule,\n    include_body: bool = False,\n    include_calls: bool = False,\n    include_imports: bool = False,\n    body_limit: int = 2000,\n) -> dict:\n    props = {\n        \"signature\": c.signature,\n        \"file_path\": c.file_path,\n        \"docstring\": c.docstring or \"\",\n    }\n    if include_body and c.content:\n        body = c.content\n        if len(body) > body_limit:\n            body = body[:body_limit] + \"\\n# ... [truncado]\"\n        props[\"content\"] = body\n    if include_calls and c.calls:\n        props[\"calls\"] = \", \".join(c.calls[:8])\n    if include_imports and c.imports:\n        props[\"imports\"] = \", \".join(c.imports[:8])\n    for key in (\"parametros\", \"tipo_retorno\", \"lineas\"):\n        if key in c.properties:\n            props[key] = c.properties[key]\n    return props\n```\n\nEsto elimina ~30 líneas duplicadas y unifica el truncado.\n\n#### 2. Registrar estrategias con un decorador (OCP)\n\n```python\n_COMPRESSORS: dict[str, Callable] = {}\n\ndef compressor(task_type: str):\n    def wrapper(fn: Callable):\n        _COMPRESSORS[task_type] = fn\n        return fn\n    return wrapper\n\n@compressor(\"code_gen\")\ndef _compress_code_gen(all_capsules): ...\n\n@compressor(\"search\")\ndef _compress_search(top_capsules, all_capsules, budget_tokens, dir_filter): ...\n```\n\n`compress()` queda: `fn = _COMPRESSORS.get(task_type, _compress_query); return fn(...)`. Agregar una task_type nueva no requiere tocar `compress()`.\n\n#### 3. Guard clause y validación de tipos en `_build_nodes_from_config`\n\n```python\ndef _build_nodes_from_config(...) -> str:\n    target = top_capsules[0] if top_capsules else None\n    if not target and task_type != \"test_gen\":\n        return \"\"\n    if not hasattr(target, \"calls\"):\n        return \"\"  # o loggear\n```\n\nY proteger accesos a `c.calls`, `c.content`, `c.properties` con `.get()` o `getattr` con defaults.",
-    "tokens": 39800,
-    "mcp_calls": {},
-    "native_calls": {
-      "read": 1
-    },
-    "redundant_native_after_ctx": 0,
-    "duration_ms": 23892,
-    "task_id": "t8_review",
-    "scores": {
-      "relevancia": 5,
-      "correccion": 5,
-      "completitud": 5,
-      "accionabilidad": 5
-    },
-    "score_total": 5.0
-  },
-  {
-    "system": "OC",
-    "response": "Now I'll look at both brace and keyword functions closely, then propose and implement the optimized version.\n\n**Análisis del problema:**\n\n- `_find_block_end_brace` (línea 276): recorre línea por línea, cuenta `{`/`}`. Para 20 funciones, en promedio recorre la mitad del bloque de cada función.\n- `_find_block_end_keyword` (línea 291): recorre línea por línea buscando `end`.\n- Ambas tienen un `max_scan` de 200 líneas, aunque en la práctica un bloque típico pesa ~25 líneas.\n\n**Mejora propuesta:** usar `re.finditer` sobre el texto completo del archivo (una sola pasada) para pre-computar índices de cierre, reemplazando el loop O(n) por lookup O(1) por función.\n**Propuesta de implementación:**\n\nEl cambio es: pre-computar con un solo scan O(n) un mapa de cierre (`{start_idx: end_idx}`) y substituir el loop línea-por-línea por un lookup O(1). Llamar al prescan una vez en `_find_block_end` y pasar el mapa.\n\n**Estimación de líneas recorridas menos:**\n\n| Escenario | Original (líneas/llamada) | Fast (líneas/llamada) |\n|---|---|---|\n| Brace, bloque ~25 líneas | ~12.5 promedio | 0 (pre-scan pago una vez) |\n| Keyword, bloque ~25 líneas | ~12.5 promedio | 0 (pre-scan pago una vez) |\n| Total 20 llamadas pre-scan | ~12.5 × 20 = **250 líneas**  | **~500 líneas (una vez) + 0** = neto **250 líneas menos** |\n\nEl pre-scan recorre las 500 líneas una sola vez, mientras que el original recorre ~250 dentro de bucles. El fast hace **50% menos iteraciones totales** en el caso típico. Y para funciones muy largas (cerca del `max_scan` de 200), el ahorro es aún mayor.\n\n¿Quieres que implemente el cambio en el código ahora?",
-    "tokens": 83282,
-    "mcp_calls": {},
-    "native_calls": {
-      "read": 1,
-      "bash": 2
-    },
-    "redundant_native_after_ctx": 0,
-    "duration_ms": 26354,
-    "task_id": "t9_optimize",
-    "scores": {
-      "relevancia": 5,
-      "correccion": 5,
-      "completitud": 5,
-      "accionabilidad": 5
-    },
-    "score_total": 5.0
-  },
-  {
-    "system": "OCMCP",
-    "response": "Let me first look at the function and its context.\nNow I see the three functions. The **key optimization**: instead of iterating every line, join the block text and use `str.find` to jump directly to the next `{`/`}` or `end`, skipping irrelevant lines entirely.\n\nThe improvement: for `_find_block_end_brace`, use `str.find(\"...\", pos)` on a joined string to leapfrog between braces. For `_find_block_end_keyword`, use `block_text.find(\"\\nend\", pos)` to jump lines without `end`.\n\nLet me also check if there's a `_find_block_end_keyword` optimization: lines 291-304. The `\"end\" not in line` guard already skips most lines, but still iterates every line in Python (the `for` loop overhead + `in` check). The real savings come from using `str.find` on the raw text.\n\nLet me implement:\nNow optimize `_find_block_end_keyword`:\nNow optimize `_find_block_end_sql`:\nLet me verify it parses and tests pass:\n14 tests pass.\n\n## Mejora aplicada\n\nLas tres variantes (`_brace`, `_keyword`, `_sql`) ahora operan sobre el bloque completo unido (`\"\\n\".join(...)`) y usan `str.find` / `re.search` para saltar directamente a los tokens relevantes, **sin iterar líneas que no los contienen**.\n\n## Estimación (500 líneas, 20 funciones de ~25 líneas cada una)\n\n| Variante | Antes (líneas iteradas) | Después (saltos) | Reducción |\n|---|---|---|---|\n| **`_brace`** | 20 × 25 = **500** | ~2-4 saltos por función = **~60** | **~88%** |\n| **`_keyword`** | 20 × 25 = **500** | ~1 salto por función (al `end`) = **~20** | **~96%** |\n| **`_sql`** | 20 × 25 = **500** | ~3-4 saltos regex = **~70** | **~86%** |\n\n**Peor caso** (función única de 200 líneas, el tope): antes 200 iteraciones, después ~2-8 saltos.\n\nEl ahorro viene de que `str.find` en C recorre el string sin invocar el intérprete de Python por cada línea, y las líneas sin tokens se saltan en masa.",
-    "tokens": 271158,
-    "mcp_calls": {},
-    "native_calls": {
-      "read": 2,
-      "grep": 1,
-      "edit": 3,
-      "bash": 2,
-      "glob": 1
-    },
-    "redundant_native_after_ctx": 0,
-    "duration_ms": 46588,
-    "task_id": "t9_optimize",
-    "scores": {
-      "relevancia": 5,
-      "correccion": 5,
-      "completitud": 5,
-      "accionabilidad": 5
-    },
-    "score_total": 5.0
-  },
-  {
-    "system": "OC",
-    "response": "## Auditoría de seguridad — `leo_code/server/server.py`\n\n### 🔴 Crítico — Path Traversal en `file_path` (endpoints `POST /search` L174, `GET /stats` L233)\n\nLas líneas `os.path.abspath(v.file_path).startswith(repo_prefix)` **no previenen path traversal**: si un atacante logra que un `file_path` como `../../../etc/passwd` sea almacenado en el índice (o si un `repo_path` contiene `..`), el `startswith` lo aprobará. `os.path.abspath` *resuelve* `..` antes del chequeo, pero si el `repo_path` mismo contiene `../..`, ambos lados se resuelven simétricamente y cualquier ruta arbitraria fuera del repo puede llegar a compararse como \"dentro\". Además, `file_path` se devuelve sin sanitizar en `SearchResponse` (L188).\n\n### 🔴 Crítico — Exposición de errores internos en respuestas (`detail=str(e)`)\n\nLos endpoints `/context` (L160), `/search` (L194), `/index` (L209) y `/sessions` (L348) devuelven `str(e)` crudo en la respuesta HTTP. Un error interno (ej. fallo de conexión a Qdrant, sintaxis de query, stack traces de dependencias) se filtra al cliente. Esto es información sensible de infraestructura.\n\n### 🟡 Medio — Rate limiting bypass por IP falsificable\n\n`_check_rate_limit` (L98-105) usa `request.client.host` (L136). FastAPI obtiene esto de la conexión TCP directa; si hay un proxy inverso (nginx, cloudflare) sin configuración `proxy_headers`, el rate limit se aplica contra la IP del proxy, no la real. Además, el rate limit es **por worker de uvicorn** — `_rate_limits` es un dict en memoria local, no compartido entre workers (L93). Con `--workers=4`, cada worker permite 30 req/10s, dando 120 req/10s efectivos.\n\n### 🟡 Medio — `CORS allow_origins=[\"*\"]` excesivo (L124)\n\nPermite cualquier origen, método y header. Para un servidor MCP (comunicación interno/cliente-controlado) no es crítico pero debilita la postura de seguridad si el servidor se expone en red. Debería limitarse al origen del cliente MCP.\n\n### 🟡 Medio — Sin headers de seguridad (HSTS, X-Content-Type-Options, etc.)\n\nNo hay middleware que establezca `Strict-Transport-Security`, `X-Content-Type-Options: nosniff`, `X-Frame-Options` ni `Content-Security-Policy`. Si el servidor se expone públicamente, estos headers mitigan ataques MITM, MIME sniffing y clickjacking.\n\n### 🟢 Bajo — No hay límite de tamaño en `query`/`repo_path`/`languages`\n\nLos Pydantic models `ContextRequest`, `SearchRequest`, `IndexRequest` no tienen validación de `max_length` ni `pattern`. Un atacante puede enviar queries de megabytes o `repo_path` de rutas muy largas para DoS por memoria/string processing.\n\n### 🟢 Bajo — Redis cache conectado sin autenticación visible\n\nL115-118: si la cache falla, silencia la excepción. Si Redis se conecta exitosamente sin contraseña (por `redis://localhost` default), un atacante en la misma red podría leer/contaminar el cache.\n\n---\n\n**Resumen:** 2 críticos (path traversal potencial + fuga de errores), 3 medios (rate limiting ineficaz, CORS abierto, sin security headers), 2 bajos (falta validación de inputs, Redis no autenticado).",
-    "tokens": 34192,
-    "mcp_calls": {},
-    "native_calls": {
-      "read": 1
-    },
-    "redundant_native_after_ctx": 0,
-    "duration_ms": 18275,
-    "task_id": "t10_audit",
-    "scores": {
-      "relevancia": 5,
-      "correccion": 5,
-      "completitud": 5,
-      "accionabilidad": 5
-    },
-    "score_total": 5.0
-  },
-  {
-    "system": "OCMCP",
-    "response": "## Auditoría de seguridad — `leo_code/server/server.py`\n\n### 🔴 Crítico: Path traversal sin sanitizar en `file_path`\n\n- **Lugar**: `/stats` (línea 232-233), `/search` (línea 175-176), y todos los endpoints que usan `file_path` de capsules\n- **Problema**: `os.path.abspath(v.file_path)` se aplica al `file_path` de una cápsula ya indexada, pero si un atacante logra indexar un repositorio con symlinks, el `file_path` puede resolver fuera del repo. No hay verificación de que `os.path.abspath(v.file_path)` esté dentro del repo esperado.\n- **Impacto**: lectura de archivos arbitrarios del sistema.\n- **Fix**: agregar `os.path.commonpath([repo, resolved]) == os.path.normpath(repo)` después de cada `os.path.abspath()` sobre `v.file_path`.\n\n### 🔴 Crítico: Excepción → string de error expuesta al cliente\n\n- **Lugar**: `/context` L160, `/search` L194, `/index` L209, `/sessions` L348\n- **Problema**: `HTTPException(status_code=500, detail=str(e))` devuelve el mensaje de excepción crudo al cliente. Puede filtrar rutas internas, trazas de stack, config de bases de datos, versiones de dependencias.\n- **Fix**: loguear `str(e)` internamente y devolver `detail=\"Internal server error\"`.\n\n### 🔴 Crítico: Sin autenticación ni autorización en ningún endpoint\n\n- **Lugar**: todos los endpoints (L127–379)\n- **Problema**: cualquier persona con acceso a la red puede indexar repos, leer estadísticas, listar sesiones, y ejecutar consultas. Si el servidor está expuesto (host `0.0.0.0` por defecto), es acceso total.\n- **Fix**: agregar API key via header o middleware de autenticación.\n\n### 🟡 Medio: Rate limiting por IP es trivial de bypassear\n\n- **Lugar**: L93–105\n- **Problema**: \n  1. La IP se obtiene de `request.client.host` (L136), que en proxies inversos es `127.0.0.1`. No parsea `X-Forwarded-For`.\n  2. El rate limit es en memoria sin persistencia; reiniciar el server resetea todos los contadores.\n  3. Ventana de 30 requests / 10s es muy permisiva. Un atacante puede hacer 3 rps sostenidos sin restricción.\n  4. No hay rate limit en endpoints de indexación (`/index`, `/preindex`) que son mucho más caros.\n- **Fix**: usar `X-Forwarded-For` como fallback, reducir `_RATE_LIMIT_MAX`, aplicar rate limit también en `/index` y `/preindex`.\n\n### 🟡 Medio: Path traversal en `repo_path` (limitado pero presente)\n\n- **Lugar**: `/context` L140, `/search` L167, `/index` L201, `/preindex` L215, `/stats` L227\n- **Problema**: `os.path.abspath(req.repo_path)` resuelve cualquier path relativo. Si un atacante pasa `../../etc/passwd`, no hay una verificación de que el path resultante esté dentro de un directorio permitido. El `_ensure_indexed` podría fallar, pero no hay un rechazo temprano.\n- **Fix**: validar que `os.path.commonpath([BASE_ALLOWED_DIR, resolved]) == BASE_ALLOWED_DIR`.\n\n### 🟡 Medio: CORS permisivo expone APIs internas\n\n- **Lugar**: L124\n- **Problema**: `allow_origins=[\"*\"], allow_methods=[\"*\"], allow_headers=[\"*\"]` — cualquier sitio web en cualquier origen puede hacer peticiones desde el navegador de un usuario en la misma red.\n- **Fix**: restringir a orígenes específicos o quitarlo si el server solo sirve a herramientas CLI/IDE locales.\n\n### 🟢 Bajo: Headers de seguridad ausentes\n\n- **Lugar**: servidor completo — no hay middleware de seguridad HTTP.\n- **Problema**: faltan `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Strict-Transport-Security` (si sirve HTTPS).\n- **Fix**: agregar middleware `SecurityHeadersMiddleware`.\n\n### 🟢 Bajo: Logging de info sensible\n\n- **Lugar**: L397–412 (`print` de configuración), y log_level \"info\" por defecto en uvicorn (L413)\n- **Problema**: aunque no se loguean queries aún, `uvicorn` con `log_level=\"info\"` loguea cada request (incluyendo paths como `/index` con paths del sistema). Usar `print()` en vez del logger configurado también es mala práctica.\n- **Fix**: reemplazar `print()` por `logging.getLogger()`, y considerar `log_level=\"warning\"` en producción.\n\n### 🟢 Bajo: Sin límite de tamaño en `req.query`\n\n- **Lugar**: `Contex",
-    "tokens": 36666,
-    "mcp_calls": {},
-    "native_calls": {
-      "read": 1
-    },
-    "redundant_native_after_ctx": 0,
-    "duration_ms": 29383,
-    "task_id": "t10_audit",
-    "scores": {
-      "relevancia": 5,
-      "correccion": 5,
-      "completitud": 5,
-      "accionabilidad": 5
-    },
-    "score_total": 5.0
-  },
-  {
-    "system": "OC",
-    "response": "Aquí tienes la explicación de la arquitectura de **leo-code** para un nuevo desarrollador:\n\n---\n\n## Arquitectura de leo-code\n\n### Estructura de directorios\n\n```\nleo_code/\n├── core/          # Módulo 1: Núcleo determinista (sin dependencias externas pesadas)\n│   ├── parser.py       # AST → Capsules (Python + tree-sitter multilenguaje)\n│   ├── graphquery.py   # where/who_calls/impact/trace con Proof (cero LLM)\n│   ├── boundary.py     # Aristas cross-language (HTTP fetch → @app.get)\n│   ├── guardian.py     # Blast radius + cobertura de tests\n│   └── context.py      # Serializa Capsules a markdown para el LLM\n│\n├── rag/           # Módulo 2: Pipeline RAG + Agent (Producto 1)\n│   ├── engine.py       # Hub central: compute_context() unifica todo\n│   ├── classifier.py   # Clasifica query en 13 tipos de tarea\n│   ├── compressor.py   # Compresión adaptativa por tipo de tarea\n│   ├── encoder.py      # all-MiniLM-L6 embeddings (384-dim)\n│   ├── vector_store.py # Qdrant búsqueda semántica\n│   ├── bm25.py         # BM25 búsqueda exacta\n│   ├── scorer.py       # PageRank + TF-IDF estructural\n│   ├── indexer/        # Indexador con watchdog (incremental)\n│   ├── llm/            # 12 providers (Anthropic, OpenAI, Ollama…)\n│   ├── agent/          # AgentLoop + 18 tools + GoalRunner\n│   └── cli/            # Click CLI: ask/chat/tui/guardian/index\n│\n└── server/        # Módulo 3: Servidores (Producto 2)\n    ├── mcp_server.py   # MCP stdio (6 tools para Claude Code/opencode)\n    └── server.py       # FastAPI HTTP sidecar (12 endpoints, puerto 9898)\n```\n\n### Entrypoints (definidos en `pyproject.toml`)\n\n| Comando | Archivo | Propósito |\n|---|---|---|\n| `leo-code` | `rag/cli/app.py:cli` | CLI interactiva (Producto 1) |\n| `leo-code-mcp` | `server/server.py:main` | Sidecar HTTP FastAPI (Producto 2) |\n| `leo-code-mcp-stdio` | `server/mcp_server.py:run_stdio` | MCP vía stdio para Claude Code |\n| `leo-code-meter` | `meter/main.py:main` | Panel flotante Windows (token savings) |\n\n### Flujo de una query (`leo-code ask`)\n\n```\nUsuario escribe query\n        │\n        ▼\napp.py:cli() → ask()                # Parsea args, carga .env\n        │\n        ▼\nagent/loop.py:AgentLoop.stream_run()  # Bucle agente con streaming\n        │\n        ├── _build_context()\n        │     └── engine.py:compute_context()\n        │           ├── classifier.py       → 13 tipos de tarea\n        │           ├── exact match         → rutas/símbolos exactos\n        │           ├── vector_store.search → Qdrant semántico\n        │           ├── bm25.search         → BM25 disperso\n        │           ├── scorer.score        → PageRank + TF-IDF\n        │           ├── RRF fusion          → ranking combinado\n        │           └── compressor.compress → compresión adaptativa\n        │\n        ├── llm.generate() / stream()      → llamada al LLM\n        │\n        └── (bucle tools)                  → read/write/trace/impact…\n              └── core/graphquery.py        → herramientas deterministas\n```\n\n### Los 3 módulos principales\n\n**1. `core/` — Núcleo determinista**\n- `parser.py` convierte AST a `Capsule` (id, type, name, file_path, calls, called_by…)\n- `graphquery.py` responde `where/who_calls/impact/trace` con `Proof` (file:line) — cero tokens de LLM\n- `boundary.py` conecta llamadas HTTP (fetch) con endpoints del server (`@app.get`)\n- `guardian.py` calcula quién se rompe + cobertura de tests\n\n**2. `rag/` — Pipeline RAG + agente**\n- `engine.py` es el hub: `compute_context()` orquesta clasificación → 4 búsquedas (exacta, semántica, BM25, estructural) → RRF → compresión\n- 13 tipos de tarea con budgets de tokens distintos\n- `rag/llm/` tiene 12 providers y 40+ modelos con catálogo de costs\n- `rag/agent/loop.py` tiene 3 modos: `rag_direct` (one-shot), `run` (tool loop), `run_smart` (intenta direct, escala a tools)\n\n**3. `server/` — Servidores MCP + HTTP**\n- `mcp_server.py`: indexación estructural instantánea (~2000 capsules/s), embeddings en background. 6 tools para Claude Code/opencode\n- `server.",
-    "tokens": 51608,
-    "mcp_calls": {},
-    "native_calls": {
-      "invalid": 1,
-      "task": 1
-    },
-    "redundant_native_after_ctx": 0,
-    "duration_ms": 131924,
-    "task_id": "t11_onboard",
-    "scores": {
-      "relevancia": 5,
-      "correccion": 5,
-      "completitud": 5,
-      "accionabilidad": 5
-    },
-    "score_total": 5.0
-  },
-  {
-    "system": "OCMCP",
-    "response": "Now let me read key files in parallel:\nNow I have a solid picture. Here's the architectural explanation:\n\n---\n\n## Arquitectura de leo-code\n\n### Estructura de directorios\n\n```\nleo-code/\n├── leo_code/\n│   ├── engine.py              ← MOTOR compartido (indexado + retrieval + compresión)\n│   ├── core/                  ← Módulo 1: AST, grafo, queries deterministas\n│   │   ├── graphquery.py      ←   Cerebro: where/who_calls/trace/impact sin LLM\n│   │   ├── parser_ts.py       ←   Parseo tree-sitter multi-lenguaje\n│   │   ├── parser.py          ←   Parseo genérico\n│   │   ├── graph.py           │   Construcción del grafo de cápsulas\n│   │   ├── refgraph.py        │   Resolución de referencias entre símbolos\n│   │   ├── boundary.py        │   Aristas cross-lenguaje (HTTP/RPC)\n│   │   ├── guardian.py        │   Impact analysis (qué se rompe)\n│   │   ├── evidence.py        │   Prueba citable (archivo:línea)\n│   │   ├── cache.py           │   Caché LRU de resultados\n│   │   ├── tokens.py          │   Conteo eficiente de tokens\n│   │   ├── metrics.py         │   Métricas de uso/latencia\n│   │   └── benchmark.py       │   Benchmark de recall/precisión\n│   ├── rag/                   ← Módulo 2: indexación persistente + retrieval híbrido\n│   │   ├── indexer/           │   Indexación AST → cápsulas (build/sync/watcher)\n│   │   ├── vector_store.py    │   Qdrant (embeddings semánticos)\n│   │   ├── bm25.py            │   BM25 sparse search (términos exactos)\n│   │   ├── encoder.py         │   Sentence-transformers, warm-up lazy\n│   │   ├── classifier.py      │   Clasifica tarea: code_query / search / no_code\n│   │   ├── compressor.py      │   Comprime cápsulas → contexto fino (presupuesto tokens)\n│   │   ├── scorer.py          │   PageRank + TF-IDF identifier-aware\n│   │   ├── agent/             │   Loop agente multi-turn (LLM + tools)\n│   │   ├── llm/               │   Wrappers de proveedores LLM\n│   │   ├── conversation_history.py │ Historial conversacional\n│   │   └── cli/app.py         │   CLI entrypoint (Click)\n│   ├── server/                ← Módulo 3: servidores\n│   │   ├── server.py          │   FastAPI HTTP (puerto 9898, sidecar)\n│   │   └── mcp_server.py      │   MCP stdio (tools: get_context/guard/etc)\n│   ├── session/               │   Compresión y gestión de sesiones\n│   ├── sdk/                   │   SDK Python mínimo\n│   ├── tui/                   │   Textual TUI (monitor de estado)\n│   ├── meter/                 │   Medición de impacto (tokens ahorrados)\n│   ├── learning/              │   Aprendizaje por refuerzo (feedback loop)\n│   └── plugins/               │   Sistema de plugins\n└── tests/\n```\n\n### Entrypoints (3)\n\n1. **CLI** — `leo-code` (definido en `pyproject.toml` → `leo_code.rag.cli.app:cli`). Comandos: `ask`, `chat`, `index`. Agente interactivo de terminal.\n\n2. **Sidecar HTTP** — `leo-code-mcp` (→ `leo_code.server.server:main`). Servidor FastAPI en puerto 9898. Endpoints: `/context`, `/search`, `/index`, `/health`, `/stats`, `/metrics`.\n\n3. **MCP stdio** — `leo-code-mcp-stdio` (→ `leo_code.server.mcp_server:run_stdio`). Servidor MCP sobre stdin/stdout. Expone tools: `get_context`, `where`, `who_calls`, `trace`, `impact`, `guard`. Es la integración con Claude Code, opencode, Cursor, etc.\n\n### Flujo de una query (ej: `get_context(\"¿quién llama a validate_user?\")`)\n\n```\nUsuario escribe en Claude Code/opencode\n        ↓\nCliente MCP envía tool_call vía stdio\n        ↓\nmcp_server.py recibe → handler get_context\n        ↓\n_ensure_structural(repo): indexa el repo si es primera vez\n  → Indexer.build() parsea AST con tree-sitter → cápsulas (símbolos con tipo, nombre, file:line, docstring, código)\n  → Guarda en disco (kc_index.json.gz) y Qdrant (embeddings)\n        ↓\n_graphquery(repo): construye GraphQuery sobre el grafo de cápsulas\n  → Linkea aristas cross-lenguaje (HTTP/RPC)\n        ↓\ncompute_context(repo, query, \"code_query\", budget):\n  1. classify_task → \"code_query\"\n  2. Exact match (palabras de la query vs file_path, name)\n  3",
-    "tokens": 115253,
-    "mcp_calls": {
-      "get_context": 1
-    },
-    "native_calls": {
-      "read": 15
-    },
-    "redundant_native_after_ctx": 15,
-    "duration_ms": 50107,
-    "task_id": "t11_onboard",
-    "scores": {
-      "relevancia": 5,
-      "correccion": 5,
-      "completitud": 5,
-      "accionabilidad": 5
-    },
-    "score_total": 5.0
-  },
-  {
-    "system": "OC",
-    "response": "I'll start by reading both files in parallel.\nAhora que tengo ambos archivos, aquí está el análisis completo:\n\n---\n\n## README.md — Problemas y mejoras\n\n### 1. Jerarquía visual\n\n**Problema**: El readme es plano — todo es texto corrido. El punto más importante (la garantía del 100%) queda enterrado en una tabla sin suficiente contraste.\n\n**Solución**: Encabezados más cortos + Table of Contents arriba + **un `> [!TIP]` o `> [!NOTE]` destacado** para la garantía:\n\n```\n> [!CAUTION]\n> **Garantía formal:** `python benchmark/audit_formal.py` contra oráculos independientes\n> — 100% precisión Y recall o el commit no mergea. [Benchmark abierto →](benchmark/audit_formal.py)\n```\n\nY un `vagrant` o `hero` section con icono grande antes del `## Por qué es distinto`:\n\n```\n<p align=\"center\">\n  <strong>100%</strong> de precisión estructural. Cero alucinaciones de código.\n  <br/><sub>Verificado contra el compilador de TypeScript y el AST de Python en ~6M LOC.</sub>\n</p>\n```\n\n### 2. Headline principal\n\n**Problema**: \"La primera inteligencia de código DEMOSTRADA, no estimada.\" es potente pero **demasiado abstracto** para quien no sabe qué significa \"demostrada\".\n\n**Mejora concreta**: Pon un **subheadline que traduzca a dolor del usuario**:\n\n| Actual | Propuesto |\n|--------|-----------|\n| *La primera inteligencia de código DEMOSTRADA, no estimada.* | **leo-code**: inteligencia de código con **garantía formal.** |\n| | *¿Puedo borrar esta función? ¿Qué rompe este cambio? leo responde con prueba `archivo:línea` — el 100% de las veces. Sin LLM, sin alucinaciones.* |\n\nEl header debe **nombrar el miedo**: \"¿Qué rompe si cambio X?\" es lo que duele. Empieza con eso.\n\n### 3. Copy — ritmo y persuasión\n\n**Problema**: El párrafo \"Eso es una categoría nueva\" (L14-18) hace una comparación débil. \"GPT-5, Claude, Copilot, Cursor y opencode _estiman_\" suena a acusación difusa. Mejor un **contraste directo con el lector como protagonista**:\n\n**Antes**:\n> GPT-5, Claude, Copilot, Cursor y opencode *estiman* la estructura de tu repo; leo la **demuestra**\n\n**Después**:\n> **Tú ahora**: `¿puedo borrar esta función?` → el agente *adivina*.  \n> **Con leo**: la misma pregunta → `impact(delete_user)` → *\"lo llama auth.py:142, admin.py:88 (sin test)\"* — **prueba, no estimación.**\n\n### 4. CTAs\n\n**Problema**: La instalación (L87-97) está bien, pero no hay un **call-to-action persuasivo** entre el \"por qué\" y el \"cómo\". El salto de la promesa a `curl ...` es brusco.\n\n**Solución**: Entre la tabla de números (L61-66) y la instalación, poner:\n\n```\n---\n\n## Pruébalo ahora — 30 segundos, sin API key\n\n```bash\ncurl -fsSL https://raw.githubusercontent.com/manzzaano/leo-code/main/install.sh | bash\nleo-code                         # sin --model → modo determinista, cero LLM\n/trace process_payment           # 15ms, con prueba archivo:línea\n```\n\n**Sin cuenta, sin API key, sin riesgo.** El motor entero corre local.\n\n---\n```\n\n### 5. Estructura general\n\n**Problema**: README tiene 248 líneas y tarda demasiado en dar el \"qué\" vs \"para qué sirve\". La sección \"El cerebro determinista\" (L70-80) debería **subir** antes que la arquitectura.\n\n**Orden propuesto**:\n\n1. **Hero** (headline + sub + garantía formal)\n2. **Dos productos** (tabla — mover arriba)\n3. **El problema que resuelve** (3 bullets de la sección \"por qué es distinto\")\n4. **Demo: cómo se ve** (un ejemplo real trace/impact — lo más persuasivo)\n5. **Instalación** (CTA inmediato después del hook)\n6. **Uso** (agente + MCP)\n7. **Benchmarks / garantía** (tabla formal)\n8. **Arquitectura** (al final — solo quien contribuye lo necesita)\n\n---\n\n## docs/index.md — Problemas y mejoras\n\n### 1. Subheadline incorrecto\n\n**Problema**: \"Funciones completas con sus dependencias, no fragmentos de 500 tokens.\" es un **feature**, no un **beneficio**. El que llega a docs no sabe qué es KC-RAG ni le importa.\n\n**Mejora**: \n\n| Actual | Propuesto |\n|--------|-----------|\n| *Funciones completas…* | **Tu agente deja de alucinar estructura.** |\n| | *leo-code responde cada",
-    "tokens": 34596,
-    "mcp_calls": {},
-    "native_calls": {
-      "read": 2
-    },
-    "redundant_native_after_ctx": 0,
-    "duration_ms": 31681,
-    "task_id": "t12_design_review",
-    "scores": {
-      "relevancia": 5,
-      "correccion": 5,
-      "completitud": 5,
-      "accionabilidad": 5
-    },
-    "score_total": 5.0
-  },
-  {
-    "system": "OCMCP",
-    "response": "Let me read both files first.\nAquí va el análisis con sugerencias concretas:\n\n---\n\n## README.md\n\n### Problemas detectados\n\n1. **Headline débil.** \"La primera inteligencia de código DEMOSTRADA, no estimada\" es larga y no pincha — no dice *para qué sirve* ni *a quién*.\n2. **Falta un CTA arriba.** El usuario lee 18 líneas antes de saber qué hacer. El primer link accionable está en línea 85.\n3. **Bloque de metrics prematuro.** La tabla de garantías (líneas 50-57) pone data cruda antes de que el usuario entienda el *beneficio*. Es información, no persuasión.\n4. **La tabla de productos (líneas 22-25) es plana.** No diferencia bien los dos productos ni da un CTA individual por cada uno.\n5. **El copy es técnicamente denso.** Frases como \"proof-carrying code intelligence\" y \"grafo verificado al 100% de precisión Y recall contra oráculos independientes\" son admirables pero no venden.\n\n### Propuesta concreta\n\nSustituir el bloque superior (líneas 1-18) por:\n\n```markdown\n# 🧠 leo-code\n\n**Tu agente de código deja de alucinar estructura. Hoy.**\n\nleo-code es el único agente que **demuestra** quién llama a qué, qué se rompe\nsi cambias algo, y cómo fluye un dato de A a B — con citas `archivo:línea` y\n**cero tokens de LLM** en las preguntas estructurales.\n\nNo estima. Prueba.\n\n[**↓ Instalar en 30 segundos**](#instalación) · [**¿Cómo funciona?**](#el-cerebro-determinista) · [**Benchmarks**](#tests-y-benchmarks)\n```\n\nY mover la tabla de productos justo debajo, pero con CTAs individuales:\n\n```markdown\n| Producto | Para qué | Para quién | Prueba |\n|----------|----------|------------|--------|\n| **`leo-code`** | Agente + TUI con chat, grafo en vivo y medidor de ahorro | Devs que quieren un agente que no alucine | `curl -fsSL ... \\| bash` |\n| **`leo-mcp`** | Motor MCP (6 tools) para Claude Code / opencode / Cursor | Devs que ya usan otro agente y quieren matar sus alucinaciones | `claude mcp add leo-code -- ...` |\n```\n\nLa tabla de garantías (líneas 50-57) debería ir **al final de la sección \"Por qué es distinto\"**, no antes de \"El cerebro determinista\".\n\n### CTAs que faltan\n\n- Un CTA tipo **\"Ver auditoría formal en 30s →\"** que enlace al bloque de auditoría.\n- Un CTA por cada producto en la tabla, no solo comandos de instalación genéricos.\n\n---\n\n## docs/index.md\n\n### Problemas detectados\n\n1. **Headline no vende el beneficio.** \"Funciones completas con sus dependencias, no fragmentos de 500 tokens\" es correcto pero soso. No dice *por qué importa*.\n2. **El CTA de instalación está ahí pero es genérico** (\"Empieza aquí: instala en 30 segundos →\"). No hay urgencia ni especificidad.\n3. **Falta jerarquía visual.** Todo está al mismo nivel: instalación, guías, conceptos, referencia. El ojo no sabe por dónde empezar.\n4. **El ejemplo de SDK es correcto pero está escondido** después de 4 tablas. Si es el quickstart, que sea lo segundo que veas.\n5. **No hay mención al \"por qué\"** — el argumento central (prueba formal, cero alucinación) que sí está en el README desaparece aquí.\n\n### Propuesta concreta\n\nSustituir las primeras líneas por:\n\n```markdown\n# leo-code — Tu agente, sin humo\n\nConéctalo a Claude Code, opencode o Cursor y tus preguntas estructurales\ndejan de ser adivinanzas: **respuestas con prueba, cero tokens de LLM**.\n\n[**↓ Instalar ahora**](instalacion.md) · [**Ver demo →**](#)\n```\n\nLuego reorganizar la página en este orden:\n\n1. **Instalación rápida** (bloque bash, como ahora)\n2. **SDK — ejemplo rápido** (subirlo, es lo que el visitante técnico busca)\n3. **Guías** (la tabla de 3 columnas)\n4. **Conceptos clave** (solo si el usuario necesita profundizar)\n\nEl CTA actual \"Empieza aquí: instala en 30 segundos →\" mejorarlo a algo como **\"Tu agente no debería adivinar. →\"** que conecta con el dolor.\n\n---\n\n## Problemas compartidos en ambos docs\n\n| Issue | README | docs/index.md |\n|-------|--------|---------------|\n| Sin hero CTA arriba | ❌ | ❌ |\n| El \"para quién\" no está claro en primeros 3 segundos | ❌ | ❌ |\n| Copy prioriza especificaciones técnicas sobre benefici",
-    "tokens": 36163,
-    "mcp_calls": {},
-    "native_calls": {
-      "read": 2
-    },
-    "redundant_native_after_ctx": 0,
-    "duration_ms": 31966,
-    "task_id": "t12_design_review",
-    "scores": {
-      "relevancia": 5,
-      "correccion": 5,
-      "completitud": 5,
-      "accionabilidad": 5
-    },
-    "score_total": 5.0
-  },
-  {
-    "system": "OC",
-    "response": "**Servidor:** `leo_code/server/server.py` (FastAPI + Pydantic + Uvicorn). Sin SQLAlchemy, sin ORM.\n\n**Total endpoints FastAPI:** 12 — 4 usan `response_model`, 8 no.\n\n**Endpoints SIN `response_model`:**\n\n| Método | Path | Línea |\n|---|---|---|\n| GET | `/health` | 127 |\n| POST | `/index` | 197 |\n| POST | `/preindex` | 212 |\n| GET | `/metrics` | 255 |\n| GET | `/metrics/prometheus` | 273 |\n| GET | `/sessions` | 325 |\n| GET | `/plugins` | 354 |\n| GET | `/skills` | 368 |\n\nAdemás hay un MCP server (`mcp_server.py`) con 2 handlers + 6 tools dispatch, pero no aplica `response_model` — usa `mcp.types.Tool` con `inputSchema`.",
-    "tokens": 30551,
-    "mcp_calls": {},
-    "native_calls": {
-      "task": 1
-    },
-    "redundant_native_after_ctx": 0,
-    "duration_ms": 41166,
-    "task_id": "t13_framework",
-    "scores": {
-      "relevancia": 5,
-      "correccion": 5,
-      "completitud": 5,
-      "accionabilidad": 5
-    },
-    "score_total": 5.0
-  },
-  {
-    "system": "OCMCP",
-    "response": "**11 endpoints.** Frameworks: **FastAPI** + **Pydantic** (no SQLAlchemy — las menciones son del clasificador/parser de terceros).\n\n| Endpoint | `response_model` |\n|---|---|\n| `GET /health` | ❌ |\n| `POST /context` | ✅ `ContextResponse` |\n| `POST /search` | ✅ `SearchResponse` |\n| `POST /index` | ❌ |\n| `POST /preindex` | ❌ |\n| `GET /stats` | ✅ `StatsResponse` |\n| `GET /metrics` | ❌ |\n| `GET /metrics/prometheus` | ❌ (usando `PlainTextResponse` tácito) |\n| `GET /benchmark` | ✅ `BenchmarkResponse` |\n| `GET /sessions` | ❌ |\n| `GET /plugins` | ❌ |\n\n**5 endpoints sin `response_model`:** `/health`, `/index`, `/preindex`, `/metrics`, `/metrics/prometheus`, `/sessions`, `/plugins` — en realidad **7**.",
-    "tokens": 69990,
-    "mcp_calls": {
-      "get_context": 1
-    },
-    "native_calls": {
-      "grep": 5,
-      "read": 1
-    },
-    "redundant_native_after_ctx": 6,
-    "duration_ms": 27478,
-    "task_id": "t13_framework",
-    "scores": {
-      "relevancia": 5,
-      "correccion": 5,
-      "completitud": 5,
-      "accionabilidad": 5
-    },
-    "score_total": 5.0
-  },
-  {
-    "system": "OC",
-    "response": "Aquí está la cadena completa desde `AgentLoop.stream_run()` hasta la respuesta del LLM:\n\n## Fase 1: Inicialización (`loop.py:555`)\n\n1. **`_init_llm(model)`** (`loop.py:787`) — parsea `\"deepseek/deepseek-v4-flash\"` → provider=`\"openai\"`, model=`\"deepseek-v4-flash\"`\n2. **`llm/__init__.py:60`** — `get_provider(\"openai\", ...)` → `OpenAIProvider`\n3. **`openai_adapter.py:38`** — `OpenAIProvider.__init__()` — guarda api_key, base_url, model\n4. **`loop.py:608`** — `classify_task(query)` via `rag/classifier.py:128`\n5. **`loop.py:618`** — `_build_context()` → `engine.py:164` (`_do_index`) → `engine.py:221` (`compute_context`):\n   - Qdrant vector search + BM25 sparse search + structural scorer → RRF fusion → `compress()` (`rag/compressor.py:90`) → `serialize_context()` (`core/context.py:4`)\n6. **`loop.py:646`** — `tool_defs = self.tools.get_openai_definitions()`\n\n## Fase 2: Loop principal — LLM call (`loop.py:654`)\n\n7. **`loop.py:664`** — `_compact_messages(messages)` — trunca historial\n8. **`loop.py:674`** — **`self.llm.stream(messages, tools)`** → `openai_adapter.py:113`:\n   - Arma kwargs con `model`, `messages`, `tools`, `temperature=0.2`, `max_tokens`, `stream=True`\n   - **`openai_adapter.py:130`** — **`self.client.chat.completions.create(**kwargs)`** → HTTP POST a `https://api.deepseek.com/v1/chat/completions`\n9. Itera el stream (`openai_adapter.py:133-154`): acumula `delta.content`, `delta.tool_calls`, `delta.reasoning_content`\n10. Post-stream (`openai_adapter.py:156-165`): yield `{\"type\": \"reasoning\"}` y `{\"type\": \"tool_call\"}` por cada tool call acumulada\n\n## Fase 3: Procesamiento de tool calls (`loop.py:714`)\n\n11. Si hay `tool_calls` → `self.tools.execute(name, args, repo_path)` en `tools.py:272`\n12. Vuelve al paso 7 para la siguiente iteración (hasta `max_iterations`)\n13. Si no hay tool calls → retorna `{\"respuesta\": text, ...}`\n\n## Rutas no-streaming\n\n- `run()` → `self.llm.generate()` → misma HTTP API pero sin stream\n- `_finalize()` → mismo patrón",
-    "tokens": 48534,
-    "mcp_calls": {},
-    "native_calls": {
-      "skill": 1,
-      "task": 1
-    },
-    "redundant_native_after_ctx": 0,
-    "duration_ms": 59302,
-    "task_id": "t14_cross_file",
-    "scores": {
-      "relevancia": 5,
-      "correccion": 5,
-      "completitud": 5,
-      "accionabilidad": 5
-    },
-    "score_total": 5.0
-  },
-  {
-    "system": "OCMCP",
-    "response": "Now let me check the `stream` method implementation in the OpenAI adapter (used as the default provider):\nNow let me check `_build_user_content`, `_init_llm`, and the `_finalize` method, plus `engine.compute_context`:\nNow let me see the rest of `compute_context` and `compress`:\nNow I have the full picture. Here's the complete trace:\n\n---\n\n## Traza: `AgentLoop.stream_run()` → respuesta del LLM\n\n### Paso 1 — Inicialización (loop.py:555-601)\n`stream_run()` configura el LLM (`_init_llm`, línea 580-581), resuelve `repo_path`, carga historial de sesión, y añade el mensaje `system` con `_system_prompt()`. Construye el `user_content` (texto + imágenes) via `_build_user_content()`.\n\n### Paso 2 — Clasificación de la query (loop.py:608-610)\nLlama a `classify_task(query)` en `leo_code/rag/classifier.py:128`. Matchea la query contra patrones regex de `_TASK_SIGNAL_RES` y devuelve un `task_type` (`code_query`, `code_edit`, `debug`, etc.).\n\n### Paso 3 — Construcción del contexto KC-RAG (loop.py:617-621)\n`self._build_context()` en loop.py:807:\n\n1. **Indexación** — Via `engine._do_index(repo)` si el repo no estaba indexado (loop.py:826).\n2. **Cableado de tools** — Carga las cápsulas del repo en el `ToolRegistry` (loop.py:833).\n3. **compute_context()** — `leo_code/engine.py:221`. Esta función es el núcleo del retrieval:\n   - Obtiene todas las cápsulas del indexador + vector store Qdrant.\n   - **Hybrid retrieval**: exact match (por path/nombre) + semántico (Qdrant) + BM25 + scorer estructural (PageRank+TF-IDF).\n   - **RRF (Reciprocal Rank Fusion)**: fusiona los 4 rankings en uno solo.\n   - Llama a `compress()` en `leo_code/rag/compressor.py` — que aplica `serialize_context()` con una estrategia según `task_type` (cuerpos completos solo para debug/optimize, firmas+docstrings para code_query, etc.).\n\n### Paso 4 — Inyección en `messages` (loop.py:625-626)\nEl contexto comprimido se inserta como segundo mensaje `system` (\"Contexto del codigo:\\n{context}\").\n\n### Paso 5 — Plugins y skills (loop.py:628-644)\n- `plugin_manager.pre_context()` → otro mensaje `system` si hay plugins.\n- `skill_manager.match()` + `inject()` → carga skills activas.\n\n### Paso 6 — Bucle principal (loop.py:654-768)\nPara cada iteración (`max_iterations`, por defecto 10):\n\n1. **Compresión de historial** via `_compact_messages()`.\n2. **Streaming LLM** (loop.py:674):\n   ```python\n   async for chunk in self.llm.stream(messages, active_tools, effort=next_effort):\n   ```\n   - `self.llm` es un `LLMProvider` (normalmente `OpenAIProvider`).\n   - `stream()` en `openai_adapter.py:113` llama a `self.client.chat.completions.create(stream=True)` → API HTTP al provider (DeepSeek/OpenAI).\n   - **Yields**: `str` (tokens de texto), `dict(type=\"tool_call\")`, o `dict(type=\"reasoning\")` (thinking models).\n\n3. **Sin tool_calls** → respuesta final. Yield `{\"type\": \"done\", \"respuesta\": text}`. Fin.\n4. **Con tool_calls** → ejecuta cada tool via `self.tools.execute()`, añade resultados a `messages`, y vuelve al paso 6.\n\n### Paso 7 — Fallback (loop.py:770-781)\nSi se agotan iteraciones sin respuesta completa: `_finalize()` llama a `self.llm.generate()` para sintetizar una respuesta.\n\n---\n\n### Orden de módulos atravesados\n\n| # | Módulo | Función | Qué hace |\n|---|--------|---------|----------|\n| 1 | `loop.py` | `stream_run()` | Orquesta todo |\n| 2 | `loop.py` | `_init_llm()` | Crea `OpenAIProvider` (o el que toque) |\n| 3 | `classifier.py` | `classify_task()` | Regex → `task_type` |\n| 4 | `engine.py` | `_do_index()` | Indexa AST del repo si falta |\n| 5 | `engine.py` | `compute_context()` | Retrieval híbrido |\n| 6 | `engine.py` | `_get_indexer().get_capsules()` | Todas las cápsulas |\n| 7 | `engine.py` | `vs.search()` (Qdrant) | Búsqueda semántica |\n| 8 | `engine.py` | `_get_bm25().search()` | Búsqueda BM25 |\n| 9 | `scorer.py` | `score_capsules()` | PageRank + TF-IDF |\n| 10 | `compressor.py` | `compress()` | Serializa contexto según estrategia |\n| 11 | `context.py` | `serialize_context()` | Formatea cápsulas a te",
-    "tokens": 234518,
-    "mcp_calls": {
-      "trace": 1,
-      "get_context": 2,
-      "where": 4
+      "get_context": 2
     },
     "native_calls": {
       "read": 10
     },
     "redundant_native_after_ctx": 10,
-    "duration_ms": 52159,
+    "duration_ms": 48356,
     "task_id": "t14_cross_file",
     "scores": {
       "relevancia": 5,
@@ -568,16 +587,16 @@
   },
   {
     "system": "OC",
-    "response": "## Arquitectura del Plugin System de leo-code\n\n### Tipos de plugins\n\n1. **Built-in** (`\"builtin\"`) — Clases Python que extienden `Plugin` (ABC). Se importan y registran directamente.\n2. **Subprocess** (`\"subprocess\"`) — Procesos externos en cualquier lenguaje que se comunican via JSON lines por stdin/stdout.\n3. **MCP** (`\"mcp\"`) — Servidores MCP (Model Context Protocol) usando JSON-RPC 2.0 sobre stdio.\n\nDefinidos en `PluginInfo.type` (`leo_code/plugins/__init__.py:33`).\n\n### Registro\n\n- **Built-ins**: `register_builtin(\"name\", Class)` a nivel de módulo (ej: `lsp.py:90`). El `PluginManager._ensure_builtins_loaded()` los auto-importa. Si no quieres auto-import, se configuran en `leo-code.json`.\n- **Subprocess/MCP**: Se declaran en la configuración `leo-code.json` con `type`, `command`, `args`:\n  ```json\n  {\"plugins\": {\"mi-herramienta\": {\"type\": \"subprocess\", \"command\": \"./tool.sh\"}}}\n  ```\n- Todos los plugins se instancian en `PluginManager.init()` (`__init__.py:199-249`) y sus tools se registran en `ToolRegistry` (`tools.py:80-82`).\n\n### Hooks del `Plugin` base (ABC, `__init__.py:40-74`)\n\n| Hook | Momento | Por defecto |\n|---|---|---|\n| `on_init(config, repo_path) → list[ToolDef]` | Inicialización | `[]` |\n| `on_tool_register(registry)` | Registrar tools | No-op |\n| `on_pre_context(query, capsules) → str` | Antes de llamar al LLM (se inyecta como system message) | `\"\"` |\n| `on_post_response(response, query) → str` | Post-procesar respuesta final | `response` sin cambios |\n| `on_pre_tool(tool_name, args) → bool` | **Guard**: antes de ejecutar tool. `False` bloquea. | `True` |\n| `on_post_tool(tool_name, args, result) → str` | Transformar resultado de tool | `result` sin cambios |\n| `on_pre_llm(messages) → list[dict]` | Modificar mensajes antes del LLM | `messages` sin cambios |\n| `on_post_llm(response) → str` | Transformar respuesta cruda del LLM | `response` sin cambios |\n| `on_shutdown()` | Limpieza | No-op |\n| `execute(tool_name, args, repo_path) → str` | Fallback para tools sin registrar | Error |\n\nSolo `pre_context()` y `shutdown()` están activamente conectados en el agent loop hoy.\n\n---\n\n### Ejemplo: Plugin que valida secrets antes de commitear\n\nBasado en los ya existentes `secrets.py` y `secretguard.py`:\nAquí tienes el ejemplo completo. Ya existen dos plugins que hacen exactamente esto — `secrets` y `secretguard` — pero voy a mostrarte cómo crearías uno propio con más features:\n### Cómo funciona\n\n1. **Hook `on_pre_tool`** se dispara antes de cada `write`/`edit`/`bash`. Si el comando bash contiene `commit` o `push`, escanea el contenido.\n2. Busca 8+ patrones de secrets (GitHub tokens, AWS keys, OpenAI keys, Slack tokens, passwords, claves privadas, certificados, Google API keys).\n3. Si encuentra coincidencias, lanza `PermissionError` — el agent loop captura el error y bloquea la operación.\n4. Tiene **allowlist** por directorio para falsos positivos (ej: `tests/fixtures/`).\n5. Patrones extra configurables desde `leo-code.json`.\n\n### Para activarlo\n\nAgrega a `leo-code.json` o `~/.leo-code/config.json`:\n```json\n{\"plugins\": {\"no_secrets\": {\"type\": \"builtin\", \"config\": {\"allowlist_paths\": [\"tests/fixtures\"]}}}}\n```\n\nO si quieres que cargue automáticamente, añade `import leo_code.plugins.no_secrets` en `_ensure_builtins_loaded()` (`__init__.py:178-184`).\n\n**Nota**: El hook `on_pre_tool` está definido en la interfaz pero aún no está conectado en el agent loop (`loop.py` no lo llama antes de ejecutar tools). Habría que añadirlo — pero los plugins `secrets` y `secretguard` que ya existen usan el mismo approach, lo que sugiere que está planeado o ya integrado en otra rama.",
-    "tokens": 81161,
+    "response": "## Arquitectura del Plugin System de leo-code\n\n### Tipos de plugins\n\n| Tipo | Clase | Comunicación |\n|---|---|---|\n| **Builtin** | `Plugin` (ABC) | Python directo, hooks completos |\n| **Subprocess** | `_SubprocessPlugin` | JSON-lines sobre stdin/stdout, hooks limitados |\n| **MCP** | `_MCPPlugin` | JSON-RPC 2.0 sobre stdio, solo tools |\n\n### Registro\n\n- **Builtins**: cada plugin llama `register_builtin(name, cls)` a nivel de módulo (`leo_code/plugins/__init__.py:407-408`). El `PluginManager._ensure_builtins_loaded()` los importa lazy (`:175-185`).\n- **Subprocess/MCP**: se configuran en `leo-code.json` con `\"type\"`, `\"command\"`, `\"args\"`. El `PluginManager.init()` los instancia y arranca (`:199-249`).\n\n### Hooks (Plugin ABC, `:40-74`)\n\n| Hook | Propósito |\n|---|---|\n| `on_init(config, repo_path)` | Configuración inicial |\n| `on_tool_register(registry)` | Registrar tools propias |\n| `on_pre_context(query, capsules)` | Inyectar contexto extra al LLM |\n| `on_post_response(response, query)` | Mutar respuesta final |\n| **`on_pre_tool(tool_name, args) -> bool`** | **Guardar tools (return False bloquea)** |\n| `on_post_tool(tool_name, args, result)` | Mutar resultado de tool |\n| `on_pre_llm(messages)` | Modificar mensajes antes del LLM |\n| `on_post_llm(response)` | Mutar salida del LLM |\n| `on_shutdown()` | Limpieza |\n\n### Ejemplo: Plugin que bloquea secrets al commitear\n\nBasado en el patrón de `leo_code/plugins/secrets.py`:\n\n```python\nimport re\nfrom leo_code.plugins import Plugin, register_builtin\n\nclass NoSecretsPlugin(Plugin):\n    name = \"no_secrets\"\n\n    PATTERNS = [\n        re.compile(r'(?i)(?:api[_-]?key|secret|password|token)\\s*[:=]\\s*[\"\\']?[A-Za-z0-9_\\-]{16,}'),\n        re.compile(r'AKIA[0-9A-Z]{16}'),           # AWS Access Key\n        re.compile(r'sk-[A-Za-z0-9_\\-]{32,}'),     # OpenAI key\n        re.compile(r'ghp_[A-Za-z0-9_]{36}'),       # GitHub PAT\n    ]\n\n    def on_init(self, config: dict, repo_path: str):\n        self.repo_path = repo_path\n\n    def on_pre_tool(self, tool_name: str, args: dict) -> bool:\n        if tool_name == \"bash\" and \"commit\" in args.get(\"command\", \"\"):\n            for pattern in self.PATTERNS:\n                if pattern.search(args.get(\"command\", \"\")):\n                    raise PermissionError(\n                        f\"[{self.name}] Bloqueado: secreto detectado en commit\"\n                    )\n        return True\n\nregister_builtin(\"no_secrets\", NoSecretsPlugin)\n```\n\nEl plugin se registra con `register_builtin` y se activa añadiéndolo al JSON:\n```json\n{\"plugins\": {\"no_secrets\": {\"type\": \"builtin\", \"config\": {}}}}\n```\n\nUsa el hook `on_pre_tool` — si `bash` contiene un `git commit` con texto que matchea patrones de API keys/tokens, lanza `PermissionError` y el commit no se ejecuta.",
+    "tokens": 296549,
+    "task_tokens": 247040,
     "mcp_calls": {},
     "native_calls": {
-      "task": 1,
-      "read": 3,
-      "write": 1
+      "bash": 1,
+      "task": 1
     },
     "redundant_native_after_ctx": 0,
-    "duration_ms": 91765,
+    "duration_ms": 76314,
     "task_id": "t15_plugin_arch",
     "scores": {
       "relevancia": 5,
@@ -589,17 +608,17 @@
   },
   {
     "system": "OCMCP",
-    "response": "## Arquitectura del Plugin System de leo-code\n\nEl sistema está en `leo_code/plugins/__init__.py:1-408` con tres tipos de plugins y dos mecanismos de extensión:\n\n### 1. Tipos de plugins (3)\n\n| Tipo | Clase | Cómo se ejecuta |\n|---|---|---|\n| **builtin** | `Plugin` (ABC, L40) | Python in-process. Heredas de `Plugin` y sobreescribes hooks. |\n| **subprocess** | `_SubprocessPlugin` (L76) | Proceso externo. Se comunica vía JSON lines por stdin/stdout. |\n| **mcp** | `_MCPPlugin` (L320) | Proceso externo. Sigue el protocolo MCP JSON-RPC (Model Context Protocol). |\n\n### 2. Registro\n\n- **Builtins**: se registran con `register_builtin(\"nombre\", ClasePlugin)` (L407), se cargan automáticamente en `_ensure_builtins_loaded()` (L176) y se instancian según la config.\n- **Subprocess/MCP**: se definen en `leo-code.json` o `~/.leo-code/config.json` con `{\"type\": \"subprocess\"}` / `{\"type\": \"mcp\"}` + command y args (L4-9).\n- `PluginManager.init()` (L199) itera la config, instancia cada plugin, llama `on_init`, registra tools.\n\n### 3. Hooks disponibles (ciclo de vida completo)\n\n| Hook | Método | Propósito |\n|---|---|---|\n| Init | `on_init(config, repo_path)` (L45) | Configuración inicial |\n| Register | `on_tool_register(registry)` (L48) | Registrar tools propias |\n| Pre-context | `on_pre_context(query, capsules)` (L51) | Inyectar contexto extra al LLM |\n| Post-response | `on_post_response(response, query)` (L54) | Modificar respuesta final |\n| Post-LLM | `on_post_llm(response)` (L66) | Modificar respuesta raw del LLM |\n| Pre-tool | `on_pre_tool(tool_name, args)` (L57) | **Interceptar/validar/bloquear** tools — retorna `False` o raise para bloquear |\n| Post-tool | `on_post_tool(tool_name, args, result)` (L60) | Modificar resultado de tool |\n| Pre-LLM | `on_pre_llm(messages)` (L63) | Modificar mensajes antes de enviar al LLM |\n| Shutdown | `on_shutdown()` (L69) | Limpieza |\n| Execute | `execute(tool_name, args, repo_path)` (L72) | Implementar una tool propia |\n\n### 4. Ejemplo real: plugin de secrets\n\nYa existen **tres** implementaciones que validan secrets antes de commitear — `secrets.py`, `no_secrets.py` y `secretguard.py`. La más completa es `SecretGuard` en `secretguard.py`:\n\n```python\nimport re\nfrom pathlib import Path\nfrom leo_code.plugins import Plugin, register_builtin\n\n_PATTERNS = [\n    (r'(?i)(api[_-]?key|apikey|secret|token|password)\\s*[:=]\\s*[\"\\']?[A-Za-z0-9_\\-@#$%^&+=]{16,}', \"possible secret\"),\n    (r'(?i)gh[pousr]_[A-Za-z0-9_]{36,}', \"GitHub token\"),\n    (r'(?i)sk-[A-Za-z0-9_]{32,}', \"OpenAI API key\"),\n    (r'(?i)AKIA[0-9A-Z]{16}', \"AWS access key\"),\n]\n\nclass SecretGuardPlugin(Plugin):\n    name = \"secretguard\"\n    version = \"0.1.0\"\n\n    def on_init(self, config, repo_path):\n        self.repo_path = repo_path\n        self.allowlist_paths = [Path(repo_path) / p for p in config.get(\"allowlist_paths\", [])]\n\n    def on_pre_tool(self, tool_name, args):\n        if tool_name not in (\"write\", \"edit\", \"bash\"):\n            return True\n        if tool_name == \"bash\" and \"commit\" not in args.get(\"command\", \"\"):\n            return True\n\n        text = args.get(\"content\") or args.get(\"newString\") or args.get(\"command\", \"\")\n        filepath = args.get(\"filePath\", \"\")\n        if self._is_allowlisted(filepath):\n            return True\n\n        findings = self._scan(text)\n        if findings:\n            raise PermissionError(f\"Secrets detectados:\\n\" + \"\\n\".join(findings))\n        return True\n\n    def _is_allowlisted(self, filepath):\n        p = Path(filepath)\n        return any(p.relative_to(allowed) or True for allowed in self.allowlist_paths\n                   if not isinstance(p.relative_to(allowed), Exception))\n\n    def _scan(self, text):\n        return [f\"  Línea {text[:m.start()].count(chr(10))+1}: {desc} (`{m.group()[:30]}...`)\"\n                for pat, desc in _PATTERNS for m in re.finditer(pat, text)][:10]\n\nregister_builtin(\"secretguard\", SecretGuardPlugin)\n```\n\n**Activación** en `leo-code.json`:\n```json\n{\"plugins\": {\"secretguard\": {\"type\": \"bui",
-    "tokens": 73785,
+    "response": "Aquí está la arquitectura completa del plugin system de leo-code:\n\n## Tipos de plugins\n\n| Tipo | Clase | Mecanismo |\n|---|---|---|\n| **builtin** | `Plugin` (Python ABC) | Carga directa de clases Python. Registrados vía `register_builtin()` al final de cada archivo. |\n| **subprocess** | `_SubprocessPlugin` | Proceso externo (cualquier lenguaje) comunicado por JSON lines sobre stdin/stdout. |\n| **mcp** | `_MCPPlugin` | Servidores MCP estándar (Model Context Protocol v2025-03-26) vía JSON-RPC 2.0 sobre stdio. |\n\n## Registro\n\nEn `leo-code.json` o `~/.leo-code/config.json`:\n\n```json\n{\n  \"plugins\": {\n    \"lsp\": {\"type\": \"builtin\", \"config\": {}},\n    \"my-tool\": {\"type\": \"subprocess\", \"command\": \"./my-plugin\"},\n    \"db\": {\"type\": \"mcp\", \"command\": \"npx\", \"args\": [\"-y\", \"mcp-server-postgres\"]}\n  }\n}\n```\n\nLos builtins se auto-registran con `register_builtin(\"nombre\", Clase)` (`leo_code/plugins/__init__.py:407`). El `PluginManager.init()` los carga bajo demanda importando `leo_code.plugins.*` (`__init__.py:176-184`).\n\n## Hooks del ciclo de vida\n\n`Plugin` (ABC) en `leo_code/plugins/__init__.py:40-73`:\n\n| Hook | Momento | Firma | Propósito |\n|---|---|---|---|\n| `on_init` | Al cargar | `(config, repo_path)` | Inicialización |\n| `on_tool_register` | Al registrar tools | `(registry)` | Publicar tools al agente |\n| `on_pre_context` | Antes de construir contexto | `(query, capsules) → str` | Inyectar contexto adicional |\n| `on_post_response` | Después de generar respuesta | `(response, query) → str` | Modificar respuesta final |\n| `on_pre_tool` | Antes de ejecutar un tool | `(tool_name, args) → bool` | **Validar/bloquear** tools |\n| `on_post_tool` | Después de ejecutar un tool | `(tool_name, args, result) → str` | Modificar resultado |\n| `on_pre_llm` | Antes de llamar al LLM | `(messages) → messages` | Interceptar/inyectar mensajes |\n| `on_post_llm` | Después de llamar al LLM | `(response) → str` | Post-procesar output del LLM |\n| `on_shutdown` | Al apagar | `()` | Limpieza |\n\nLos subprocess plugins reciben los hooks como mensajes JSON (`type: \"pre_context\"`, `\"shutdown\"`, etc.) y responden por JSON lines.\n\n## Ejemplo: el plugin `secretguard` ya existente\n\n`leo_code/plugins/secretguard.py` hace exactamente lo que pides — intercepta `write`, `edit` y `bash` (commits/pushes) via `on_pre_tool`, escanea el contenido contra 15 regex de secrets (API keys, tokens, claves privadas, AWS keys, Slack tokens, OpenAI keys), y si encuentra coincidencias lanza `PermissionError` bloqueando la operación.\n\nRegistro: `register_builtin(\"secretguard\", SecretGuardPlugin)` en la línea 87. Se activa añadiéndolo a la config:\n```json\n{\"plugins\": {\"secretguard\": {\"type\": \"builtin\", \"config\": {\"allowlist_paths\": [\"tests/fixtures/\"]}}}}\n```",
+    "tokens": 71790,
+    "task_tokens": 0,
     "mcp_calls": {
       "get_context": 1
     },
     "native_calls": {
-      "glob": 2,
       "read": 5
     },
-    "redundant_native_after_ctx": 7,
-    "duration_ms": 38767,
+    "redundant_native_after_ctx": 5,
+    "duration_ms": 30200,
     "task_id": "t15_plugin_arch",
     "scores": {
       "relevancia": 5,
