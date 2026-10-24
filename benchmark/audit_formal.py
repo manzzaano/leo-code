@@ -170,7 +170,7 @@ def check_e(repos):
     budget = 20 + 40_000 / max(n, 1)
     ok = per_symbol <= budget and not inline_write
     return ok, (f"{Path(repo).name}, {n:,} símbolos: reconstrucción "
-                f"{per_symbol:.1f} µs/símbolo (<{budget:.0f}) · índice escrito dentro de la "
+                f"{per_symbol:.1f} µs/símbolo (<{budget:.1f}) · índice escrito dentro de la "
                 f"llamada: {'SÍ ❌' if inline_write else 'no'}")
 
 
