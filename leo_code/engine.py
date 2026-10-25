@@ -221,14 +221,19 @@ def generation(repo: str) -> int:
     return _generation.get(repo, 0)
 
 
-def _write_index(repo: str, path: Path) -> None:
+def _write_index(repo: str, path: Path, timer: bool = False) -> None:
     """Escribe el índice de `repo` en `path`. Coge _index_lock: `save()` itera las
     cápsulas y un sync concurrente las mutaría.
 
     La ruta se fija al AGENDAR, no aquí: entre el cambio y la escritura diferida la
     caché puede haber cambiado de sitio (tests que la mueven, LEO_CACHE_DIR), y un
-    flush tardío escribiría en la caché equivocada."""
+    flush tardío escribiría en la caché equivocada.
+
+    timer=True: la llama el temporizador, que solo escribe si sigue siendo el agendado
+    (un flush pudo adelantarse y escribirlo ya, o un cambio posterior reagendarlo)."""
     with _index_lock:
+        if timer and (_save_timers.get(repo) or (None,))[0] is not threading.current_thread():
+            return
         _save_timers.pop(repo, None)
         idx = _get_indexer()
         prefix = repo + os.sep
@@ -258,7 +263,7 @@ def _schedule_save(repo: str) -> None:
     old = _save_timers.get(repo)
     if old is not None:
         old[0].cancel()
-    t = threading.Timer(_SAVE_DEBOUNCE_S, _write_index, args=(repo, path))
+    t = threading.Timer(_SAVE_DEBOUNCE_S, _write_index, args=(repo, path, True))
     t.daemon = True     # el cliente MCP mata el server sin avisar: no bloquear la salida
     t.name = f"leo-save:{Path(repo).name}"
     _save_timers[repo] = (t, path)
@@ -272,6 +277,10 @@ def flush_index(repo: str | None = None) -> None:
         if pending is not None:
             pending[0].cancel()
             _write_index(r, pending[1])
+    # una escritura diferida que ya empezó tiene el lock: esperarla. Si no, el proceso sale
+    # con el hilo daemon a medias y el índice no llega a disco (medido en django)
+    with _index_lock:
+        pass
 
 
 atexit.register(flush_index)
