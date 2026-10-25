@@ -1,8 +1,8 @@
 """El escaneo de llamadas HTTP salta a las pistas en vez de probar el regex en cada
 posición; debe encontrar exactamente lo mismo que `finditer` (chequeo (e) de la auditoría)."""
 
-from leo_code.core.boundary import (_CLIENT_CALL, _CLIENT_HINTS, _SERVER_HINTS,
-                                    _SERVER_ROUTE, _hinted_finditer)
+from leo_code.core.boundary import (_CLIENT_CALL, _CLIENT_HINTS, _SERVER_ROUTE,
+                                    _hinted_finditer, _route_literals)
 
 CASES = [
     "fetch('/api/a'); axios.get(\"/api/b\")",
@@ -33,9 +33,9 @@ SERVER_CASES = [
 ]
 
 
-def test_hinted_finditer_matches_finditer_on_server_routes():
+def test_route_literals_match_finditer_on_server_routes():
+    # `_scan` solo usa el literal de la ruta (y `_norm` lo baja a minúsculas): buscar en
+    # el texto ya en minúsculas, desde el `.`, da los mismos literales que el regex entero.
     for text in SERVER_CASES:
-        expected = [(m.start(), m.group(1)) for m in _SERVER_ROUTE.finditer(text)]
-        got = [(m.start(), m.group(1)) for m in
-               _hinted_finditer(_SERVER_ROUTE, text, text.lower(), _SERVER_HINTS, at_word=True)]
-        assert got == expected, text
+        expected = [m.group(1).lower() for m in _SERVER_ROUTE.finditer(text)]
+        assert [r.lower() for r in _route_literals(text, text.lower())] == expected, text

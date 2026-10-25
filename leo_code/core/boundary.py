@@ -25,6 +25,11 @@ _SERVER_ROUTE = re.compile(
     r"""(?:@\w+\.(?:get|post|put|patch|delete|route)|\.(?:get|post|put|patch|delete|route))\s*\(\s*['"]([^'"]+)['"]""",
     re.IGNORECASE,
 )
+# El mismo regex desde el `.`, para el texto ya en minúsculas: toda coincidencia de
+# `@app.get(...)` contiene la de `.get(...)` con el mismo literal, y `_scan` solo usa el
+# literal (que `_norm` baja a minúsculas). Una pasada en C en vez de 6 `find` por cápsula.
+_SERVER_ROUTE_LOW = re.compile(
+    r"""\.(?:get|post|put|patch|delete|route)\s*\(\s*['"]([^'"]+)['"]""")
 # Llamadas cliente: fetch("/x"), axios.get('/x'), http.post(`/x`), request("/x")
 _CLIENT_CALL = re.compile(
     r"""(?:fetch|axios|http|request|\$\.(?:ajax|get|post))(?:\.\w+)?\s*\(\s*[`'"]([^`'"]+)[`'"]""",
@@ -55,14 +60,20 @@ def _norm(route: str) -> str:
 # fuente de verdad, solo se les ahorra el 99% de las cápsulas—. Medido a 300k símbolos:
 # escanear todo con el regex cliente costaba 3.629 ms; con prefiltro, 225 ms.
 _CLIENT_HINTS = ("fetch", "axios", "http", "request", "$.")
-_SERVER_HINTS = (".get", ".post", ".put", ".patch", ".delete", ".route")
 
 
-def _hinted_finditer(rx, text: str, low: str, hints, at_word: bool = False):
-    """= rx.finditer(text) cuando toda coincidencia EMPIEZA por una pista (o, con at_word,
-    por el `@palabra` pegado delante: `@app.get`): prueba el regex solo ahí (`low` =
-    text.lower()), no en cada posición. Medido en django: el regex cliente costaba 9,7
-    µs/símbolo de la reconstrucción y el de servidor 2,6."""
+def _route_literals(text: str, low: str):
+    """Literales de ruta de servidor en `text` (`low` = text.lower()), en minúsculas salvo
+    en el camino lento. Medido en django: _scan bajó de 6,0 a 3,6 µs/símbolo."""
+    if len(low) != len(text):               # lower() cambió longitudes (Unicode): camino lento
+        return [m.group(1) for m in _SERVER_ROUTE.finditer(text)]
+    return _SERVER_ROUTE_LOW.findall(low)
+
+
+def _hinted_finditer(rx, text: str, low: str, hints):
+    """= rx.finditer(text) cuando toda coincidencia EMPIEZA por una pista: prueba el regex
+    solo ahí (`low` = text.lower()), no en cada posición. Medido en django: el regex
+    cliente costaba 9,7 µs/símbolo de la reconstrucción."""
     if len(low) != len(text):               # lower() cambió longitudes (Unicode): camino lento
         yield from rx.finditer(text)
         return
@@ -71,12 +82,6 @@ def _hinted_finditer(rx, text: str, low: str, hints, at_word: bool = False):
         i = low.find(h)
         while i != -1:
             starts.add(i)
-            if at_word:
-                j = i
-                while j and (low[j - 1].isalnum() or low[j - 1] == "_"):
-                    j -= 1
-                if j < i and j and low[j - 1] == "@":
-                    starts.add(j - 1)
             i = low.find(h, i + 1)
     end = 0
     for i in sorted(starts):
@@ -106,8 +111,8 @@ def _scan(capsules: dict) -> tuple[dict[str, list], list[tuple]]:
         sig = getattr(c, "signature", "") or ""
         server_text = " ".join((content, sig, deco))
         low = server_text.lower()
-        for m in _hinted_finditer(_SERVER_ROUTE, server_text, low, _SERVER_HINTS, at_word=True):
-            routes.setdefault(_norm(m.group(1)), []).append(c)
+        for r in _route_literals(server_text, low):
+            routes.setdefault(_norm(r), []).append(c)
         if any(h in low for h in _CLIENT_HINTS):
             # low empieza por content.lower() si lower() no cambió longitudes
             aligned = low[:len(content)] if len(low) == len(server_text) else content.lower()
