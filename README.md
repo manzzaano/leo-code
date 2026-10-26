@@ -24,17 +24,17 @@
 
 ## Quickstart
 
-leo-mcp is in beta and installs from this repository:
+leo-mcp is in beta, published on PyPI and npm:
 
 ```bash
-uv tool install git+https://github.com/manzzaano/leo-code.git   # installs the leo-mcp command
+uv tool install leo-mcp   # installs the leo-mcp command
 leo-mcp doctor                  # checks your setup and prints the config snippet
 claude mcp add leo-mcp -- leo-mcp   # Claude Code
 ```
 
 Other clients: run `leo-mcp init --client opencode|cursor|codex` inside your project.
 
-Requirements: [uv](https://docs.astral.sh/uv/), which fetches Python for you. Without uv: `pip install git+https://github.com/manzzaano/leo-code.git` with Python ≥ 3.11.
+Requirements: [uv](https://docs.astral.sh/uv/), which fetches Python for you. Without uv: `pip install leo-mcp` with Python ≥ 3.11. Or without installing anything: `claude mcp add leo-mcp -- npx -y leo-mcp`.
 No API key: leo-mcp never calls an LLM. It parses your repo locally.
 
 ## What your agent gets
@@ -99,12 +99,12 @@ leo-mcp indexed C:\...\NEXUS  (build in 0.17s)
 | Env var | Default | Effect |
 |---|---|---|
 | `LEO_REPO` | client's working dir | repo to index when a tool call gives no `repo_path` |
-| `LEO_SEMANTIC` | off | semantic recall in `get_context`; needs the `semantic` extra (`uv tool install "leo-mcp[semantic] @ git+https://github.com/manzzaano/leo-code.git"`, sentence-transformers, ~2 GB with torch). `graph` doesn't need it |
+| `LEO_SEMANTIC` | off | semantic recall in `get_context`; needs the `semantic` extra (`uv tool install "leo-mcp[semantic]"`, sentence-transformers, ~2 GB with torch). `graph` doesn't need it |
 | `LEO_CACHE_DIR` | user cache | where indexes and logs go |
 | `LEO_MAX_FILE_KB` | `512` | skip source files larger than this |
 | `LEO_WATCH` | `1` | filesystem watcher; `0` falls back to re-scanning the tree (network mounts that drop events) |
 | `LEO_GUARD_HOOK` | `1` | the warning before an edit; `0` silences it without touching your settings |
-| `LEO_MCP_FROM` | this repository | source `uvx` uses when the leo-mcp command isn't installed (local wheel, git URL) |
+| `LEO_MCP_FROM` | `leo-mcp==<version>` | source `uvx` uses when the leo-mcp command isn't installed (local wheel, git URL) |
 
 
 ---
@@ -225,12 +225,12 @@ python benchmark/mcp_client_bench.py    # real MCP client, token-reduction gate
 
 `leo-mcp` es un servidor MCP que le da a tu agente de código (Claude Code, opencode, Cursor, Codex) el grafo de llamadas real de tu repo. Con él responde dónde se define algo, quién lo llama, qué se rompe si lo cambias y el camino de A a B, citando siempre `archivo:línea`. Sin LLM y sin API key.
 
-Está en beta y se instala desde este repositorio:
+Está en beta, publicado en PyPI y npm:
 
 ```bash
-uv tool install git+https://github.com/manzzaano/leo-code.git
+uv tool install leo-mcp
 leo-mcp doctor
 claude mcp add leo-mcp -- leo-mcp
 ```
 
-Requisitos: [uv](https://docs.astral.sh/uv/), o Python ≥ 3.11 con `pip install git+https://github.com/manzzaano/leo-code.git`. El índice vive en la caché de usuario, nunca dentro de tu proyecto. Los números y la metodología están arriba, con los comandos para reproducirlos. El caso de estudio completo está en [leosoftware.dev/sistemas/leo-mcp](https://leosoftware.dev/sistemas/leo-mcp).
+Requisitos: [uv](https://docs.astral.sh/uv/), o Python ≥ 3.11 con `pip install leo-mcp`. El índice vive en la caché de usuario, nunca dentro de tu proyecto. Los números y la metodología están arriba, con los comandos para reproducirlos. El caso de estudio completo está en [leosoftware.dev/sistemas/leo-mcp](https://leosoftware.dev/sistemas/leo-mcp).
