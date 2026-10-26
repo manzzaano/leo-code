@@ -138,3 +138,6 @@ docs/archive/
 /package.json
 /package-lock.json
 /node_modules/
+
+# guía de trabajo local, no es del producto
+skill/
