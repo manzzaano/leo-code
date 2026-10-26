@@ -13,13 +13,17 @@ Checks:
   (d) LATENCIA: cualquier query estructural <50ms a escala.
   (e) PRESUPUESTO POST-EDICIÓN: reconstruir el grafo tras una edición ≤20 µs/símbolo
       y sin escribir el índice dentro de la llamada al tool.
+  (f) RAM: pico del proceso en el camino del producto (arranque en frío y en caliente +
+      get_context) ≤ 500 MB, lo que tiene libre cualquier portátil de desarrollador.
 
 Uso:  python benchmark/audit_formal.py [repo1 repo2 ...]
       (repos extra para (a)/(d) a escala; por defecto el propio leo-code)
 """
 
 import os
+import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -170,8 +174,74 @@ def check_e(repos):
     budget = 20 + 40_000 / max(n, 1)
     ok = per_symbol <= budget and not inline_write
     return ok, (f"{Path(repo).name}, {n:,} símbolos: reconstrucción "
-                f"{per_symbol:.1f} µs/símbolo (<{budget:.0f}) · índice escrito dentro de la "
+                f"{per_symbol:.1f} µs/símbolo (<{budget:.1f}) · índice escrito dentro de la "
                 f"llamada: {'SÍ ❌' if inline_write else 'no'}")
+
+
+_MEM_LIMIT_MB = 500
+_MEM_QUERIES = ["how is the main entry point configured",
+                "where are errors handled and reported",
+                "what validates the input data"]
+
+
+def _peak_mb():
+    """Pico de memoria residente de ESTE proceso, en MB."""
+    if sys.platform == "win32":
+        import ctypes
+        from ctypes import wintypes
+
+        class PMC(ctypes.Structure):
+            _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD),
+                        ("PeakWorkingSetSize", ctypes.c_size_t)] + [
+                (f"_{i}", ctypes.c_size_t) for i in range(7)]
+        k32, psapi = ctypes.WinDLL("kernel32"), ctypes.WinDLL("psapi")
+        k32.GetCurrentProcess.restype = wintypes.HANDLE
+        psapi.GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.POINTER(PMC), wintypes.DWORD]
+        m = PMC(); m.cb = ctypes.sizeof(PMC)
+        psapi.GetProcessMemoryInfo(k32.GetCurrentProcess(), ctypes.byref(m), m.cb)
+        return m.PeakWorkingSetSize / 2**20
+    # Linux: VmHWM y no ru_maxrss, que sobrevive a exec y hereda el pico del padre
+    # (fs/exec.c guarda el hiwater del mm viejo en signal->maxrss).
+    if Path("/proc/self/status").exists():
+        for line in Path("/proc/self/status").read_text().splitlines():
+            if line.startswith("VmHWM:"):
+                return int(line.split()[1]) / 1024
+    import resource
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2**20   # macOS: bytes
+
+
+def _mem_child(repo, cache):
+    """Lo que hace leo-mcp con un repo: estructura + grafo + varias get_context."""
+    os.environ.update(LEO_CACHE_DIR=cache, LEO_WATCH="0", LEO_SEMANTIC="0")
+    from leo_code import engine
+    from leo_code.server import mcp_server
+    engine.ensure_structural(repo)
+    mcp_server._repo_graph(repo)
+    for q in _MEM_QUERIES:
+        engine.compute_context(repo, q)
+    engine.flush_index()
+    print(f"{_peak_mb():.0f}")
+
+
+def check_f(repos):
+    """RAM: el pico del camino del producto cabe en lo que tiene libre un portátil normal.
+    Se mide en un proceso hijo limpio (lo que pasaron los otros chequeos no cuenta) dos
+    veces: en frío (sin caché: parsea todo) y en caliente (carga el índice de disco, que
+    llegó a 1,7 GB de pico en django al parsearlo como un único JSON). Semántico apagado:
+    el launcher npx no instala ese extra salvo LEO_SEMANTIC=1.
+    """
+    repo = os.path.abspath(max(repos, key=lambda r: sum(1 for _ in Path(r).rglob("*.py"))))
+    peaks = []
+    with tempfile.TemporaryDirectory() as cache:
+        for _ in ("frío", "caliente"):
+            out = subprocess.run([sys.executable, __file__, "--mem-child", repo, cache],
+                                 capture_output=True, text=True, timeout=1800)
+            if out.returncode:
+                return False, f"el proceso hijo falló: {out.stderr.strip()[-300:]}"
+            peaks.append(float(out.stdout.split()[-1]))
+    ok = max(peaks) <= _MEM_LIMIT_MB
+    return ok, (f"{Path(repo).name}: pico frío {peaks[0]:.0f} MB · caliente {peaks[1]:.0f} MB "
+                f"(≤{_MEM_LIMIT_MB} MB)")
 
 
 def main(extra):
@@ -188,6 +258,8 @@ def main(extra):
         ("(d) SLA a 5M+ LOC: query <50ms y guardián <2s", lambda: check_d(repos)),
         ("(e) presupuesto post-edición: reconstrucción acotada y sin escribir en línea",
          lambda: check_e(repos)),
+        ("(f) RAM: pico del camino del producto en frío y en caliente ≤500 MB",
+         lambda: check_f(repos)),
     ]
     results = []
     for label, fn in checks:
@@ -209,4 +281,6 @@ if __name__ == "__main__":
     # entera al primer print (en CI no se ve porque ubuntu va en UTF-8).
     from leo_code.logging_config import utf8_console
     utf8_console()
+    if sys.argv[1:2] == ["--mem-child"]:
+        sys.exit(_mem_child(*sys.argv[2:4]))
     sys.exit(main(sys.argv[1:]))

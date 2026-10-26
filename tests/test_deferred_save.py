@@ -77,3 +77,31 @@ def test_no_se_escribe_cache_de_un_repo_sin_simbolos(repo, monkeypatch):
         idx._capsules = {}
     engine.flush_index()
     assert not engine.repo_index_path(str(repo)).exists()
+
+
+def test_flush_espera_a_la_escritura_diferida_que_ya_empezo(repo, monkeypatch):
+    """Si el temporizador ya está escribiendo, flush_index (y atexit) deben esperarlo: si
+    no, el proceso sale con el hilo daemon a medias, el índice no llega a disco y queda un
+    .tmp huérfano (medido en django: la escritura tarda segundos)."""
+    import threading
+    from leo_code.rag.indexer import Indexer
+
+    empezo, seguir, real_save = threading.Event(), threading.Event(), Indexer.save
+
+    def save_lento(self, *a, **kw):
+        empezo.set()
+        seguir.wait(5)
+        real_save(self, *a, **kw)
+
+    monkeypatch.setattr(Indexer, "save", save_lento)
+    monkeypatch.setattr(engine, "_SAVE_DEBOUNCE_S", 0.01)
+    engine.ensure_structural(str(repo))
+    assert empezo.wait(5), "la escritura diferida tiene que haber arrancado"
+
+    flush = threading.Thread(target=engine.flush_index)
+    flush.start()
+    flush.join(0.3)
+    assert flush.is_alive(), "flush_index volvió con la escritura a medias"
+    seguir.set()
+    flush.join(5)
+    assert engine.repo_index_path(str(repo)).exists()

@@ -22,6 +22,13 @@ from typing import Optional
 
 from leo_code.core.parser import extract_from_file, build_call_graph, Capsule, detect_language, EXT_LANG
 
+try:
+    import orjson
+    _dumps, _loads = orjson.dumps, orjson.loads
+except ImportError:
+    _dumps = lambda d: json.dumps(d, ensure_ascii=False).encode("utf-8")  # noqa: E731
+    _loads = json.loads
+
 
 class Indexer:
     """Indexa un codebase y mantiene el índice actualizado."""
@@ -221,58 +228,58 @@ class Indexer:
         return count
 
     def save(self, path: str = "kc_index.json.gz", repo: str | None = None):
-        """Persiste el índice a disco comprimido (orjson+gzip, fallback json+gzip).
+        """Persiste el índice a disco: JSON Lines (una cápsula por línea) en gzip.
+
+        En streaming, cápsula a cápsula: un único documento JSON obligaba a tener a la vez
+        el dict, el texto y el gzip enteros (113 MB de JSON en django), y al cargarlo orjson
+        reservaba ~12× la entrada (pico de 1,7 GB comprometidos, medido).
 
         repo: guarda solo las cápsulas de ese repo (caché por repo). Escritura atómica:
         el cliente MCP mata el server sin aviso y un gzip a medias no debe quedar."""
-        items = self._capsules.items()
+        items = list(self._capsules.values())
         if repo:
             repo_abs = os.path.abspath(repo)
-            items = [(cid, c) for cid, c in items if _under(c.file_path, repo_abs)]
-        data = {
-            cid: {
-                "id": c.id, "type": c.type, "name": c.name,
-                "file_path": c.file_path, "start_line": c.start_line,
-                "end_line": c.end_line, "language": c.language,
-                "signature": c.signature, "docstring": c.docstring,
-                "content": c.content,
-                "calls": c.calls, "called_by": c.called_by,
-                "imports": c.imports, "properties": c.properties,
-            }
-            for cid, c in items
-        }
-        try:
-            import orjson
-            raw = orjson.dumps(data, option=orjson.OPT_INDENT_2)
-        except ImportError:
-            raw = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
+            items = [c for c in items if _under(c.file_path, repo_abs)]
         tmp = Path(f"{path}.tmp{os.getpid()}")
-        tmp.write_bytes(gzip.compress(raw))
+        with gzip.open(tmp, "wb") as f:
+            for c in items:
+                f.write(_dumps({
+                    "id": c.id, "type": c.type, "name": c.name,
+                    "file_path": c.file_path, "start_line": c.start_line,
+                    "end_line": c.end_line, "language": c.language,
+                    "signature": c.signature, "docstring": c.docstring,
+                    "content": c.content,
+                    "calls": c.calls, "called_by": c.called_by,
+                    "imports": c.imports, "properties": c.properties,
+                }) + b"\n")
         os.replace(tmp, path)
-        print(f"[indexer] saved: {path} ({len(data)} symbols)")
+        print(f"[indexer] saved: {path} ({len(items)} symbols)")
 
     def load(self, path: str = "kc_index.json.gz", merge: bool = False):
-        """Carga un índice comprimido desde disco. merge=True conserva lo ya cargado
-        (otros repos del mismo proceso) en vez de reemplazarlo."""
-        raw = gzip.decompress(Path(path).read_bytes())
-        try:
-            import orjson
-            data = orjson.loads(raw)
-        except ImportError:
-            data = json.loads(raw.decode("utf-8"))
+        """Carga un índice comprimido desde disco, línea a línea. merge=True conserva lo ya
+        cargado (otros repos del mismo proceso) en vez de reemplazarlo."""
         if not merge:
             self._capsules = {}
-        for cid, d in data.items():
-            self._capsules[cid] = Capsule(
-                id=d["id"], type=d["type"], name=d["name"],
-                file_path=d["file_path"], start_line=d["start_line"],
-                end_line=d["end_line"], language=d["language"],
-                signature=d["signature"], content=d.get("content", ""),
-                docstring=d.get("docstring"), calls=d.get("calls", []),
-                called_by=d.get("called_by", []), imports=d.get("imports", []),
-                properties=d.get("properties", {}),
-            )
-        print(f"[indexer] loaded: {path} ({len(data)} symbols)")
+        n = 0
+        with gzip.open(path, "rb") as f:
+            first = f.readline()
+            if first.strip() == b"{":
+                # formato anterior (un solo documento indentado): TUI/agente con kc_index.json.gz
+                docs = _loads(first + f.read()).values()
+            else:
+                docs = map(_loads, filter(None, (first, *f)))
+            for d in docs:
+                self._capsules[d["id"]] = Capsule(
+                    id=d["id"], type=d["type"], name=d["name"],
+                    file_path=d["file_path"], start_line=d["start_line"],
+                    end_line=d["end_line"], language=d["language"],
+                    signature=d["signature"], content=d.get("content", ""),
+                    docstring=d.get("docstring"), calls=d.get("calls", []),
+                    called_by=d.get("called_by", []), imports=d.get("imports", []),
+                    properties=d.get("properties", {}),
+                )
+                n += 1
+        print(f"[indexer] loaded: {path} ({n} symbols)")
 
     def _rebuild_call_graph(self) -> None:
         """Re-resuelve called_by global tras un sync (los edges son cross-file)."""

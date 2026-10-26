@@ -133,3 +133,11 @@ install.ps1
 
 # Local archive of the coding-agent stage docs
 docs/archive/
+
+# TypeScript local para los oraculos TS (CI lo instala por su cuenta)
+/package.json
+/package-lock.json
+/node_modules/
+
+# guía de trabajo local, no es del producto
+skill/

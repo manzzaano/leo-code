@@ -51,6 +51,7 @@ dev = [
     "leo-mcp[semantic,http]",
     "pytest>=8",
     "pytest-asyncio>=0.24",
+    "jedi>=0.19",   # juez del oráculo de resolución (benchmark/resolution_oracle.py)
 ]
 
 [project.scripts]

@@ -49,6 +49,114 @@ def _node_calls(node) -> list[str]:
     return calls
 
 
+def call_form(f) -> tuple[str, str] | None:
+    """(nombre, receptor) de la función llamada: receptor '' = `foo()`, 'X' = `X.foo()`
+    con X un nombre simple, 'super()' = `super().foo()`, '.' = cualquier otro receptor
+    (`a.b.foo()`, `f().foo()`)."""
+    if isinstance(f, ast.Name):
+        return f.id, ""
+    if isinstance(f, ast.Attribute):
+        v = f.value
+        if isinstance(v, ast.Name):
+            return f.attr, v.id
+        if isinstance(v, ast.Call) and isinstance(v.func, ast.Name) and v.func.id == "super":
+            return f.attr, "super()"
+        return f.attr, "."
+    return None
+
+
+def _base_forms(bases) -> list:
+    """Bases de una clase con la forma de `call_form`: `Base` → [Base, ''], `m.Base` →
+    [Base, m]; de `Generic[T]` se toma `Generic`. Lo que no se puede seguir (`a.b.Base`,
+    `with_metaclass(Meta, Base)`) queda con receptor '.': una base desconocida, que puede
+    ser cualquier clase con ese nombre (de una llamada, cada argumento)."""
+    out = []
+    for b in bases:
+        if isinstance(b, ast.Subscript):
+            b = b.value
+        form = call_form(b)
+        if form and form[1] != "super()":
+            out.append(list(form))
+        elif isinstance(b, ast.Call):
+            out += [[f[0], "."] for f in map(call_form, b.args) if f] or [["", "."]]
+        else:
+            out.append([form[0] if form else "", "."])
+    return out
+
+
+def _self_arg(m) -> str:
+    """Primer parámetro de un método (`self`, `cls`…); '' si es @staticmethod o no tiene."""
+    if any(ast.unparse(d).split(".")[-1] == "staticmethod" for d in m.decorator_list):
+        return ""
+    args = m.args.posonlyargs + m.args.args
+    return args[0].arg if args else ""
+
+
+def _bind(stmt, alias) -> list:
+    """Import → [nombre_local, módulo, atributo, nivel]: `import a.b as X` → [X, 'a.b', '', 0];
+    `import a.b` → [a, 'a', '', 0]; `from .m import f as g` → [g, 'm', 'f', 1]."""
+    if isinstance(stmt, ast.Import):
+        if alias.asname:
+            return [alias.asname, alias.name, "", 0]
+        top = alias.name.split(".")[0]
+        return [top, top, "", 0]
+    return [alias.asname or alias.name, stmt.module or "", alias.name, stmt.level]
+
+
+def _resolution_props(node) -> dict:
+    """Lo que GraphQuery necesita para resolver las llamadas de `node` (ver graphquery)."""
+    forms, binds, n = {}, [], 0
+    for child in ast.walk(node):
+        if isinstance(child, ast.Call):
+            form = call_form(child.func)
+            if form:
+                forms[form] = None
+                n += 1
+        elif isinstance(child, (ast.Import, ast.ImportFrom)):
+            binds += [_bind(child, a) for a in child.names if a.name != "*"]
+    # n_calls = len(calls) al parsear: lo que refgraph/boundary añadan después va detrás
+    props = {"call_forms": [list(f) for f in forms], "n_calls": n}
+    if binds:
+        props["local_binds"] = binds
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        types = _local_types(node)
+        if types:
+            props["local_types"] = types
+    return props
+
+
+def _local_types(fn) -> dict:
+    """Variables de `fn` cuyas asignaciones son TODAS `x = C(...)` / `x = m.C(...)`:
+    nombre → formas de `call_form` de cada C (paso 3). Es el tipo como unión de lo asignado
+    (pyright; el grafo de asignaciones de PyCG), sin flujo. Cualquier otra forma de ligar
+    el nombre (parámetro, bucle, `with`, `except`, import, `global`…) lo descarta, también
+    dentro de funciones anidadas: la unión puede salir mayor, nunca menor."""
+    ctor, other, seen = {}, set(), set()
+    for n in ast.walk(fn):
+        if isinstance(n, ast.Assign):
+            f = call_form(n.value.func) if isinstance(n.value, ast.Call) else None
+            t = n.targets[0]
+            if len(n.targets) == 1 and isinstance(t, ast.Name) and f and f[1] not in (".", "super()"):
+                ctor.setdefault(t.id, {})[f] = None
+                seen.add(t)
+        elif isinstance(n, ast.Name) and isinstance(n.ctx, (ast.Store, ast.Del)) and n not in seen:
+            other.add(n.id)
+        elif isinstance(n, ast.arg):
+            other.add(n.arg)
+        elif isinstance(n, (ast.Global, ast.Nonlocal)):
+            other.update(n.names)
+        elif isinstance(n, ast.alias):
+            other.add((n.asname or n.name).split(".")[0])
+        elif isinstance(n, (ast.ExceptHandler, ast.MatchAs, ast.MatchStar)) and n.name:
+            other.add(n.name)
+        elif isinstance(n, ast.MatchMapping) and n.rest:
+            other.add(n.rest)
+        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and n is not fn:
+            other.add(n.name)
+    # ponytail: un metaclass.__call__ o __new__ que devuelva otro tipo engaña a la regla
+    return {k: [list(f) for f in v] for k, v in ctor.items() if k not in other}
+
+
 def extract_from_python(content: str, file_path: str) -> list[Capsule]:
     """Extrae cápsulas del AST de un archivo Python. 0 dependencias externas."""
     capsules = []
@@ -69,6 +177,7 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
                     language="python", signature=f"import {alias.name}",
                     content=ast.unparse(node),
                     imports=[alias.name],
+                    properties={"bind": _bind(node, alias)},
                 ))
 
         elif isinstance(node, ast.ImportFrom):
@@ -83,6 +192,7 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
                     language="python", signature=f"from {mod} import {alias.name}",
                     content=ast.unparse(node),
                     imports=[mod] if mod else [],
+                    properties={"bind": _bind(node, alias)} if alias.name != "*" else {},
                 ))
 
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -127,6 +237,7 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
                 "tipo_retorno": returns,
                 "lineas": lines,
                 "module": module_name,
+                **_resolution_props(node),
             }
             if decorators:
                 props["decorators"] = ", ".join(decorators)
@@ -174,8 +285,10 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
             props = {
                 "metodos": ", ".join(methods),
                 "hereda_de": ", ".join(bases),
+                "bases": _base_forms(node.bases),
                 "lineas": lines,
                 "module": module_name,
+                **_resolution_props(node),
             }
             if decorators:
                 props["decorators"] = ", ".join(decorators)
@@ -222,7 +335,8 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
                 m_calls = _node_calls(m)
                 m_decos = [ast.unparse(d) for d in m.decorator_list] if m.decorator_list else []
                 m_props = {"class": node.name, "qualified": f"{node.name}.{m.name}",
-                           "module": module_name}
+                           "module": module_name, "self_arg": _self_arg(m),
+                           **_resolution_props(m)}
                 if m_decos:
                     m_props["decorators"] = ", ".join(m_decos)
                 capsules.append(Capsule(
