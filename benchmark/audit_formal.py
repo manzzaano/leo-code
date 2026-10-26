@@ -200,9 +200,14 @@ def _peak_mb():
         m = PMC(); m.cb = ctypes.sizeof(PMC)
         psapi.GetProcessMemoryInfo(k32.GetCurrentProcess(), ctypes.byref(m), m.cb)
         return m.PeakWorkingSetSize / 2**20
+    # Linux: VmHWM y no ru_maxrss, que sobrevive a exec y hereda el pico del padre
+    # (fs/exec.c guarda el hiwater del mm viejo en signal->maxrss).
+    if Path("/proc/self/status").exists():
+        for line in Path("/proc/self/status").read_text().splitlines():
+            if line.startswith("VmHWM:"):
+                return int(line.split()[1]) / 1024
     import resource
-    rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-    return rss / 2**20 if sys.platform == "darwin" else rss / 1024   # macOS bytes, Linux KB
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2**20   # macOS: bytes
 
 
 def _mem_child(repo, cache):

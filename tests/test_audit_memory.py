@@ -22,3 +22,16 @@ def test_check_f_falla_si_el_pico_supera_el_tope(mini_repo_path, monkeypatch):
     monkeypatch.setattr(audit_formal, "_MEM_LIMIT_MB", 1)
     ok, detail = audit_formal.check_f([str(mini_repo_path)])
     assert not ok, detail
+
+
+def test_el_hijo_no_hereda_el_pico_del_padre():
+    """En Linux `ru_maxrss` sobrevive a exec: el hijo reportaba el pico de la auditoría
+    entera (776 MB en CI, igual en frío y en caliente)."""
+    import subprocess
+    lastre = bytearray(400 * 2**20)   # noqa: F841 — sube el pico del padre
+    lastre[::4096] = b"x" * len(lastre[::4096])
+    code = (f"import sys; sys.path.insert(0, {str(Path(audit_formal.__file__).parent)!r}); "
+            "import audit_formal; print(audit_formal._peak_mb())")
+    hijo = float(subprocess.run([sys.executable, "-c", code], capture_output=True,
+                                text=True, check=True).stdout)
+    assert hijo < 200, hijo
