@@ -93,3 +93,38 @@ def test_init_repoint_keeps_the_users_own_keys(tmp_path, monkeypatch):
     assert _init(tmp_path, "claude", monkeypatch, PINNED) == 0
     entry = json.loads(cfg.read_text(encoding="utf-8"))["mcpServers"]["leo-mcp"]
     assert entry == {"command": "uvx", "args": PINNED[1:], "env": {"LEO_SEMANTIC": "1"}}
+
+
+# ---- ¿corre leo-mcp desde la caché de uv? ----
+
+def test_ephemeral_under_uv_cache_dir_even_without_archive_bucket(monkeypatch, tmp_path):
+    # Señal documentada: `uv cache dir` del uv que nos lanzó; no depende del nombre del bucket.
+    monkeypatch.setattr(cli, "_uv_cache_dir", lambda: str(tmp_path / "cache"))
+    assert cli._ephemeral(str(tmp_path / "cache" / "otro-bucket" / "x" / "python.exe"))
+    assert not cli._ephemeral(str(tmp_path / "proj" / ".venv" / "Scripts" / "python.exe"))
+
+
+def test_ephemeral_falls_back_to_the_archive_bucket(monkeypatch):
+    # `uvx --no-cache` usa un temporal fuera de `uv cache dir`; sin uv tampoco hay cache dir.
+    monkeypatch.setattr(cli, "_uv_cache_dir", lambda: None)
+    assert cli._ephemeral(r"C:\Users\u\AppData\Local\Temp\.tmpX\archive-v0\abc\Scripts\python.exe")
+    assert not cli._ephemeral("/home/u/proj/.venv/bin/python")
+
+
+def test_uv_cache_dir_asks_the_uv_that_launched_us(monkeypatch, tmp_path):
+    import shutil as sh
+    uv = sh.which("uv")
+    if not uv:
+        import pytest
+        pytest.skip("uv no instalado")
+    cli._uv_cache_dir.cache_clear()
+    monkeypatch.setenv("UV", uv)
+    monkeypatch.setenv("UV_CACHE_DIR", str(tmp_path / "c"))
+    assert cli._uv_cache_dir() == str(tmp_path / "c")
+    cli._uv_cache_dir.cache_clear()
+    monkeypatch.setenv("UV", str(tmp_path / "no-existe"))
+    assert cli._uv_cache_dir() is None, "un uv roto no puede tumbar init/doctor"
+    cli._uv_cache_dir.cache_clear()
+    monkeypatch.delenv("UV")
+    assert cli._uv_cache_dir() is None, "sin UV no nos lanzó uv: no adivinar"
+    cli._uv_cache_dir.cache_clear()

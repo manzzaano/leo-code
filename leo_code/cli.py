@@ -9,10 +9,12 @@ Salida al usuario en inglés. `serve` no escribe NADA en stdout (canal JSON-RPC)
 """
 
 import argparse
+import functools
 import json
 import os
 import platform
 import shutil
+import subprocess
 import sys
 import sysconfig
 from pathlib import Path
@@ -22,8 +24,38 @@ from leo_code import __version__
 CLIENTS = ("claude", "cursor", "opencode", "codex")
 
 
+@functools.lru_cache(maxsize=1)
+def _uv_cache_dir() -> str | None:
+    """`uv cache dir` del uv que nos lanzó. `UV` (uv >= 0.6) es la ruta de ese uv y se hereda
+    a los hijos; sin ella no nos lanzó uv y no hay nada que preguntar."""
+    uv = os.environ.get("UV")
+    if not uv:
+        return None
+    try:
+        out = subprocess.run([uv, "cache", "dir"], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if out.returncode != 0:
+        return None
+    return out.stdout.strip() or None
+
+
 def _ephemeral(path: str) -> bool:
-    """¿Está en la caché de uv (lo que corre `npx`/`uvx`)? uv puede borrarlo en cualquier momento."""
+    """¿Está en la caché de uv (lo que corre `npx`/`uvx`)? La doc de uv trata esos entornos
+    como desechables: `uv cache clean` los borra.
+
+    Primero la señal documentada (dentro de `uv cache dir`); si no, el bucket `archive-v*`
+    donde uv crea esos entornos (no documentado), que cubre `uvx --no-cache`: ahí el entorno
+    vive en un temporal fuera de `uv cache dir`.
+    """
+    cache = _uv_cache_dir()
+    if cache:
+        p, c = (os.path.normcase(os.path.abspath(x)) for x in (path, cache))
+        try:
+            if os.path.commonpath([p, c]) == c:
+                return True
+        except ValueError:   # otra unidad en Windows
+            pass
     return "archive-v" in path.replace("\\", "/")
 
 
