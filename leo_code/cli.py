@@ -14,6 +14,7 @@ import os
 import platform
 import shutil
 import sys
+import sysconfig
 from pathlib import Path
 
 from leo_code import __version__
@@ -21,21 +22,18 @@ from leo_code import __version__
 CLIENTS = ("claude", "cursor", "opencode", "codex")
 
 
-# leo-mcp aún no está en PyPI ni en npm: sin binario instalado, se lanza desde el repo con uvx.
-REPO_SOURCE = "git+https://github.com/manzzaano/leo-code.git"
-
-
 def _launch() -> list[str]:
     """Comando que el cliente MCP ejecutará.
 
-    El `leo-mcp` instalado (uv tool install / pip) si está en el PATH: arranca sin red.
-    Si no, uvx desde el repo (o desde LEO_MCP_FROM). Un binario dentro de la caché de uv
-    (lo que ve un `uvx` efímero) no vale: uv puede borrarlo y la config quedaría rota.
+    El `leo-mcp` del entorno que está corriendo y, si no, el del PATH (uv tool install / pip):
+    arranca sin red y es esta misma versión. Si no, uvx con la versión publicada fijada, como
+    el launcher npm (o LEO_MCP_FROM). Un binario dentro de la caché de uv (lo que ve un `uvx`
+    efímero) no vale: uv puede borrarlo y la config quedaría rota.
     """
-    exe = shutil.which("leo-mcp")
-    if exe and "archive-v" not in exe.replace("\\", "/"):
-        return [exe]
-    return ["uvx", "--from", os.environ.get("LEO_MCP_FROM", REPO_SOURCE), "leo-mcp"]
+    for exe in (shutil.which("leo-mcp", path=sysconfig.get_path("scripts")), shutil.which("leo-mcp")):
+        if exe and "archive-v" not in exe.replace("\\", "/"):
+            return [exe]
+    return ["uvx", "--from", os.environ.get("LEO_MCP_FROM", f"leo-mcp=={__version__}"), "leo-mcp"]
 
 
 def _quiet_index(repo: str) -> dict | None:
