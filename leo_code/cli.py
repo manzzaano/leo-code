@@ -22,6 +22,11 @@ from leo_code import __version__
 CLIENTS = ("claude", "cursor", "opencode", "codex")
 
 
+def _ephemeral(path: str) -> bool:
+    """¿Está en la caché de uv (lo que corre `npx`/`uvx`)? uv puede borrarlo en cualquier momento."""
+    return "archive-v" in path.replace("\\", "/")
+
+
 def _launch() -> list[str]:
     """Comando que el cliente MCP ejecutará.
 
@@ -31,7 +36,7 @@ def _launch() -> list[str]:
     efímero) no vale: uv puede borrarlo y la config quedaría rota.
     """
     for exe in (shutil.which("leo-mcp", path=sysconfig.get_path("scripts")), shutil.which("leo-mcp")):
-        if exe and "archive-v" not in exe.replace("\\", "/"):
+        if exe and not _ephemeral(exe):
             return [exe]
     return ["uvx", "--from", os.environ.get("LEO_MCP_FROM", f"leo-mcp=={__version__}"), "leo-mcp"]
 
@@ -130,6 +135,8 @@ def cmd_doctor(args) -> int:
         row("guard hook", None, "off (LEO_GUARD_HOOK=0)")
     elif installed:
         row("guard hook", True, "warns before editing a symbol whose dependents have no test")
+    elif _ephemeral(sys.executable):
+        row("guard hook", None, "not installed here (needs `uv tool install leo-mcp`, then leo-mcp init)")
     else:
         row("guard hook", None, "not installed here (run: leo-mcp init)")
     row("cache", None, str(engine._CACHE_DIR))
@@ -196,6 +203,13 @@ def _maybe_hook(args, root: Path) -> int:
     """El hook es lo que hace que leo hable sin que el agente se acuerde de preguntar.
     Solo Claude Code: es el único harness con PreToolUse."""
     if args.client == "claude" and not getattr(args, "no_hook", False):
+        if _ephemeral(sys.executable):
+            # El hook apunta a este intérprete (ver _hook_command): desde la caché de uv
+            # fallaría en cada edición el día que uv lo borre.
+            print("Guard hook not installed: leo-mcp is running from uv's cache (npx/uvx),"
+                  " which uv may delete. To get it: `uv tool install leo-mcp`, then run"
+                  " `leo-mcp init` again.")
+            return 0
         return _install_guard_hook(root)
     return 0
 

@@ -229,3 +229,34 @@ def test_settings_json_invalido_no_se_reescribe(tmp_path, capsys):
     settings.write_text("{ no es json", encoding="utf-8")
     assert _init(tmp_path) == 1
     assert settings.read_text(encoding="utf-8") == "{ no es json"
+
+
+UV_CACHE_PY = r"C:\Users\u\AppData\Local\uv\cache\archive-v0\abc\Scripts\python.exe"
+
+
+def test_init_desde_la_cache_de_uv_no_escribe_un_hook_que_se_rompera(tmp_path, monkeypatch, capsys):
+    """npx/uvx corren leo desde la caché de uv: uv puede borrar ese python y el hook
+    fallaría en cada edición. Mejor sin hook y diciendo cómo tenerlo."""
+    monkeypatch.setattr(sys, "executable", UV_CACHE_PY)
+    assert _init(tmp_path) == 0
+    assert not (tmp_path / ".claude" / "settings.json").exists()
+    assert "uv tool install leo-mcp" in capsys.readouterr().out
+    assert (tmp_path / ".mcp.json").exists(), "el server sí se configura"
+
+
+def test_init_desde_la_cache_de_uv_no_repunta_un_hook_bueno(tmp_path, monkeypatch):
+    assert _init(tmp_path) == 0
+    settings = tmp_path / ".claude" / "settings.json"
+    bueno = settings.read_text(encoding="utf-8")
+    monkeypatch.setattr(sys, "executable", UV_CACHE_PY)
+    assert _init(tmp_path) == 0
+    assert settings.read_text(encoding="utf-8") == bueno
+
+
+def test_doctor_desde_la_cache_de_uv_no_manda_a_un_init_que_no_lo_instalara(tmp_path, monkeypatch, capsys):
+    from leo_code import cli
+    monkeypatch.setattr(sys, "executable", UV_CACHE_PY)
+    monkeypatch.delenv("LEO_GUARD_HOOK", raising=False)
+    cli.main(["doctor", str(tmp_path)])
+    fila = next(l for l in capsys.readouterr().out.splitlines() if "guard hook" in l)
+    assert "uv tool install leo-mcp" in fila
