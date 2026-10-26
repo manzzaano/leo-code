@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "leo-mcp"
-version = "0.3.1"
+version = "0.3.2"
 description = "MCP server that gives your coding agent the real call graph of your repo (where / who_calls / impact / trace / guard, cited file:line) plus compressed AST context."
 readme = "README.md"
 requires-python = ">=3.11"

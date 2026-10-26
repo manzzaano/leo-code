@@ -9,10 +9,12 @@ Salida al usuario en inglés. `serve` no escribe NADA en stdout (canal JSON-RPC)
 """
 
 import argparse
+import functools
 import json
 import os
 import platform
 import shutil
+import subprocess
 import sys
 import sysconfig
 from pathlib import Path
@@ -20,6 +22,41 @@ from pathlib import Path
 from leo_code import __version__
 
 CLIENTS = ("claude", "cursor", "opencode", "codex")
+
+
+@functools.lru_cache(maxsize=1)
+def _uv_cache_dir() -> str | None:
+    """`uv cache dir` del uv que nos lanzó. `UV` (uv >= 0.6) es la ruta de ese uv y se hereda
+    a los hijos; sin ella no nos lanzó uv y no hay nada que preguntar."""
+    uv = os.environ.get("UV")
+    if not uv:
+        return None
+    try:
+        out = subprocess.run([uv, "cache", "dir"], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if out.returncode != 0:
+        return None
+    return out.stdout.strip() or None
+
+
+def _ephemeral(path: str) -> bool:
+    """¿Está en la caché de uv (lo que corre `npx`/`uvx`)? La doc de uv trata esos entornos
+    como desechables: `uv cache clean` los borra.
+
+    Primero la señal documentada (dentro de `uv cache dir`); si no, el bucket `archive-v*`
+    donde uv crea esos entornos (no documentado), que cubre `uvx --no-cache`: ahí el entorno
+    vive en un temporal fuera de `uv cache dir`.
+    """
+    cache = _uv_cache_dir()
+    if cache:
+        p, c = (os.path.normcase(os.path.abspath(x)) for x in (path, cache))
+        try:
+            if os.path.commonpath([p, c]) == c:
+                return True
+        except ValueError:   # otra unidad en Windows
+            pass
+    return "archive-v" in path.replace("\\", "/")
 
 
 def _launch() -> list[str]:
@@ -31,7 +68,7 @@ def _launch() -> list[str]:
     efímero) no vale: uv puede borrarlo y la config quedaría rota.
     """
     for exe in (shutil.which("leo-mcp", path=sysconfig.get_path("scripts")), shutil.which("leo-mcp")):
-        if exe and "archive-v" not in exe.replace("\\", "/"):
+        if exe and not _ephemeral(exe):
             return [exe]
     return ["uvx", "--from", os.environ.get("LEO_MCP_FROM", f"leo-mcp=={__version__}"), "leo-mcp"]
 
@@ -130,6 +167,8 @@ def cmd_doctor(args) -> int:
         row("guard hook", None, "off (LEO_GUARD_HOOK=0)")
     elif installed:
         row("guard hook", True, "warns before editing a symbol whose dependents have no test")
+    elif _ephemeral(sys.executable):
+        row("guard hook", None, "not installed here (needs `uv tool install leo-mcp`, then leo-mcp init)")
     else:
         row("guard hook", None, "not installed here (run: leo-mcp init)")
     row("cache", None, str(engine._CACHE_DIR))
@@ -196,6 +235,13 @@ def _maybe_hook(args, root: Path) -> int:
     """El hook es lo que hace que leo hable sin que el agente se acuerde de preguntar.
     Solo Claude Code: es el único harness con PreToolUse."""
     if args.client == "claude" and not getattr(args, "no_hook", False):
+        if _ephemeral(sys.executable):
+            # El hook apunta a este intérprete (ver _hook_command): desde la caché de uv
+            # fallaría en cada edición el día que uv lo borre.
+            print("Guard hook not installed: leo-mcp is running from uv's cache (npx/uvx),"
+                  " which uv may delete. To get it: `uv tool install leo-mcp`, then run"
+                  " `leo-mcp init` again.")
+            return 0
         return _install_guard_hook(root)
     return 0
 
@@ -231,15 +277,19 @@ def cmd_init(args) -> int:
                   + json.dumps({key: {"leo-mcp": entry}}, indent=2), file=sys.stderr)
             return 1
     servers = data.setdefault(key, {})
-    if "leo-mcp" in servers:
+    old = servers.get("leo-mcp")
+    # Repuntar una config vieja (p. ej. la de 0.3.0 a git+https) sin perder las claves
+    # que haya puesto el usuario, como `env`.
+    new = {**old, **entry} if isinstance(old, dict) else entry
+    if old == new:
         # Sin return: quien ya tenía el server configurado es justo quien aún no tiene
         # el hook, y salir aquí dejaba a todos los usuarios previos sin él.
         print(f"leo-mcp is already configured in {target}")
         return _maybe_hook(args, root)
-    servers["leo-mcp"] = entry
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-    print(f"Added leo-mcp to {target}. Restart {args.client} to load it.")
+    servers["leo-mcp"] = new
+    _write_json(target, data)
+    done = "Updated leo-mcp in" if old else "Added leo-mcp to"
+    print(f"{done} {target}. Restart {args.client} to load it.")
     return _maybe_hook(args, root)
 
 
