@@ -379,6 +379,7 @@ class _PyScope:
         lb = props.get("local_binds")
         local = {b[0]: b for b in lb} if lb else {}
         cls, me = props.get("class"), props.get("self_arg")
+        lt = props.get("local_types") or _NONE
         top = self.top.get(here, _NONE)
         binds = self.binds.get(here, _NONE)
         memo = self._memo.get(here)
@@ -402,6 +403,17 @@ class _PyScope:
             if recv == "" and name not in local and name not in top and name not in binds:
                 if name not in _BUILTINS:
                     by_name.append(name)
+                continue
+            if recv in lt:                    # x = C(...); x.foo() → la MRO de C (paso 3)
+                key = f"{lt[recv]}\0{name}"
+                if key not in memo:
+                    memo[key] = self._typed(lt[recv], name, local, top, binds, here)
+                t = memo[key]
+                if t is None:
+                    by_name.append(name)
+                else:
+                    for d in t:
+                        resolved[d.id] = d
                 continue
             if recv and recv not in local and recv not in binds and recv not in top:
                 by_name.append(name)          # obj.foo(), a.b.foo(): por nombre
@@ -428,6 +440,23 @@ class _PyScope:
             else:
                 for d in t:
                     resolved[d.id] = d
+
+    def _typed(self, ctors: list, name: str, local, top, binds, here: str) -> list | None:
+        """`x.name()` con `x` construida solo por `ctors` (formas `[C, '']` / `[C, m]`): `C.name()`
+        para cada C. None si alguna C no es una clase del repo o el método no se encuentra."""
+        keys = []
+        for c, m in ctors:
+            b = local.get(m or c) or binds.get(m or c)
+            if m:
+                defs = self._bound(b, c, m, here) if b else None
+            else:
+                defs = top[c] if c not in local and c in top else (
+                    self._bind_targets(b, here) if b else None)
+            ks = self._keys_of(defs)
+            if not ks:
+                return None
+            keys += ks
+        return self._explicit(keys, name)
 
     def _bound(self, b: list, name: str, recv: str, here: str) -> list | None:
         """Destinos de `name()` (recv '') o `recv.name()` cuando el nombre clave viene del import `b`."""

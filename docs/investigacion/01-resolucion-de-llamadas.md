@@ -344,6 +344,65 @@ máquina). Sin GC, GraphQuery cuesta 5,8 µs/símbolo, frente a 5,2–6,3 en HEA
 atributos (`obj.foo()`, `self.x.foo()`), que siguen yendo por nombre. Eso es el paso 3:
 tipos locales.
 
+## 9. Paso 3: tipos locales para `x.foo()` (26/10/2026)
+
+### Medición previa: cuánto puede dar cada fuente de tipos
+
+Antes de escribir código se clasificaron con `ast` todas las llamadas `x.foo()` y
+`self.x.foo()` a métodos con nombre repetido, según de dónde sale el tipo del receptor. Se
+pondera por destinos falsos (homónimos − 1), que es lo que mide el oráculo:
+
+| Receptor | django | sympy |
+|---|---|---|
+| `x = C(...)` en la misma función | **20,1%** | **9,1%** |
+| `self.x` con `self.x = C(...)` o `x: C` en la clase | <1% | <1% |
+| parámetro anotado, `x: C = …`, retorno anotado | <1% | ~1% |
+| cadenas `a.b.foo()` (django: `Modelo.objects.…`, el manager que añade la metaclase) | 26,6% | 3,0% |
+| `f().foo()`, `x = otra_cosa()`, parámetros sin anotar, globales | resto | resto |
+
+Conclusión: en estos repos casi no hay anotaciones (cuadra con Di Grazia y Pradel, 2022),
+así que lo único que vale la pena es `x = C(...)`. Lo demás se descarta por ahora (YAGNI):
+`self.x`, anotaciones y retornos juntos no llegan al 2%. `Modelo.objects` necesita saber
+cómo funciona Django, y eso no es un tipo local.
+
+### Regla
+
+Es la de las dos fuentes. En PyCG, el grafo de asignaciones guarda para cada identificador el
+**conjunto** de objetos a los que puede apuntar (`AssignG = Obj → P(Obj)`), con un análisis
+insensible al contexto. Pyright, para una variable sin tipo declarado: "The inferred type of
+the variable is the union of all such types".
+
+- Si **todas** las asignaciones de `x` en la función son `x = C(...)` o `x = m.C(...)`,
+  `x.foo()` va al primer `foo` de la MRO de cada `C`. No se incluyen subclases, porque el
+  constructor da el tipo exacto.
+- Cualquier otra forma de ligar `x` descarta la variable, también dentro de funciones
+  anidadas: parámetro, bucle, `with`, `except`, import, `global`/`nonlocal`, desempaquetado,
+  `del` o un `x = f()` cualquiera. Así la unión puede salir más grande, pero nunca más
+  pequeña de lo real.
+- Si alguna `C` no es una clase del repo, o el método no aparece antes de una base
+  desconocida, la llamada va por nombre, como antes.
+- Techo conocido: un `metaclass.__call__` o un `__new__` que devuelve otro tipo engaña a la
+  regla. Está marcado en el código.
+
+### Resultados (muestra 5000, semilla 0)
+
+| Repo | Exactas paso 2 → paso 3 | Precisión | Destinos falsos | Recall |
+|---|---|---|---|---|
+| django | 72,3% → **74,9%** | 10,0% → 10,7% | 4022 → 3730 | 100% |
+| sympy | 79,5% → **80,2%** | 31,3% → 31,8% | 2223 → 2182 | 100% |
+
+Coste: con el mínimo de 5 reconstrucciones en CPU, intercalando A/B, la reconstrucción de
+django sale igual que en HEAD (9,85 frente a 9,85 µs/símbolo). Índice en formato 6.
+
+**Lo que queda.** Los falsos que siguen son sobre todo:
+- cadenas de atributos (`Modelo.objects.create`, que es el 27% en django);
+- `f().foo()`;
+- variables asignadas desde llamadas cuyo retorno no se conoce.
+
+Para resolverlos haría falta propagar entre funciones (como hace PyCG) o modelar Django. Las
+dos cosas chocan con el presupuesto del gate (e), así que no se hacen sin una decisión
+explícita.
+
 ## Fuentes
 
 - Salis et al., *PyCG: Practical Call Graph Generation in Python*, ICSE 2021. https://arxiv.org/abs/2103.00587
