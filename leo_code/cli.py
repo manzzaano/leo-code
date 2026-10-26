@@ -231,15 +231,19 @@ def cmd_init(args) -> int:
                   + json.dumps({key: {"leo-mcp": entry}}, indent=2), file=sys.stderr)
             return 1
     servers = data.setdefault(key, {})
-    if "leo-mcp" in servers:
+    old = servers.get("leo-mcp")
+    # Repuntar una config vieja (p. ej. la de 0.3.0 a git+https) sin perder las claves
+    # que haya puesto el usuario, como `env`.
+    new = {**old, **entry} if isinstance(old, dict) else entry
+    if old == new:
         # Sin return: quien ya tenía el server configurado es justo quien aún no tiene
         # el hook, y salir aquí dejaba a todos los usuarios previos sin él.
         print(f"leo-mcp is already configured in {target}")
         return _maybe_hook(args, root)
-    servers["leo-mcp"] = entry
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-    print(f"Added leo-mcp to {target}. Restart {args.client} to load it.")
+    servers["leo-mcp"] = new
+    _write_json(target, data)
+    done = "Updated leo-mcp in" if old else "Added leo-mcp to"
+    print(f"{done} {target}. Restart {args.client} to load it.")
     return _maybe_hook(args, root)
 
 

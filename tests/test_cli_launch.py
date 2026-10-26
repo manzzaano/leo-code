@@ -44,3 +44,52 @@ def test_without_binary_runs_the_published_version_or_leo_mcp_from(monkeypatch):
 def test_never_npx(monkeypatch):
     _setup(monkeypatch)
     assert "npx" not in cli._launch()
+
+
+# ---- `leo-mcp init` sobre una config que ya tenía leo-mcp ----
+
+def _init(tmp, client, monkeypatch, launch):
+    from argparse import Namespace
+    monkeypatch.setattr(cli, "_launch", lambda: launch)
+    return cli.cmd_init(Namespace(repo=str(tmp), client=client, no_hook=True))
+
+
+def test_init_repoints_an_outdated_server_and_keeps_the_others(tmp_path, monkeypatch, capsys):
+    import json
+    cfg = tmp_path / ".mcp.json"
+    old = {"command": "uvx", "args": ["--from", "git+https://github.com/manzzaano/leo-code.git", "leo-mcp"]}
+    other = {"command": "otro-mcp", "args": []}
+    cfg.write_text(json.dumps({"mcpServers": {"leo-mcp": old, "otro": other}}), encoding="utf-8")
+    assert _init(tmp_path, "claude", monkeypatch, PINNED) == 0
+    servers = json.loads(cfg.read_text(encoding="utf-8"))["mcpServers"]
+    assert servers["leo-mcp"] == {"command": "uvx", "args": PINNED[1:]}
+    assert servers["otro"] == other
+    assert "Updated" in capsys.readouterr().out
+
+
+def test_init_leaves_an_up_to_date_server_alone(tmp_path, monkeypatch, capsys):
+    assert _init(tmp_path, "cursor", monkeypatch, PINNED) == 0
+    cfg = tmp_path / ".cursor" / "mcp.json"
+    before = cfg.read_text(encoding="utf-8")
+    capsys.readouterr()
+    assert _init(tmp_path, "cursor", monkeypatch, PINNED) == 0
+    assert cfg.read_text(encoding="utf-8") == before
+    assert "already configured" in capsys.readouterr().out
+
+
+def test_init_repoints_opencode_too(tmp_path, monkeypatch):
+    import json
+    assert _init(tmp_path, "opencode", monkeypatch, ["/old/leo-mcp"]) == 0
+    assert _init(tmp_path, "opencode", monkeypatch, PINNED) == 0
+    entry = json.loads((tmp_path / "opencode.json").read_text(encoding="utf-8"))["mcp"]["leo-mcp"]
+    assert entry == {"type": "local", "command": PINNED, "enabled": True}
+
+
+def test_init_repoint_keeps_the_users_own_keys(tmp_path, monkeypatch):
+    import json
+    cfg = tmp_path / ".mcp.json"
+    old = {"command": "/old/leo-mcp", "args": [], "env": {"LEO_SEMANTIC": "1"}}
+    cfg.write_text(json.dumps({"mcpServers": {"leo-mcp": old}}), encoding="utf-8")
+    assert _init(tmp_path, "claude", monkeypatch, PINNED) == 0
+    entry = json.loads(cfg.read_text(encoding="utf-8"))["mcpServers"]["leo-mcp"]
+    assert entry == {"command": "uvx", "args": PINNED[1:], "env": {"LEO_SEMANTIC": "1"}}
