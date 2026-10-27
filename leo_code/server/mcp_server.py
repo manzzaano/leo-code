@@ -64,9 +64,10 @@ _TOOL = types.Tool(
         "properties": {
             "query": {"type": "string", "description": "Question or task about the code, in natural language or a symbol name."},
             **_REPO_PROP,
+            # Sin code_gen: por MCP se reintenta como code_query (ver _get_context).
             "task_type": {"type": "string", "default": "auto",
-                          "description": "auto|code_query|refactor|debug|review|search|code_gen|optimize|audit"},
-            "budget_tokens": {"type": "integer", "default": 0, "description": "Token cap (0 = automatic)."},
+                          "enum": ["auto", "code_query", "refactor", "debug", "review", "search", "optimize", "audit"]},
+            "budget_tokens": {"type": "integer", "default": 0, "minimum": 0, "description": "Token cap (0 = automatic)."},
         },
         "required": ["query"],
     },
@@ -291,9 +292,10 @@ def _get_context(args: dict) -> str:
     _index(repo)
     _embed_bg(repo)
     result = engine.compute_context(repo, query, task_type, budget, self_sufficient=True)
-    if result.get("task_type") == "no_code":
+    if result.get("task_type") in ("no_code", "code_gen"):
         # Una llamada a get_context ES sobre código por definición; el clasificador
-        # marca no_code con queries cortas en inglés y devolvía contexto VACÍO.
+        # marca no_code con queries cortas en inglés y devolvía contexto VACÍO, y code_gen
+        # ("write…") solo da el árbol de directorios, que el agente ya ve con sus tools.
         result = engine.compute_context(repo, query, "code_query", budget, self_sufficient=True)
     if not result["capsules_total"]:
         return _empty_msg(repo)

@@ -234,6 +234,28 @@ def test_get_context_says_so_when_nothing_matches(fresh_engine, tmp_path):
     assert "Answer from this" not in out
 
 
+
+def test_get_context_answers_with_code_when_query_reads_as_code_gen(fresh_engine, tmp_path):
+    # "write" clasifica code_gen, cuya estrategia es solo el árbol de directorios (y apunta
+    # a search_code, tool del agente antiguo): por MCP get_context devuelve código siempre.
+    repo = _write(tmp_path / "shop" / "app.py",
+                  "def write_invoice(order):\n    return format_total(order)\n").parent
+    out = mcp_server._get_context({"query": "how does write_invoice write the invoice", "repo_path": str(repo)})
+    assert "def write_invoice" in out
+    assert "search_code" not in out and "Estructura del repositorio" not in out
+
+
+def test_get_context_labels_are_english(fresh_engine, tmp_path):
+    # El agente recibía "Tipo Retorno", "Parametros", "[LLAMA]" y "[truncado]".
+    body = "\n".join(f"    x{i} = helper({i})" for i in range(400))
+    repo = _write(tmp_path / "shop" / "app.py",
+                  "def helper(n: int) -> int:\n    return n\n\n\n"
+                  f"def compute_total(items: list) -> int:\n{body}\n    return 0\n").parent
+    out = mcp_server._get_context({"query": "compute_total", "repo_path": str(repo)})
+    assert "compute_total" in out
+    for spanish in ("Tipo Retorno", "Parametros", "[LLAMA]", "[truncado]", "Lineas"):
+        assert spanish not in out, spanish
+
 def test_codex_snippet_is_valid_toml(capsys, tmp_path):
     # Codex no está instalado aquí: al menos el TOML que imprimimos debe parsear.
     import tomllib
