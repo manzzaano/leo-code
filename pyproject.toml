@@ -27,7 +27,7 @@ classifiers = [
 # watchdog: eventos de FS para no re-walkear el repo en cada sync (1-2 s por llamada
 # medidos con 20.000 archivos). Si falta, el motor cae al walk de siempre.
 dependencies = [
-    "mcp>=1.0,<2.0",
+    "mcp>=2.3,<3",
     "orjson>=3.9",
     "rank-bm25>=0.2",
     "tree-sitter>=0.23",

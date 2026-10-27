@@ -20,9 +20,7 @@ import re
 import sys
 import threading
 from collections import Counter
-from io import TextIOWrapper
 
-import anyio
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 import mcp.types as types
@@ -45,19 +43,23 @@ leo-mcp gives you this repository's real call graph, parsed from the AST (full A
 - Before changing a function's signature or behavior, run graph op=guard on it.
 - The graph is static: calls through WebSockets, subprocesses, queues, reflection or string-built dispatch are not edges."""
 
-server = Server("leo-mcp", version=__version__, instructions=INSTRUCTIONS)
-
 _REPO_PROP = {"repo_path": {"type": "string",
                             "description": "Repository root. Defaults to the project the server was started in."}}
 
+# Las dos tools solo leen el repo: idempotentes, sin efectos y sin salir de él.
+_READ_ONLY = types.ToolAnnotations(read_only_hint=True, destructive_hint=False,
+                                   idempotent_hint=True, open_world_hint=False)
+
 _TOOL = types.Tool(
     name="get_context",
+    title="Code context",
+    annotations=_READ_ONLY,
     description=(
         "Code context for a question or task: the AST subgraph of the relevant symbols "
         "(signatures and bodies), compressed, with file:line. Use it before grep/read to "
         "understand how something works, where to make a change, or why something fails."
     ),
-    inputSchema={
+    input_schema={
         "type": "object",
         "properties": {
             "query": {"type": "string", "description": "Question or task about the code, in natural language or a symbol name."},
@@ -76,6 +78,8 @@ _NEEDS = {"where": ("symbol",), "who_calls": ("symbol",), "impact": ("symbol",),
 _GRAPH_OPS = tuple(_NEEDS)
 _GRAPH_TOOL = types.Tool(
     name="graph",
+    title="Call graph",
+    annotations=_READ_ONLY,
     description=(
         "Deterministic call-graph query with file:line proof, no LLM. "
         "op=where: definition · who_calls: direct callers · impact: everything that transitively "
@@ -83,7 +87,7 @@ _GRAPH_TOOL = types.Tool(
         "crossing frontend fetch -> backend route · guard: impact plus which dependents have no tests. "
         "where/who_calls/impact/guard need `symbol`; trace needs `src` and `dst`."
     ),
-    inputSchema={"type": "object", "properties": {
+    input_schema={"type": "object", "properties": {
         "op": {"type": "string", "enum": list(_GRAPH_OPS)},
         "symbol": {"type": "string", "description": "Function, method or class name (where/who_calls/impact/guard)."},
         "src": {"type": "string", "description": "Start symbol (trace)."},
@@ -93,9 +97,8 @@ _GRAPH_TOOL = types.Tool(
 )
 
 
-@server.list_tools()
-async def list_tools() -> list[types.Tool]:
-    return [_TOOL, _GRAPH_TOOL]
+async def list_tools(_ctx, _params) -> types.ListToolsResult:
+    return types.ListToolsResult(tools=[_TOOL, _GRAPH_TOOL])
 
 
 def _relativize(text: str, repo: str) -> str:
@@ -322,16 +325,21 @@ def _get_context(args: dict) -> str:
     return _relativize(header + ctx + sources + footer, repo)
 
 
-@server.call_tool()
-async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
-    # Las excepciones las convierte el SDK en isError con el mensaje: ValueError legibles.
-    if name == "graph":
-        text = await asyncio.to_thread(_graph, arguments)
-    elif name == "get_context":
-        text = await asyncio.to_thread(_get_context, arguments)
-    else:
-        raise ValueError(f"Unknown tool: {name}")
-    return [types.TextContent(type="text", text=text)]
+async def call_tool(_ctx, params: types.CallToolRequestParams) -> types.CallToolResult:
+    # El SDK v2 ya no convierte las excepciones en is_error: un error de uso (ValueError
+    # legible) tiene que llegar al agente como resultado, no como error de protocolo.
+    handler = {"graph": _graph, "get_context": _get_context}.get(params.name)
+    try:
+        if handler is None:
+            raise ValueError(f"Unknown tool: {params.name}")
+        text = await asyncio.to_thread(handler, params.arguments or {})
+    except Exception as e:
+        return types.CallToolResult(content=[types.TextContent(type="text", text=str(e))], is_error=True)
+    return types.CallToolResult(content=[types.TextContent(type="text", text=text)])
+
+
+server = Server("leo-mcp", version=__version__, instructions=INSTRUCTIONS,
+                on_list_tools=list_tools, on_call_tool=call_tool)
 
 
 # Repos cuyo embedding (semántico) ya se lanzó en background, para no duplicarlo.
@@ -409,16 +417,18 @@ def _warmup(repo: str):
 
 async def main():
     setup_logging(log_dir=engine._CACHE_DIR / "logs")
-    # El canal MCP usa stdout. El indexer y otras libs hacen print() (en este y otros
-    # threads) y eso corrompería el protocolo: stdout REAL para JSON-RPC, sys.stdout → stderr.
-    protocol_stdout = anyio.wrap_file(TextIOWrapper(sys.stdout.buffer, encoding="utf-8"))
-    sys.stdout = sys.stderr
     if os.getenv("LEO_DEBUG_DUMP"):  # diagnóstico: volcar stacks periódicamente a stderr
         import faulthandler
         faulthandler.dump_traceback_later(60, repeat=True, file=sys.stderr)
     _preload_native()
-    _warmup(os.path.abspath(os.getenv("LEO_REPO") or "."))
-    async with stdio_server(stdout=protocol_stdout) as (read, write):
+    # El canal MCP usa stdout y el indexer y otras libs hacen print() desde otros threads.
+    # stdio_server (SDK v2) sirve el protocolo por un descriptor privado y apunta el fd 1
+    # a stderr mientras dura: el warmup arranca DENTRO, cuando sus print ya no llegan al canal.
+    async with stdio_server() as (read, write):
+        # ...pero sys.stdout tiene su propio buffer: con un pipe, lo impreso esperaba en él y se
+        # vaciaba al salir, con el fd 1 ya devuelto al canal. Tras el claim, print → stderr.
+        sys.stdout = sys.stderr
+        _warmup(os.path.abspath(os.getenv("LEO_REPO") or "."))
         await server.run(read, write, server.create_initialization_options())
 
 
