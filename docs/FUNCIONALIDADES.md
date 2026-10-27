@@ -13,7 +13,7 @@ Inventario completo del producto, por importancia. Cada funcionalidad se revisa 
 | # | Funcionalidad | Dónde | Revisión |
 |---|---|---|---|
 | 1 | Servidor MCP stdio, 2 tools, versión del paquete | `server/mcp_server.py:47,97` | 27/10 decidido A+B+C: migrado a SDK `mcp>=2.3,<3` (handlers `on_*`, errores → `is_error` a mano, `stdio_server` v2 + `sys.stdout→stderr` tras el claim); `title` + `annotations` read-only. Hecho, sin publicar |
-| 2 | `get_context`: símbolos relevantes con firma, cuerpo y `fichero:línea`, comprimidos | `mcp_server.py:278`, `engine.py:481` | |
+| 2 | `get_context`: símbolos relevantes con firma, cuerpo y `fichero:línea`, comprimidos | `mcp_server.py:278`, `engine.py:481` | 27/10 decidido A+B+D: benchmark NL `nl_retrieval_bench.py` (gate CI 60%) 20% → 67%; BM25 con tokenizador de código, exactos sin ruido, tests al final; `code_gen` → code_query; enum `task_type`; salida en inglés. C (PageRank personalizado) pendiente según benchmark. Hecho, sin publicar |
 | 3 | `graph op=where`: definición de un símbolo | `core/graphquery.py:576` | |
 | 4 | `graph op=who_calls`: llamadores directos con líneas exactas de llamada | `mcp_server.py:201` | |
 | 5 | `graph op=impact`: dependientes transitivos | `graphquery.py:605` | |
