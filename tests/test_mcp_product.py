@@ -226,6 +226,14 @@ def test_get_context_without_semantic_extra(fresh_engine, fullstack):
     assert out.startswith("[leo-mcp ·") and "jobs" in out
 
 
+def test_get_context_says_so_when_nothing_matches(fresh_engine, tmp_path):
+    # Antes: cabecera "0 tokens of code context" + "Answer from this" con cuerpo en blanco.
+    repo = _write(tmp_path / "shop" / "app.py", "def compute_total(items):\n    return sum(items)\n").parent
+    out = mcp_server._get_context({"query": "authentication flow", "repo_path": str(repo)})
+    assert "no symbol matched" in out and "graph op=where" in out
+    assert "Answer from this" not in out
+
+
 def test_codex_snippet_is_valid_toml(capsys, tmp_path):
     # Codex no está instalado aquí: al menos el TOML que imprimimos debe parsear.
     import tomllib
