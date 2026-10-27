@@ -30,10 +30,14 @@ class Cite:
     line: int
     repo: str = ""
     sig: str = ""  # solo where: la firma, para no necesitar otra llamada
+    via: str = ""  # solo impact: por quién llega (desde profundidad 2)
+    depth: int = 0
 
     def __str__(self) -> str:
         loc = f"{self.file}:{self.line}"
         out = f"{self.name} ({self.type}) @ {loc}" + (f" [{self.repo}]" if self.repo else "")
+        if self.via:
+            out += f" ← via {self.via} · depth {self.depth}"
         return out + (f"\n      {self.sig}" if self.sig else "")
 
 
@@ -78,6 +82,15 @@ def _same_family(a, b) -> bool:
 
 def _xlang_targets(c) -> set:
     return {_bare(x.get("to", "")) for x in ((getattr(c, "properties", None) or {}).get("xlang_calls") or [])}
+
+
+def _qual(c) -> str:
+    """`Clase.método` para métodos (el nombre a secas para el resto)."""
+    return (c.properties or {}).get("qualified") or c.name
+
+
+def _pos(c) -> tuple:
+    return (c.file_path or "", c.start_line or 0, c.name, c.id)
 
 
 def _bare(name: str) -> str:
@@ -619,8 +632,12 @@ class GraphQuery:
     def callers_of_def(self, d) -> list:
         """Callers de UNA definición (no de todas sus homónimas): los que la resuelven a
         ella y los que no se resuelven. Como incomingCalls de LSP, que parte de un ítem."""
-        name, out = _bare(d.name), []
+        name, out, fam = _bare(d.name), [], _family(d)
         for c in {c.id: c for c in self._callers_of(d.name)}.values():
+            cf = _family(c)
+            # otro lenguaje que tiene su propio homónimo: solo vale la arista HTTP explícita
+            if fam and cf and cf != fam and name not in _xlang_targets(c):
+                continue
             forms = [f for f in (c.properties or {}).get("call_forms") or () if f[0] == name]
             # sin forma con ese nombre: arista de refgraph/boundary, se queda
             if not forms or any(self.hits_def(c, f, d) for f in forms):
@@ -643,22 +660,41 @@ class GraphQuery:
                     break
         return Proof("callees", name, out, edges)
 
+    def defs_named(self, name: str) -> list:
+        """Definiciones de `name`; con `Clase.método`, solo las de esa clase si existen."""
+        defs = [c for c in self._resolve(name) if self._is_def(c)]
+        return [c for c in defs if _qual(c) == name] or defs
+
     def impact(self, name: str, limit: int = 200) -> Proof:
-        """Cierre transitivo de quién se rompe si cambias `name` (callers de callers…)."""
-        roots = self._resolve(name)
-        start = roots[0].name if roots else name
-        seen, q, order, edges = {_bare(start)}, deque([start]), [], []
-        while q:
-            cur = q.popleft()
-            for caller in self._callers_of(cur):
-                key = _bare(caller.name)
-                if key not in seen:
-                    seen.add(key)
-                    order.append(caller); edges.append((caller.name, cur))
-                    q.append(caller.name)
-            if len(order) >= limit:
-                break
-        return Proof("impact", name, [self._cite(c) for c in order], edges)
+        """Cierre transitivo de quién se rompe si cambias `name` (callers de callers…).
+
+        Nodos por definición (id), no por nombre: antes dos dependientes `run` distintos
+        contaban como uno y cuál salía dependía del orden (27/10: faltaban dependientes en
+        150/300 nombres de leo-code). Se sube por la resolución (callers_of_def); lo que no
+        se resuelve sigue por nombre, así que no se quita ninguna arista incierta."""
+        roots = sorted(self.defs_named(name), key=_pos)
+        seen = {c.id for c in roots}
+        q = deque((c, 0) for c in roots) if roots else deque([(None, 0)])
+        order, cites, more = [], [], False
+        while q and not more:
+            cur, depth = q.popleft()
+            if cur is None:                   # símbolo sin definición indexada
+                nxt = self._callers_of(name)
+            else:
+                nxt = self.callers_of_def(cur) if self._is_def(cur) else self._callers_of(cur.name)
+            for c in sorted({c.id: c for c in nxt}.values(), key=_pos):
+                if c.id in seen:
+                    continue
+                if len(order) >= limit:
+                    more = True
+                    break
+                seen.add(c.id); order.append(c); q.append((c, depth + 1))
+                cites.append(replace(self._cite(c), via=_qual(cur) if depth else "", depth=depth + 1))
+        notes = [f"stopped at {limit}; more dependents exist"] if more else []
+        n_aux = sum(map(_is_aux_path, order))
+        if n_aux:
+            notes.append(f"{n_aux} of them in tests/benchmarks")
+        return Proof("impact", name, cites, note=" · ".join(notes))
 
     def trace(self, src: str, dst: str, max_depth: int = 12) -> Proof:
         """Camino de llamadas más corto src → dst (BFS), con cada salto citado.

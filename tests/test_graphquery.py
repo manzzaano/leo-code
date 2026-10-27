@@ -120,3 +120,29 @@ def test_where_names_the_class_of_a_method_and_shows_its_signature():
     out = GraphQuery({a.id: a, b.id: b}).where("search").render()
     assert "BM25Index.search (method) @ bm25.py:1" in out and "VectorStore.search (method)" in out
     assert "def BM25Index.search(self, query, top_k) -> list" in out
+
+
+def test_impact_says_through_whom_and_at_what_depth():
+    p = GraphQuery(_chain()).impact("usersTable")
+    fetch = next(c for c in p.cites if c.name == "fetchUser")
+    assert "fetchUser (function) @ ui.tsx:20 ← via apiGetUser · depth 3" == str(fetch)
+    assert "edges:" not in p.render()
+
+
+def test_impact_stops_at_the_limit_and_says_so():
+    caps = {c.id: c for c in [_cap("core", [], "core.py")]
+            + [_cap(f"f{i}", ["core"], "svc.py", i * 10) for i in range(3)]
+            + [_cap(f"test_{i}", ["core"], "tests/test_c.py", i * 10, "test") for i in range(3)]}
+    p = GraphQuery(caps).impact("core", limit=4)
+    assert len(p.cites) == 4
+    assert "stopped at 4; more dependents exist" in p.render()
+    assert "1 of them in tests/benchmarks" in p.render()
+
+
+def test_callers_of_a_python_def_exclude_js_callers_of_a_homonym():
+    caps = {c.id: c for c in [_cap("main", [], "m.py"),
+                              _cap("main", [], "x.js", lang="javascript"),
+                              _cap("boot", ["main"], "y.js", lang="javascript")]}
+    g = GraphQuery(caps)
+    assert g.callers_of_def(caps["m.py:main"]) == []
+    assert [c.name for c in g.callers_of_def(caps["x.js:main"])] == ["boot"]

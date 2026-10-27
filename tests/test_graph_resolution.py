@@ -126,3 +126,34 @@ def test_refs_added_after_parsing_stay_by_name():
     main = next(c for c in caps.values() if c.name == "main")
     main.calls.append("handler")
     assert "main" in _callers(GraphQuery(caps), "handler")
+
+
+# ---- impact por definición (revisión #5, 27/10) ----
+TARGET = {"p/core.py": "def target():\n    pass\n"}
+
+
+def test_impact_keeps_homonymous_dependents():
+    # antes se deduplicaba por nombre base: solo salía uno de los dos `run`
+    files = {**TARGET,
+             "p/a.py": "from core import target\n\ndef run():\n    target()\n",
+             "p/b.py": "from core import target\n\ndef run():\n    target()\n"}
+    g = _graph(files)
+    assert sorted(c.file for c in g.impact("target").cites) == ["p/a.py", "p/b.py"]
+    # y no depende del orden en que llegan las cápsulas
+    rev = GraphQuery(dict(reversed(list(g.caps.items()))))
+    assert [str(c) for c in rev.impact("target").cites] == [str(c) for c in g.impact("target").cites]
+
+
+def test_impact_does_not_follow_homonyms_of_dependents():
+    g = _graph({**TARGET,
+                "p/svc.py": "from core import target\n\ndef helper():\n    target()\n",
+                "p/t.py": "def helper():\n    pass\n\ndef test_x():\n    helper()\n"})
+    assert {c.name for c in g.impact("target").cites} == {"helper"}   # test_x llama a SU helper
+
+
+def test_impact_of_class_method_starts_from_that_definition():
+    g = _graph({"p/m.py": "class A:\n    def save(self):\n        pass\n"
+                          "class B:\n    def save(self):\n        pass\n"
+                          "def use_a():\n    a = A()\n    a.save()\n"
+                          "def use_b():\n    b = B()\n    b.save()\n"})
+    assert {c.name for c in g.impact("A.save").cites} == {"use_a"}

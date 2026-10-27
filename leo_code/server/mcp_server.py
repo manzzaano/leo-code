@@ -28,7 +28,7 @@ import mcp.types as types
 
 from leo_code import __version__, engine
 from leo_code.core.boundary import link_http_edges
-from leo_code.core.graphquery import GraphQuery, Proof, _bare, _is_aux_path
+from leo_code.core.graphquery import GraphQuery, Proof, _bare, _is_aux_path, _qual
 from leo_code.core.guardian import Guardian
 from leo_code.core.parser import call_form
 from leo_code.core.tokens import count_tokens
@@ -204,10 +204,6 @@ _NEXT = {
 _DEF_LINE = re.compile(r"\s*(export\s+)?(async\s+)?(def|function|class)\s")
 
 
-def _qual(c) -> str:
-    return (c.properties or {}).get("qualified") or c.name
-
-
 def _rough_lines(c, bare: str) -> list[int]:
     """Líneas con `bare(` por regex: superconjunto de las llamadas reales (y lo único
     que hay fuera de Python)."""
@@ -247,9 +243,8 @@ def _who_calls(gq: GraphQuery, symbol: str) -> str:
     todas sus homónimas (27/10: −25% callers en django, −43% en leo-code).
     """
     bare = _bare(symbol)
-    defs = [c for c in gq._resolve(symbol) if gq._is_def(c)]
-    named = [c for c in defs if _qual(c) == symbol]
-    target = named[0] if len(named) == 1 else defs[0] if len(defs) == 1 else None
+    defs = gq.defs_named(symbol)
+    target = defs[0] if len(defs) == 1 else None
     callers = (gq.callers_of_def(target) if target
                else list({c.id: c for c in gq._callers_of(symbol)}.values()))
     if not callers:
