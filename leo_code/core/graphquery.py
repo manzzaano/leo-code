@@ -18,7 +18,7 @@ import builtins
 import sys
 from collections import defaultdict, deque
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 
 @dataclass(frozen=True)
@@ -29,10 +29,12 @@ class Cite:
     file: str
     line: int
     repo: str = ""
+    sig: str = ""  # solo where: la firma, para no necesitar otra llamada
 
     def __str__(self) -> str:
         loc = f"{self.file}:{self.line}"
-        return f"{self.name} ({self.type}) @ {loc}" + (f" [{self.repo}]" if self.repo else "")
+        out = f"{self.name} ({self.type}) @ {loc}" + (f" [{self.repo}]" if self.repo else "")
+        return out + (f"\n      {self.sig}" if self.sig else "")
 
 
 @dataclass
@@ -42,6 +44,7 @@ class Proof:
     query: str
     cites: list[Cite] = field(default_factory=list)
     edges: list[tuple[str, str]] = field(default_factory=list)  # (origen, destino) por arista usada
+    note: str = ""  # una línea al pie (where: "imported in N files")
 
     @property
     def found(self) -> bool:
@@ -55,6 +58,8 @@ class Proof:
         if self.edges:
             lines.append("  edges: " + " → ".join(
                 dict.fromkeys([self.edges[0][0]] + [e[1] for e in self.edges])))
+        if self.note:
+            lines.append(f"  {self.note}")
         return "\n".join(lines)
 
 
@@ -466,6 +471,16 @@ class _PyScope:
         return files if not files else self._in_module(files, name, 0)
 
 
+def _is_import(c) -> bool:
+    return (getattr(c, "signature", "") or "").lstrip().startswith(("from ", "import "))
+
+
+def _is_aux_path(c) -> bool:
+    """Tests y benchmarks van detrás del código del producto."""
+    parts = (c.file_path or "").replace("\\", "/").split("/")
+    return any(p in ("tests", "test", "benchmark", "benchmarks") for p in parts)
+
+
 class GraphQuery:
     """Índices deterministas sobre un store de cápsulas (id -> Capsule)."""
 
@@ -574,7 +589,16 @@ class GraphQuery:
 
     # ---- queries deterministas ----
     def where(self, name: str) -> Proof:
-        return Proof("where", name, [self._cite(c) for c in self._resolve(name)])
+        """Definiciones con su clase y firma. Los imports solo si no hay definición indexada
+        (símbolo externo): antes `where Capsule` daba 16 imports y la dataclass salía 6ª,
+        porque _is_def no cuenta dataclass/constant (y no se toca: la resolución depende de él)."""
+        hits = self._resolve(name)
+        defs = [c for c in hits if not _is_import(c)]
+        cites = [replace(self._cite(c), name=(c.properties or {}).get("qualified") or c.name,
+                         sig=" ".join((c.signature or "").split())[:160])
+                 for c in (sorted(defs, key=_is_aux_path) if defs else hits)]
+        n_imp = len({c.file_path for c in hits if _is_import(c)}) if defs else 0
+        return Proof("where", name, cites, note=f"imported in {n_imp} files" if n_imp else "")
 
     def who_calls(self, name: str, limit: int = 50) -> Proof:
         callers = self._callers_of(name)

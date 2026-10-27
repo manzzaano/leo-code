@@ -85,3 +85,38 @@ def test_boundary_links_http_edge():
     p = g.trace("UserBtn", "q")
     assert [c.name for c in p.cites] == ["UserBtn", "get_user", "q"]
     assert {c.file for c in p.cites} == {"ui.tsx", "api.py", "db.py"}  # cruza lenguajes
+
+
+def _import_of(name, file):
+    c = _cap(name, file=file, t="class", content="")
+    c.signature = f"from pkg.models import {name}"
+    return c
+
+
+def test_where_hides_imports_when_the_definition_exists():
+    # Antes: `where Capsule` daba 17 resultados (16 imports) y la dataclass salía 6ª.
+    caps = [_import_of("Model", f"use{i}.py") for i in range(5)] + [_cap("Model", file="models.py", t="dataclass")]
+    p = GraphQuery({c.id: c for c in caps}).where("Model")
+    assert [c.file for c in p.cites] == ["models.py"]
+    assert "imported in 5 files" in p.render()
+
+
+def test_where_keeps_imports_of_an_external_symbol():
+    # Sin definición indexada (p. ej. Path), los imports son lo único que se puede citar.
+    caps = [_import_of("Path", "a.py"), _import_of("Path", "b.py")]
+    assert len(GraphQuery({c.id: c for c in caps}).where("Path").cites) == 2
+
+
+def test_where_lists_product_code_before_tests_and_benchmarks():
+    caps = [_cap("main", file="benchmark/run.py"), _cap("main", file="tests/test_x.py"),
+            _cap("main", file="pkg/cli.py")]
+    assert GraphQuery({c.id: c for c in caps}).where("main").cites[0].file == "pkg/cli.py"
+
+
+def test_where_names_the_class_of_a_method_and_shows_its_signature():
+    a, b = _cap("search", file="bm25.py", t="method"), _cap("search", file="store.py", t="method")
+    a.properties, b.properties = {"qualified": "BM25Index.search"}, {"qualified": "VectorStore.search"}
+    a.signature = "def BM25Index.search(self, query, top_k) -> list"
+    out = GraphQuery({a.id: a, b.id: b}).where("search").render()
+    assert "BM25Index.search (method) @ bm25.py:1" in out and "VectorStore.search (method)" in out
+    assert "def BM25Index.search(self, query, top_k) -> list" in out
