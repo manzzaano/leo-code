@@ -145,9 +145,71 @@ def test_who_calls_cites_call_lines_not_just_the_caller_definition(fresh_engine,
                   "    return get_session()\n").parent  # 9
     out = mcp_server._graph({"op": "who_calls", "symbol": "get_session", "repo_path": str(repo)})
     assert "3 call site(s)" in out
-    assert "run (method) @ agent.py:4 → calls at :5, :6" in out
+    assert "Agent.run (method) @ agent.py:4 → calls at :5, :6" in out
     assert "other (function) @ agent.py:8 → calls at :9" in out
     assert "Agent (class)" not in out   # sus llamadas ya las cubre su método
+
+
+_TWO_SAVES = ("class A:\n"                 # 1
+              "    def save(self):\n"      # 2
+              "        return 1\n"         # 3
+              "class B:\n"                 # 4
+              "    def save(self):\n"      # 5
+              "        return 2\n"         # 6
+              "def use_a():\n"             # 7
+              "    a = A()\n"              # 8
+              "    a.save()\n"             # 9
+              "def use_b():\n"             # 10
+              "    b = B()\n"              # 11
+              "    b.save()\n"             # 12
+              "def use_any(x):\n"          # 13
+              "    x.save()\n"             # 14
+              "def both():\n"              # 15
+              "    a = A()\n"              # 16
+              "    b = B()\n"              # 17
+              "    a.save()\n"             # 18
+              "    b.save()\n")            # 19
+
+
+def test_who_calls_class_method_lists_only_callers_of_that_definition(fresh_engine, tmp_path):
+    repo = _write(tmp_path / "svc" / "m.py", _TWO_SAVES).parent
+    out = mcp_server._graph({"op": "who_calls", "symbol": "A.save", "repo_path": str(repo)})
+    assert "use_a (function) @ m.py:7 → calls at :9" in out
+    assert "use_any (function) @ m.py:13 → calls at :14" in out   # sin resolver: por nombre
+    assert "both (function) @ m.py:15 → calls at :18\n" in out    # no la línea de b.save()
+    assert "use_b" not in out
+
+
+def test_who_calls_bare_name_with_homonyms_says_how_to_narrow(fresh_engine, tmp_path):
+    repo = _write(tmp_path / "svc" / "m.py", _TWO_SAVES).parent
+    out = mcp_server._graph({"op": "who_calls", "symbol": "save", "repo_path": str(repo)})
+    assert "use_b (function)" in out and "use_a (function)" in out
+    assert "2 definitions named save (A.save, B.save)" in out
+
+
+def test_who_calls_puts_product_first_and_says_when_it_cuts(fresh_engine, tmp_path):
+    _write(tmp_path / "svc" / "core.py", "def helper():\n    return 1\n"
+                                         "def zz_main():\n    return helper()\n")
+    _write(tmp_path / "svc" / "tests" / "test_h.py",
+           "".join(f"def test_{i:02}():\n    helper()\n" for i in range(55)))
+    out = mcp_server._graph({"op": "who_calls", "symbol": "helper", "repo_path": str(tmp_path / "svc")})
+    lines = out.splitlines()
+    assert lines[1].startswith("  · zz_main (function) @ core.py:3")
+    assert "showing 50 of 56 callers (55 in tests/benchmarks)" in out
+
+
+def test_who_calls_ignores_names_in_docstrings_and_comments(fresh_engine, tmp_path):
+    repo = _write(tmp_path / "svc" / "m.py",
+                  "def helper(x):\n"                      # 1
+                  "    return x\n"                        # 2
+                  "class Svc:\n"                          # 3
+                  '    """Use helper(x) to do things."""\n'  # 4
+                  "    def run(self):\n"                  # 5
+                  "        # helper(2) is cheap\n"        # 6
+                  "        return helper(1)\n").parent    # 7
+    out = mcp_server._graph({"op": "who_calls", "symbol": "helper", "repo_path": str(repo)})
+    assert "1 call site(s) in 1 caller(s)" in out
+    assert "Svc.run (method) @ m.py:5 → calls at :7\n" in out
 
 
 def test_index_persists_and_resyncs(fresh_engine, fullstack, monkeypatch):

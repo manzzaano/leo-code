@@ -610,6 +610,23 @@ class GraphQuery:
                      [self._cite(c) for c in uniq[:limit]],
                      edges=[(c.name, name) for c in uniq[:limit]])
 
+    def hits_def(self, caller, form, d) -> bool:
+        """¿Puede la llamada `form` (nombre, receptor) de `caller` ir a la def `d`?
+        Sin resolver (None) → sí, por nombre: nunca se quita una arista que no se sabe."""
+        t = self._scope.targets(caller, *form)
+        return t is None or any(x.id == d.id for x in t)
+
+    def callers_of_def(self, d) -> list:
+        """Callers de UNA definición (no de todas sus homónimas): los que la resuelven a
+        ella y los que no se resuelven. Como incomingCalls de LSP, que parte de un ítem."""
+        name, out = _bare(d.name), []
+        for c in {c.id: c for c in self._callers_of(d.name)}.values():
+            forms = [f for f in (c.properties or {}).get("call_forms") or () if f[0] == name]
+            # sin forma con ese nombre: arista de refgraph/boundary, se queda
+            if not forms or any(self.hits_def(c, f, d) for f in forms):
+                out.append(c)
+        return out
+
     def callees(self, name: str, limit: int = 50) -> Proof:
         targets = self._resolve(name)
         if not targets:

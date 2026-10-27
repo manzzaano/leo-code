@@ -11,6 +11,7 @@ Todo lo que ve el agente/usuario va en inglés (estándar del ecosistema MCP); e
 índice vive en la caché de usuario, nunca dentro del repo.
 """
 
+import ast
 import asyncio
 import difflib
 import importlib
@@ -27,8 +28,9 @@ import mcp.types as types
 
 from leo_code import __version__, engine
 from leo_code.core.boundary import link_http_edges
-from leo_code.core.graphquery import GraphQuery, _bare
+from leo_code.core.graphquery import GraphQuery, Proof, _bare, _is_aux_path
 from leo_code.core.guardian import Guardian
+from leo_code.core.parser import call_form
 from leo_code.core.tokens import count_tokens
 from leo_code.logging_config import setup_logging
 
@@ -202,36 +204,85 @@ _NEXT = {
 _DEF_LINE = re.compile(r"\s*(export\s+)?(async\s+)?(def|function|class)\s")
 
 
+def _qual(c) -> str:
+    return (c.properties or {}).get("qualified") or c.name
+
+
+def _rough_lines(c, bare: str) -> list[int]:
+    """Líneas con `bare(` por regex: superconjunto de las llamadas reales (y lo único
+    que hay fuera de Python)."""
+    call = re.compile(rf"\b{re.escape(bare)}\s*(?:<[^()\n]*>)?\s*\(")
+    return [c.start_line + i for i, t in enumerate((c.content or "").splitlines())
+            if call.search(t) and not _DEF_LINE.match(t)]
+
+
+def _call_lines(gq: GraphQuery, c, bare: str, d) -> list[int]:
+    """Líneas donde `c` llama a `bare`. Python con ast: sin docstrings ni comentarios
+    (eran el 2,4% de líneas de más en django) y, con una def `d`, solo las llamadas que
+    pueden ir a ella. El resto de lenguajes, por regex."""
+    text = c.content or ""
+    if (c.file_path or "").endswith(".py"):
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:
+            tree = None
+        if tree is not None:
+            out = set()
+            for n in ast.walk(tree):
+                form = call_form(n.func) if isinstance(n, ast.Call) else None
+                if form and form[0] == bare and (d is None or gq.hits_def(c, form, d)):
+                    f = n.func   # línea del nombre llamado: `attr` en `obj\n.attr()`
+                    out.add(c.start_line - 1 + (f.end_lineno if isinstance(f, ast.Attribute) else f.lineno))
+            return sorted(out)
+    return _rough_lines(c, bare)
+
+
 def _who_calls(gq: GraphQuery, symbol: str) -> str:
     """who_calls con las líneas de LLAMADA, no solo la de definición del caller.
 
     Medido en el harness sobre NEXUS (2026-09-15): con `execute_batch @ executor_agent.py:32`
     los agentes contestaban "call site: línea 32" y perdían la 2ª llamada (:39, :55).
     Una cápsula (p.ej. la clase) cuyas llamadas ya cubre otra más estrecha (su método) se omite.
-    Solo presentación: el grafo auditado (GraphQuery) no cambia.
+    Con una sola definición (o `Clase.método`) se usan los callers de ESA def, no los de
+    todas sus homónimas (27/10: −25% callers en django, −43% en leo-code).
     """
     bare = _bare(symbol)
-    call = re.compile(rf"\b{re.escape(bare)}\s*(?:<[^()\n]*>)?\s*\(")
-    callers = list({c.id: c for c in gq._callers_of(symbol)}.values())
-    sites = {c.id: [c.start_line + i for i, text in enumerate((c.content or "").splitlines())
-                    if call.search(text) and not _DEF_LINE.match(text)] for c in callers}
-    kept, covered = [], set()
+    defs = [c for c in gq._resolve(symbol) if gq._is_def(c)]
+    named = [c for c in defs if _qual(c) == symbol]
+    target = named[0] if len(named) == 1 else defs[0] if len(defs) == 1 else None
+    callers = (gq.callers_of_def(target) if target
+               else list({c.id: c for c in gq._callers_of(symbol)}.values()))
+    if not callers:
+        return Proof("who_calls", symbol).render()
+    sites, kept, covered = {}, [], set()
     for c in sorted(callers, key=lambda c: (c.end_line or 0) - (c.start_line or 0)):
+        # Si hasta las líneas por regex ya están cubiertas (la clase cuyos métodos ya
+        # salieron), no se parsea: en django `get` tardaba 2,6 s por las clases.
+        rough = _rough_lines(c, bare)
+        if rough and {(c.file_path, ln) for ln in rough} <= covered:
+            continue
+        sites[c.id] = _call_lines(gq, c, bare, target)
         own = {(c.file_path, ln) for ln in sites[c.id]}
         if own and own <= covered:
             continue
         covered |= own
         kept.append(c)
-    if not kept:
-        return gq.who_calls(symbol).render()
-    kept.sort(key=lambda c: (c.file_path, c.start_line))
+    kept.sort(key=lambda c: (_is_aux_path(c), c.file_path, c.start_line))   # producto primero
     n_sites = len(covered)
     head = (f"[who_calls] {symbol} — {n_sites} call site(s) in {len(kept)} caller(s), with proof:"
             if n_sites else f"[who_calls] {symbol} — {len(kept)} caller(s), with proof:")
     lines = [head]
     for c in kept[:50]:
         at = (" → calls at " + ", ".join(f":{ln}" for ln in sites[c.id])) if sites[c.id] else ""
-        lines.append(f"  · {c.name} ({c.type}) @ {c.file_path}:{c.start_line}{at}")
+        lines.append(f"  · {_qual(c)} ({c.type}) @ {c.file_path}:{c.start_line}{at}")
+    if len(kept) > 50:
+        lines.append(f"  … showing 50 of {len(kept)} callers "
+                     f"({sum(map(_is_aux_path, kept))} in tests/benchmarks)")
+    if target is None and len(defs) > 1:
+        names = sorted({_qual(c) for c in defs})
+        lines.append(f"  {len(defs)} definitions named {bare} ({', '.join(names[:5])}"
+                     f"{', …' if len(names) > 5 else ''}): callers of all of them. "
+                     'Narrow with symbol="Class.method".')
     return "\n".join(lines)
 
 
