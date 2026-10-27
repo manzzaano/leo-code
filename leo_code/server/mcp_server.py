@@ -303,6 +303,10 @@ def _get_context(args: dict) -> str:
         line, _, ctx = ctx.partition("\n")
         files = [f for f in line[len("ARCHIVOS: "):].split(", ") if f]
         ctx = ctx.lstrip("\n")
+    if not ctx.strip():
+        # Sin esto el agente recibía "0 tokens of code context · Answer from this" en blanco.
+        return (f'[leo-mcp · no symbol matched "{query}" · {result["capsules_total"]:,} symbols indexed]\n'
+                'Name a function, class or file in the query, or find a symbol with graph op=where.')
 
     tok = count_tokens(ctx)
     raw = sum(_raw_tokens(f) for f in files)
