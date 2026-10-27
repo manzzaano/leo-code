@@ -26,6 +26,9 @@ jobs:
       - name: Test
         run: python -m pytest --tb=short -q
 
+      - name: Calidad de get_context con preguntas en lenguaje natural
+        run: python benchmark/nl_retrieval_bench.py
+
       - name: Import smoke test
         run: |
           python -c "from leo_code.core.parser import Capsule, extract_from_file"

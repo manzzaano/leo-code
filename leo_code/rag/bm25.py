@@ -1,12 +1,46 @@
 """BM25 Sparse Retrieval — complementa la búsqueda densa Qdrant con TF-IDF.
 
-Indexa cápsulas como documentos: name + signature + docstring.
+Indexa cápsulas como documentos: name + signature + docstring + nombre del archivo.
 Usa rank_bm25 (Python puro, sin dependencias nativas).
 """
 
+import re
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from leo_code.core.parser import Capsule
+
+
+# Palabras de pregunta que no nombran código ("how does X work"): con ellas BM25 premiaba
+# cualquier docstring en inglés.
+_STOP = frozenset(
+    "a an the is are was were be been to of in on at by for from with into about and or not "
+    "how does do did what when where which why who whom this that these those it its can "
+    "should would will there here".split())
+_WORD = re.compile(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+")
+
+
+def code_tokens(text: str) -> list[str]:
+    """Palabras de texto e identificadores: parte snake_case y camelCase, minúsculas, sin
+    palabras de pregunta y con un plural/-ing/-ed recortado ("callers" ~ "caller").
+
+    Partir solo por espacios dejaba `discriminant_short_words(words:` como UN token: una
+    pregunta en lenguaje natural no casaba nunca con un identificador compuesto.
+    ponytail: stemmer de sufijos a mano, cambiar por uno real si el benchmark lo pide."""
+    out = []
+    for w in _WORD.findall(text or ""):
+        w = w.lower()
+        if w in _STOP:
+            continue
+        if w.endswith("ies") and len(w) > 4:
+            w = w[:-3] + "y"
+        else:
+            for suf in ("ing", "ed", "s"):
+                if w.endswith(suf) and len(w) - len(suf) >= 3 and not w.endswith("ss"):
+                    w = w[:-len(suf)]
+                    break
+        out.append(w)
+    return out
 
 
 @dataclass
@@ -27,8 +61,9 @@ class BM25Index:
     def add(self, capsules: list[Capsule]):
         docs = []
         for c in capsules:
-            text = f"{c.name} {c.signature or ''} {c.docstring or ''}"
-            tokens = text.lower().split()
+            # Sin el cuerpo: medido en benchmark/nl_retrieval_bench.py, mete más ruido que señal.
+            text = f"{c.name} {c.signature or ''} {c.docstring or ''} {Path(c.file_path or '').stem}"
+            tokens = code_tokens(text)
             self._tokenized.append(tokens)
             self._ids.append(c.id)
             self._meta[c.id] = {"name": c.name, "file_path": c.file_path}
@@ -42,7 +77,9 @@ class BM25Index:
     def search(self, query: str, top_k: int = 20) -> list[BM25Result]:
         if self._index is None or not self._tokenized:
             return []
-        tokens = query.lower().split()
+        tokens = code_tokens(query)
+        if not tokens:
+            return []
         scores = self._index.get_scores(tokens)
         ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
         return [

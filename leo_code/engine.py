@@ -465,6 +465,19 @@ def _name_parts(name: str) -> set[str]:
     return out
 
 
+# Sin cuerpo que mostrar: imports, cabeceras de archivo y campos de dataclass.
+_NO_BODY = frozenset({"module", "file_header", "attribute"})
+
+
+def _demoted(c, query_parts: set[str]) -> int:
+    """1 = al final del contexto: tests (salvo que la pregunta hable de tests) y símbolos
+    sin cuerpo. Medido en nl_retrieval_bench: abrían 4 de cada 10 respuestas."""
+    if c.type in _NO_BODY:
+        return 1
+    is_test = c.type == "test" or "tests" in Path(c.file_path or "").parts
+    return int(is_test and "test" not in query_parts)
+
+
 def _get_bm25(repo: str, caps: dict) -> object:
     # Clave = generación del índice estructural: tras un resync (el agente editó código)
     # BM25 se reconstruye; antes se quedaba con los símbolos del arranque.
@@ -531,7 +544,10 @@ def compute_context(repo: str, query: str, task_type_in: str = "auto",
         return {"context": context, "tokens": len(context) // 2, "task_type": task_type, "capsules_total": len(caps)}
 
     # Hybrid: exact match (one rep per file for path, name match) + semantic
-    query_words = set(re.findall(r"\w{4,}", query.lower()))
+    from leo_code.rag.bm25 import _STOP, code_tokens
+    # Sin palabras de pregunta: "where" casaba con GraphQuery.where y "does"/"what" con todo.
+    query_words = set(re.findall(r"\w{4,}", query.lower())) - _STOP
+    query_parts = set(code_tokens(query))
     # Siglas y palabras cortas ("CV", "db", "ws"): el corte en 4 las tiraba y "How does CV
     # tailoring work?" no casaba con cv_morpher.py (medido en NEXUS: el contexto lo lideraba
     # pdf_factory, código muerto). Solo cuentan como PARTE completa de un nombre/stem, nunca
@@ -561,25 +577,29 @@ def compute_context(repo: str, query: str, task_type_in: str = "auto",
     specific_file_paths: set[str] = set()
     for c in caps.values():
         stem = Path(c.file_path).stem.lower()
+        if stem.startswith("__"):
+            continue  # "init" no nombra los __init__.py (sin esto, la query de `leo-mcp init` traía 5)
         parts = set(re.split(r"[_\-.]", stem))
         if any(w == stem or w == stem.replace("_", "") for w in query_words) or (short_words & parts):
             specific_file_paths.add(c.file_path)
 
-    path_seen: set[str] = set()
     specific_match: list = []  # ALL capsules from explicitly-named files (highest priority)
-    path_match: list = []      # one capsule per other path-matched file
-    name_match: list = []
+    loose_match: list = []     # ruta o nombre que casa con alguna palabra: candidatos, no líderes
     for c in caps.values():
         fp = (c.file_path or "").lower().replace("\\", "/")
         nm = c.name.lower()
         if c.file_path in specific_file_paths:
             specific_match.append(c)
-        elif any(w in fp for w in query_words):
-            if c.file_path not in path_seen:
-                path_match.append(c)
-                path_seen.add(c.file_path)
-        elif any(w in nm for w in query_words) or (short_words & _name_parts(c.name)):
-            name_match.append(c)
+        elif any(w in fp or w in nm for w in query_words) or (short_words & _name_parts(c.name)):
+            loose_match.append(c)
+    # Antes iban DELANTE de la fusión: la 1ª cápsula de cada archivo con la palabra en la
+    # ruta (en guard_hook.py, el `from __future__ import annotations`) y cualquier nombre
+    # con la palabra dentro ("calls" → include_calls). Ahora solo lidera el símbolo nombrado
+    # tal cual; el resto entra en la fusión ordenado por palabras compartidas con la query.
+    named = [c for c in loose_match
+             if c.name.split(".")[-1].lower() in query_words and not _demoted(c, query_parts)]
+    loose_match.sort(key=lambda c: (_demoted(c, query_parts),
+                                    -len(query_parts & set(code_tokens(f"{c.name} {Path(c.file_path).stem}")))))
     specific_match.sort(
         key=lambda c: (
             -_dir_priority(c),
@@ -588,14 +608,19 @@ def compute_context(repo: str, query: str, task_type_in: str = "auto",
             # preguntado desaparece del contexto (recall = precisión perdida).
             0 if c.name.split(".")[-1].lower() in query_words else 1,
             -sum(1 for w in query_words if w in (c.file_path or "").lower().replace("\\", "/")),
+            # Dentro del archivo nombrado: tests/imports al final y, delante, lo que comparte
+            # palabras con la pregunta ("watcher reindex changed" → sync/watch, no los imports).
+            _demoted(c, query_parts),
+            -len(query_parts & set(code_tokens(c.name))),
             # Prefer actual defs (no dots, type is function/class) over imports and modules
             0 if (c.type in ("function", "class") and "." not in c.name) else 1,
             -sum(1 for w in query_words if w in c.name.lower()),
         ),
     )
     # specific_match first → guarantees target file content leads the context
-    exact = specific_match[:20] + path_match[:5] + name_match[:3]
+    exact = specific_match[:20] + [c for c in named if c not in specific_match][:5]
     exact_ids = {c.id for c in exact}
+    loose_match = [c for c in loose_match if c.id not in exact_ids][:15]
 
     # Fast start: cargar el encoder cuesta ~9s por proceso. Con el encoder frío,
     # esta query sirve solo con las patas estructurales (exact + BM25 + scorer,
@@ -625,6 +650,7 @@ def compute_context(repo: str, query: str, task_type_in: str = "auto",
         from leo_code.rag.scorer import score_capsules
         pool_ids = list(dict.fromkeys(
             [c.id for c in exact]
+            + [c.id for c in loose_match]
             + [c.id for c in semantic]
             + [bm.capsule_id for bm in bm25_results if bm.capsule_id in caps]
         ))
@@ -639,6 +665,8 @@ def compute_context(repo: str, query: str, task_type_in: str = "auto",
     fused_scores: dict[str, float] = {}
     for rank, c in enumerate(exact):
         fused_scores[c.id] = fused_scores.get(c.id, 0) + 1 / (60 + rank + 1)
+    for rank, c in enumerate(loose_match):
+        fused_scores[c.id] = fused_scores.get(c.id, 0) + 1 / (60 + rank + 1)
     for rank, c in enumerate(semantic):
         fused_scores[c.id] = fused_scores.get(c.id, 0) + 1 / (60 + rank + 1)
     for rank, bm in enumerate(bm25_results):
@@ -650,6 +678,7 @@ def compute_context(repo: str, query: str, task_type_in: str = "auto",
     cap = 30 if task_type == "search" else (25 if specific_file_paths else 15)
     fused_ids = sorted(fused_scores, key=fused_scores.get, reverse=True)
     top_caps = [caps[rid] for rid in fused_ids if rid in caps and rid not in exact_ids]
+    top_caps.sort(key=lambda c: _demoted(c, query_parts))  # estable: conserva el orden RRF
     top_caps = exact + top_caps
     top_caps = top_caps[:cap]
 

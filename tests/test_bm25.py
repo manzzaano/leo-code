@@ -47,3 +47,21 @@ def test_bm25_process_match():
     results = idx.search("process data input")
     assert len(results) > 0
     assert results[0].capsule_id == "2"
+
+
+def test_bm25_matches_words_inside_snake_and_camel_identifiers():
+    """Una pregunta en lenguaje natural casa con las partes de un identificador: partiendo
+    solo por espacios, "short words" no encontraba discriminant_short_words(...)."""
+    caps = _capsules() + [
+        Capsule(id="4", type="function", name="discriminant_short_words", file_path="engine.py",
+                start_line=1, end_line=5, language="python",
+                signature="def discriminant_short_words(words: set, caps: dict) -> set", content="",
+                docstring="", calls=[], properties={}),
+        Capsule(id="5", type="method", name="Indexer.markDirty", file_path="watcher.py",
+                start_line=1, end_line=5, language="python",
+                signature="def markDirty(self, path)", content="", docstring="", calls=[], properties={}),
+    ]
+    idx = BM25Index()
+    idx.add(caps)
+    assert idx.search("how are short words filtered")[0].capsule_id == "4"
+    assert idx.search("which files are marked dirty")[0].capsule_id == "5"
