@@ -99,3 +99,34 @@ def test_coverage_by_definition_not_by_name(tmp_path):
     assert g.is_covered("helper")                    # por nombre: alguna def cubierta
     rep = g.review("use_b")
     assert not rep.changed_covered
+
+
+def _repo_caps(tmp_path, files):
+    from leo_code.rag.indexer import Indexer
+    for name, src in files.items():
+        (tmp_path / name).write_text(src)
+    idx = Indexer(); idx.build(str(tmp_path), verbose=False)
+    return idx.get_capsules()
+
+
+def test_import_does_not_make_every_function_a_dependent(tmp_path):
+    # Antes la parte (2) de augment_refs repartía lo referenciado a nivel de módulo entre
+    # TODAS las funciones del archivo: en leo-code, impact 0 → guard 643 (`_detect_jsts`).
+    caps = _repo_caps(tmp_path, {
+        "b.py": "def target():\n    return 1\n",
+        "a.py": ("import b\n\nHANDLER = b.target\n\n"
+                 "def f1():\n    return 1\n\ndef f2():\n    return 2\n"),
+    })
+    names = {a.cite.name for a in Guardian(caps).review("target").affected}
+    assert not names & {"f1", "f2"}, names
+
+
+def test_dispatch_table_still_reaches_its_user(tmp_path):
+    # Dispatch por dict a nivel de módulo: quien usa la tabla depende de sus funciones.
+    caps = _repo_caps(tmp_path, {
+        "b.py": "def target():\n    return 1\n",
+        "a.py": ("import b\n\n_TABLE = {'go': b.target}\n\n"
+                 "def run(k):\n    return _TABLE[k]()\n\ndef other():\n    return 2\n"),
+    })
+    names = {a.cite.name for a in Guardian(caps).review("target").affected}
+    assert "run" in names and "other" not in names, names

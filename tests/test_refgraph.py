@@ -20,8 +20,9 @@ def test_module_dispatch_edge(tmp_path):
     caps = _caps_from(tmp_path / "m.py", src)
     augment_refs(caps)
     detect = next(c for c in caps.values() if c.name == "detect")
-    # `_detect_go` se referencia a nivel de módulo (dict) → arista hacia las funciones del archivo
-    assert "_detect_go" in detect.calls
+    table = next(c for c in caps.values() if c.name == "DISPATCH")
+    # la tabla es un nodo: detect → DISPATCH → _detect_go
+    assert "DISPATCH" in detect.calls and "_detect_go" in table.calls
 
 
 def test_unique_only_no_common_name_noise(tmp_path):
@@ -32,3 +33,15 @@ def test_unique_only_no_common_name_noise(tmp_path):
     augment_refs(caps)
     caller = next(c for c in caps.values() if c.name == "caller")
     assert "run" not in caller.calls   # nombre no único → sin arista de referencia
+
+
+def test_main_block_reaches_functions_of_its_file(tmp_path):
+    # Una función que relanza su archivo como script (`subprocess … __file__`) depende de lo
+    # que hace el bloque __main__: audit_formal.check_f → --mem-child → compute_context.
+    src = ("def child():\n    return 1\n\n"
+           "def spawn():\n    return run_script(__file__)\n\n"
+           "if __name__ == '__main__':\n    child()\n")
+    caps = _caps_from(tmp_path / "m.py", src)
+    augment_refs(caps)
+    spawn = next(c for c in caps.values() if c.name == "spawn")
+    assert "child" in spawn.calls
