@@ -19,7 +19,7 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass, field
 
-from leo_code.core.graphquery import GraphQuery, Cite, _bare
+from leo_code.core.graphquery import GraphQuery, Cite
 
 
 @dataclass
@@ -75,6 +75,8 @@ class Guardian:
         self.caps = aug
         self.gq = GraphQuery(aug)
         self._covered: set[str] | None = None
+        # cita (archivo, línea, nombre) → su cápsula: la cobertura va por definición
+        self._at = {(c.file_path or "?", c.start_line or 0, c.name): c for c in aug.values()}
 
     # ---- cobertura: símbolos alcanzados por algún test ----
     @staticmethod
@@ -88,40 +90,40 @@ class Guardian:
         return (c.name or "").lower().startswith("test_") or _is_test_path(Path(c.file_path or ""))
 
     def test_closure(self) -> set[str]:
-        """Nombres (base) alcanzables desde cualquier test siguiendo `calls` (transitivo)."""
+        """Ids de las definiciones alcanzables desde algún test (transitivo).
+
+        Por definición, con la resolución de llamadas (`_hops`: resueltas → su def; sin
+        resolver → todas las homónimas, no se quita una arista incierta). Por nombre, un
+        test de un `helper` cubría a todos los `helper` del repo."""
         if self._covered is not None:
             return self._covered
-        by_name: dict[str, list] = {}
-        for c in self.caps.values():
-            by_name.setdefault(_bare(c.name), []).append(c)
         seen: set[str] = set()
-        q: deque = deque()
-        for c in self.caps.values():
-            if self._is_test(c):
-                for callee in (c.calls or []):
-                    q.append(_bare(callee))
+        q: deque = deque(d for c in self.caps.values() if self._is_test(c)
+                         for d, _, _ in self.gq._hops(c))
         while q:
-            name = q.popleft()
-            if name in seen:
+            d = q.popleft()
+            if d.id in seen:
                 continue
-            seen.add(name)
-            for c in by_name.get(name, []):
-                for callee in (c.calls or []):
-                    b = _bare(callee)
-                    if b not in seen:
-                        q.append(b)
+            seen.add(d.id)
+            q.extend(t for t, _, _ in self.gq._hops(d) if t.id not in seen)
         self._covered = seen
         return seen
 
-    def is_covered(self, name: str) -> bool:
-        return _bare(name) in self.test_closure()
+    def is_covered(self, sym) -> bool:
+        """Una cápsula: ¿la alcanza un test? Un nombre: ¿alguna de sus defs?"""
+        if not isinstance(sym, str):
+            return sym.id in self.test_closure()
+        return any(c.id in self.test_closure() for c in self.gq._resolve(sym))
 
     # ---- radio de explosión + revisión ----
     def review(self, changed_symbol: str, limit: int = 200) -> ChangeReport:
         impact = self.gq.impact(changed_symbol, limit=limit)
-        affected = [Affected(c, self.is_covered(c.name)) for c in impact.cites]
+        affected = [Affected(c, self.is_covered(self._at[(c.file, c.line, c.name)]))
+                    for c in impact.cites]
+        defs = self.gq.defs_named(changed_symbol)
         return ChangeReport(symbol=changed_symbol,
-                            changed_covered=self.is_covered(changed_symbol),
+                            changed_covered=(any(map(self.is_covered, defs)) if defs
+                                             else self.is_covered(changed_symbol)),
                             affected=affected)
 
     def review_many(self, symbols: list[str]) -> list[ChangeReport]:

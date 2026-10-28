@@ -78,7 +78,7 @@ def run():
         ran = any(c.start_line < ln <= c.end_line for ln in lines)
         if ran:
             dyn_covered += 1
-            if not g.is_covered(c.name):
+            if not g.is_covered(c):         # por definición, no por nombre
                 violations.append((c.name, c.file_path))
 
     ok = len(violations) == 0

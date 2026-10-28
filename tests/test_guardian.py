@@ -79,3 +79,23 @@ def test_is_test_same_rule_as_hook():
     # Tests de verdad, incluido el `tests.py` de una app Django fuera de tests/.
     for f in ("tests/x.py", "pkg/test_x.py", "pkg/x_test.py", "scripts/tests.py", "web/a.test.ts"):
         assert Guardian._is_test(_cap("helper", file=f)), f
+
+
+def test_coverage_by_definition_not_by_name(tmp_path):
+    # Dos `helper` homónimos: el test solo llama al de a.py. Por nombre ambos salían
+    # cubiertos; por definición, solo el que el test alcanza.
+    from leo_code.rag.indexer import Indexer
+    (tmp_path / "a.py").write_text("def helper():\n    return 1\n")
+    (tmp_path / "b.py").write_text("def helper():\n    return 2\n")
+    (tmp_path / "c.py").write_text("from b import helper\n\ndef use_b():\n    return helper()\n")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_a.py").write_text(
+        "from a import helper\n\ndef test_h():\n    assert helper() == 1\n")
+    idx = Indexer(); idx.build(str(tmp_path), verbose=False)
+    g = Guardian(idx.get_capsules())
+    defs = {c.file_path.replace("\\", "/").rsplit("/", 1)[-1]: c
+            for c in g.gq.defs_named("helper")}
+    assert g.is_covered(defs["a.py"]) and not g.is_covered(defs["b.py"])
+    assert g.is_covered("helper")                    # por nombre: alguna def cubierta
+    rep = g.review("use_b")
+    assert not rep.changed_covered
