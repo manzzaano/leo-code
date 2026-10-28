@@ -81,10 +81,11 @@ class Guardian:
     def _is_test(c) -> bool:
         if c.type == "test":
             return True
-        nm = (c.name or "").lower()
-        fp = (c.file_path or "").lower().replace("\\", "/")
-        return nm.startswith("test_") or "/tests/" in fp or fp.endswith("_test.py") \
-            or "test" in fp.split("/")[-1]
+        # Mismo criterio que el hook: «test» suelto en el nombre del archivo marcaba
+        # producto como test (django: testing.py, testserver.py).
+        from pathlib import Path
+        from leo_code.guard_hook import _is_test_path
+        return (c.name or "").lower().startswith("test_") or _is_test_path(Path(c.file_path or ""))
 
     def test_closure(self) -> set[str]:
         """Nombres (base) alcanzables desde cualquier test siguiendo `calls` (transitivo)."""

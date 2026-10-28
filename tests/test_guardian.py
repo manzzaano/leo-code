@@ -69,3 +69,13 @@ def test_proof_is_citable():
     rep = g.review("read_db")
     a = rep.affected[0]
     assert a.cite.file and a.cite.line >= 1 and a.cite.name      # archivo:línea presente
+
+
+def test_is_test_same_rule_as_hook():
+    # Producto con «test» en el nombre del archivo NO es un test (django: testing.py,
+    # testserver.py): antes contaba como test y lo que llamaba salía cubierto.
+    for f in ("pkg/testing.py", "cmd/testserver.py", "cmd/sendtestemail.py", "pkg/latest.py"):
+        assert not Guardian._is_test(_cap("helper", file=f)), f
+    # Tests de verdad, incluido el `tests.py` de una app Django fuera de tests/.
+    for f in ("tests/x.py", "pkg/test_x.py", "pkg/x_test.py", "scripts/tests.py", "web/a.test.ts"):
+        assert Guardian._is_test(_cap("helper", file=f)), f

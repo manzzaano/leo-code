@@ -41,10 +41,10 @@ _TEST_MARKERS = ("/tests/", "/test/", "/__tests__/", "/spec/")
 
 def _is_test_path(path: Path) -> bool:
     """Editar un test no rompe a nadie: es el caso más común y el más inútil de avisar."""
-    posix = path.as_posix().lower()
+    posix = "/" + path.as_posix().lower()   # "/" delante: `tests/x.py` relativo también
     name = path.name.lower()
     return (any(m in posix for m in _TEST_MARKERS)
-            or name.startswith("test_") or name.startswith("test.")
+            or name.startswith("test_") or name.startswith("test.") or name == "tests.py"
             or any(name.endswith(s) for s in ("_test.py", ".test.ts", ".test.tsx", ".test.js",
                                               ".spec.ts", ".spec.tsx", ".spec.js")))
 
