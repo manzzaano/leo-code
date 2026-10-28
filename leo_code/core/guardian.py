@@ -26,10 +26,11 @@ from leo_code.core.graphquery import GraphQuery, Cite
 class Affected:
     """Un símbolo dentro del radio de explosión, con su estado de cobertura."""
     cite: Cite
-    covered: bool          # ¿lo alcanza algún test?
+    covered: bool          # ¿lo alcanza algún test? (estático: alcanzable, no ejecutado)
+    is_test: bool = False  # un test dependiente es cobertura, no riesgo
 
     def __str__(self) -> str:
-        mark = "✓ tested" if self.covered else "✗ NO test"
+        mark = "✓ reached by a test" if self.covered else "✗ NO test"
         return f"{self.cite}  [{mark}]"
 
 
@@ -39,22 +40,31 @@ class ChangeReport:
     symbol: str
     changed_covered: bool
     affected: list[Affected] = field(default_factory=list)
+    note: str = ""         # de impact: «stopped at N; more dependents exist»
 
     @property
     def uncovered(self) -> list[Affected]:
-        return [a for a in self.affected if not a.covered]
+        """Riesgo: dependientes de producto sin test. Nada cubre a un test, así que listar
+        los tests aquí era el 86% de las entradas (27/10, leo-code y django)."""
+        return [a for a in self.affected if not a.covered and not a.is_test]
 
-    def render(self) -> str:
+    def render(self, shown: int = 40) -> str:
         lines = [f"changing `{self.symbol}`"
-                 + ("  [✓ tested]" if self.changed_covered else "  [✗ NO test]")]
+                 + ("  [✓ reached by a test]" if self.changed_covered else "  [✗ NO test]")]
         if not self.affected:
             lines.append("  → breaks nothing that is indexed.")
             return "\n".join(lines)
-        risk = len(self.uncovered)
-        lines.append(f"  → affects {len(self.affected)} symbol(s)"
-                     + (f", {risk} with NO test (risk)" if risk else ", all tested ✓"))
-        for a in self.affected[:40]:
-            lines.append(f"    · {a}")
+        risk = self.uncovered
+        n_tests = sum(a.is_test for a in self.affected)
+        lines.append(f"  → affects {len(self.affected)} symbol(s): {n_tests} test(s) depend on it, "
+                     f"{len(self.affected) - n_tests} in code"
+                     + (f", {len(risk)} with NO test (risk):" if risk
+                        else ", all reached by a test ✓"))
+        lines += [f"    · {a.cite}" for a in risk[:shown]]   # orden del BFS: menor profundidad antes
+        if len(risk) > shown:
+            lines.append(f"    … showing {shown} of {len(risk)}")
+        if self.note:
+            lines.append(f"  ({self.note})")
         return "\n".join(lines)
 
 
@@ -118,13 +128,14 @@ class Guardian:
     # ---- radio de explosión + revisión ----
     def review(self, changed_symbol: str, limit: int = 200) -> ChangeReport:
         impact = self.gq.impact(changed_symbol, limit=limit)
-        affected = [Affected(c, self.is_covered(self._at[(c.file, c.line, c.name)]))
-                    for c in impact.cites]
+        caps = [self._at[(c.file, c.line, c.name)] for c in impact.cites]
+        affected = [Affected(c, self.is_covered(cap), self._is_test(cap))
+                    for c, cap in zip(impact.cites, caps)]
         defs = self.gq.defs_named(changed_symbol)
         return ChangeReport(symbol=changed_symbol,
                             changed_covered=(any(map(self.is_covered, defs)) if defs
                                              else self.is_covered(changed_symbol)),
-                            affected=affected)
+                            affected=affected, note=impact.note)
 
     def review_many(self, symbols: list[str]) -> list[ChangeReport]:
         return [self.review(s) for s in symbols]
@@ -191,10 +202,16 @@ def guard_repo(repo: str = ".", staged: bool = False, base: str | None = None) -
     link_http_edges(caps)                 # aristas HTTP para impacto cross-lenguaje
     g = Guardian(caps)
     reports = g.review_diff(git_diff(repo, staged, base))
-    affected = sum(len(r.affected) for r in reports)
-    uncovered = sum(len(r.uncovered) for r in reports)
-    summary = {"changed": len(reports), "affected": affected, "uncovered_risk": uncovered}
-    return reports, summary
+    return reports, summarize(reports)
+
+
+def summarize(reports: list[ChangeReport]) -> dict:
+    """Totales sin repetir: un dependiente de varios símbolos cambiados cuenta una vez
+    (sumando, el diff main..dev daba 2.344 «riesgo» para ~41 símbolos distintos)."""
+    key = lambda a: (a.cite.file, a.cite.line, a.cite.name)
+    return {"changed": len(reports),
+            "affected": len({key(a) for r in reports for a in r.affected}),
+            "uncovered_risk": len({key(a) for r in reports for a in r.uncovered})}
 
 
 # ----------------------------------------------------------------------------

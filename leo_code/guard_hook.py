@@ -49,11 +49,6 @@ def _is_test_path(path: Path) -> bool:
                                               ".spec.ts", ".spec.tsx", ".spec.js")))
 
 
-def _is_test_cite(cite) -> bool:
-    return (cite.type == "test" or (cite.name or "").lower().startswith("test_")
-            or _is_test_path(Path(cite.file or "")))
-
-
 def _line_of(path: Path, needle: str) -> int | None:
     """Línea (1-based) donde empieza `needle` en el archivo.
 
@@ -114,11 +109,7 @@ def _report(caps: list, symbols: list) -> tuple[str, str] | None:
     guard = Guardian(by_id)
     for cap in symbols:
         report = guard.review(cap.name)
-        # Un test que depende del símbolo es cobertura, no riesgo — y nada cubre a un test,
-        # así que sin este filtro TODOS salían marcados como "sin test". En un repo bien
-        # cubierto eso es un aviso en cada edición apuntando a archivos de test: el ruido
-        # que hace que el hook se apague el primer día.
-        risky = [a for a in report.uncovered if not _is_test_cite(a.cite)]
+        risky = report.uncovered   # ya sin tests: un test dependiente es cobertura
         if not risky:
             continue
         shown = risky[:_MAX_SYMBOLS_REPORTED]

@@ -130,3 +130,30 @@ def test_dispatch_table_still_reaches_its_user(tmp_path):
     })
     names = {a.cite.name for a in Guardian(caps).review("target").affected}
     assert "run" in names and "other" not in names, names
+
+
+def test_tests_are_coverage_not_risk_and_cut_is_announced():
+    # 86% de los «✗ NO test» eran tests (nada cubre a un test). Ahora un test dependiente
+    # cuenta como cobertura; el riesgo lista solo producto, y un corte se anuncia.
+    caps = {c.id: c for c in
+            [_cap("core", file="lib.py")]
+            + [_cap(f"use{i}", file="app.py", line=10 * i, calls=["core"]) for i in range(45)]
+            + [_cap("test_core", file="tests/test_lib.py", t="test", calls=["core"])]}
+    rep = Guardian(caps).review("core")
+    assert [a.cite.name for a in rep.uncovered if a.cite.name.startswith("test")] == []
+    assert len(rep.uncovered) == 45
+    out = rep.render()
+    assert "1 test(s)" in out and "45 with NO test" in out
+    assert "test_core (test)" not in out
+    assert "showing 40 of 45" in out
+
+
+def test_impact_cut_is_announced_and_cli_counts_unique():
+    caps = {c.id: c for c in
+            [_cap("core", file="lib.py"), _cap("core2", file="lib2.py")]
+            + [_cap(f"use{i}", file="app.py", line=10 * i, calls=["core", "core2"]) for i in range(5)]}
+    g = Guardian(caps)
+    assert "stopped at 3" in g.review("core", limit=3).render()
+    from leo_code.core.guardian import summarize
+    reps = g.review_many(["core", "core2"])          # mismos 5 dependientes para los dos
+    assert summarize(reps)["uncovered_risk"] == 5
