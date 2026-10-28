@@ -34,6 +34,7 @@ def fresh_engine(tmp_path, monkeypatch):
     # tiene sus propios tests en test_deferred_save.py.
     monkeypatch.setattr(engine, "_SAVE_DEBOUNCE_S", 0.0)
     monkeypatch.setattr(mcp_server, "_gq_cache", {})
+    monkeypatch.setattr(mcp_server, "_guard_cache", {})
     monkeypatch.setattr(engine, "SEMANTIC", False)
     return tmp_path
 
@@ -356,3 +357,16 @@ def test_trace_to_an_external_symbol_says_it_is_not_in_the_repo(fresh_engine, tm
     out = mcp_server._graph({"op": "trace", "src": "fetch_all", "dst": "fetch_page", "repo_path": str(repo)})
     assert "`fetch_page` has no definition in this repo" in out
     assert "No static call path" not in out
+
+
+def test_guard_reuses_guardian_until_index_changes(fresh_engine, fullstack, monkeypatch):
+    # Guardian(caps) se construía en CADA llamada: django 11-18 s por guard.
+    built = []
+    real = mcp_server.Guardian
+    monkeypatch.setattr(mcp_server, "Guardian", lambda caps: built.append(1) or real(caps))
+    args = {"op": "guard", "symbol": "get_session", "repo_path": str(fullstack)}
+    first = mcp_server._graph(args)
+    assert mcp_server._graph(args) == first and len(built) == 1
+    engine._generation[str(fullstack)] = engine.generation(str(fullstack)) + 1
+    mcp_server._graph(args)
+    assert len(built) == 2

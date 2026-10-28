@@ -146,10 +146,24 @@ _GQ_CACHE_MAX = 4
 _gq_cache: dict[str, tuple[int, dict, GraphQuery]] = {}
 
 
+# Guardian por repo, atado al MISMO dict de cápsulas de _gq_cache: si el índice cambia de
+# generación, _repo_graph crea otro dict y el guardián se reconstruye. Construirlo en cada
+# llamada costaba 260 ms en leo-code y 11-18 s en django (augment_refs + test_closure).
+_guard_cache: dict[str, tuple[dict, Guardian]] = {}
+
+
+def _guardian(repo: str, caps: dict) -> Guardian:
+    hit = _guard_cache.get(repo)
+    if hit is None or hit[0] is not caps:
+        hit = _guard_cache[repo] = (caps, Guardian(caps))
+    return hit[1]
+
+
 def _evict_repo(repo: str) -> None:
     """Suelta el grafo de un repo y su watcher: si no lo consultamos, no hay por qué
     seguir observando su árbol ni retener sus cápsulas."""
     _gq_cache.pop(repo, None)
+    _guard_cache.pop(repo, None)
     try:
         engine.flush_index(repo)              # no perder lo indexado de ese repo
         engine._get_indexer().stop_watch(repo)
@@ -264,7 +278,7 @@ def _graph(args: dict) -> str:
         return "\n".join(_not_found(gq, s) for s in unknown)
     if op == "guard":
         # Guardian sobre las MISMAS cápsulas (boundary ya cosido por _repo_graph).
-        out = Guardian(caps).review(syms[0]).render()
+        out = _guardian(repo, caps).review(syms[0]).render()
     elif op == "who_calls":
         out = _who_calls(gq, syms[0])
     else:
