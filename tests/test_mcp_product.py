@@ -348,3 +348,11 @@ def test_importing_engine_does_not_write_into_cwd(tmp_path):
     subprocess.run([sys.executable, "-c", "import leo_code.server.mcp_server"],
                    cwd=tmp_path, env=env, check=True, capture_output=True)
     assert list(tmp_path.iterdir()) == []
+
+
+def test_trace_to_an_external_symbol_says_it_is_not_in_the_repo(fresh_engine, tmp_path):
+    repo = _write(tmp_path / "svc" / "m.py",
+                  "def fetch_all(client):\n    return client.fetch_page('x')\n").parent
+    out = mcp_server._graph({"op": "trace", "src": "fetch_all", "dst": "fetch_page", "repo_path": str(repo)})
+    assert "`fetch_page` has no definition in this repo" in out
+    assert "No static call path" not in out

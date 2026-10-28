@@ -11,7 +11,6 @@ Todo lo que ve el agente/usuario va en inglés (estándar del ecosistema MCP); e
 índice vive en la caché de usuario, nunca dentro del repo.
 """
 
-import ast
 import asyncio
 import difflib
 import importlib
@@ -28,9 +27,8 @@ import mcp.types as types
 
 from leo_code import __version__, engine
 from leo_code.core.boundary import link_http_edges
-from leo_code.core.graphquery import GraphQuery, Proof, _bare, _is_aux_path, _qual
+from leo_code.core.graphquery import GraphQuery, Proof, _bare, _is_aux_path, _qual, rough_lines
 from leo_code.core.guardian import Guardian
-from leo_code.core.parser import call_form
 from leo_code.core.tokens import count_tokens
 from leo_code.logging_config import setup_logging
 
@@ -201,38 +199,6 @@ _NEXT = {
 }
 
 
-_DEF_LINE = re.compile(r"\s*(export\s+)?(async\s+)?(def|function|class)\s")
-
-
-def _rough_lines(c, bare: str) -> list[int]:
-    """Líneas con `bare(` por regex: superconjunto de las llamadas reales (y lo único
-    que hay fuera de Python)."""
-    call = re.compile(rf"\b{re.escape(bare)}\s*(?:<[^()\n]*>)?\s*\(")
-    return [c.start_line + i for i, t in enumerate((c.content or "").splitlines())
-            if call.search(t) and not _DEF_LINE.match(t)]
-
-
-def _call_lines(gq: GraphQuery, c, bare: str, d) -> list[int]:
-    """Líneas donde `c` llama a `bare`. Python con ast: sin docstrings ni comentarios
-    (eran el 2,4% de líneas de más en django) y, con una def `d`, solo las llamadas que
-    pueden ir a ella. El resto de lenguajes, por regex."""
-    text = c.content or ""
-    if (c.file_path or "").endswith(".py"):
-        try:
-            tree = ast.parse(text)
-        except SyntaxError:
-            tree = None
-        if tree is not None:
-            out = set()
-            for n in ast.walk(tree):
-                form = call_form(n.func) if isinstance(n, ast.Call) else None
-                if form and form[0] == bare and (d is None or gq.hits_def(c, form, d)):
-                    f = n.func   # línea del nombre llamado: `attr` en `obj\n.attr()`
-                    out.add(c.start_line - 1 + (f.end_lineno if isinstance(f, ast.Attribute) else f.lineno))
-            return sorted(out)
-    return _rough_lines(c, bare)
-
-
 def _who_calls(gq: GraphQuery, symbol: str) -> str:
     """who_calls con las líneas de LLAMADA, no solo la de definición del caller.
 
@@ -253,10 +219,10 @@ def _who_calls(gq: GraphQuery, symbol: str) -> str:
     for c in sorted(callers, key=lambda c: (c.end_line or 0) - (c.start_line or 0)):
         # Si hasta las líneas por regex ya están cubiertas (la clase cuyos métodos ya
         # salieron), no se parsea: en django `get` tardaba 2,6 s por las clases.
-        rough = _rough_lines(c, bare)
+        rough = rough_lines(c, bare)
         if rough and {(c.file_path, ln) for ln in rough} <= covered:
             continue
-        sites[c.id] = _call_lines(gq, c, bare, target)
+        sites[c.id] = gq.call_lines(c, bare, target)
         own = {(c.file_path, ln) for ln in sites[c.id]}
         if own and own <= covered:
             continue
@@ -305,7 +271,11 @@ def _graph(args: dict) -> str:
         proof = gq.trace(*syms) if op == "trace" else getattr(gq, op)(syms[0])
         out = proof.render()
         if op == "trace" and not proof.found:
-            out += ("\n(No static call path. Hops through WebSockets, subprocesses, queues or "
+            ends = [s for s in syms if not gq.nodes_named(s)]
+            out += (f"\n({' and '.join(f'`{s}`' for s in ends)} has no definition in this repo "
+                    "(external or not indexed): trace needs both ends here. "
+                    f"For who calls it: graph op=who_calls symbol={ends[-1]})" if ends else
+                    "\n(No static call path. Hops through WebSockets, subprocesses, queues or "
                     "string-built dispatch are not followed, which can be why.)")
     return _relativize(out + "\n\n" + _NEXT[op], repo)
 

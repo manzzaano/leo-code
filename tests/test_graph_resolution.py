@@ -157,3 +157,46 @@ def test_impact_of_class_method_starts_from_that_definition():
                           "def use_a():\n    a = A()\n    a.save()\n"
                           "def use_b():\n    b = B()\n    b.save()\n"})
     assert {c.name for c in g.impact("A.save").cites} == {"use_a"}
+
+
+# ---- trace por definición (revisión #6, 27/10) ----
+# b.py va primero: antes cada salto se citaba con la PRIMERA def del nombre (B.get)
+GETS = {"p/b.py": "class B:\n    def get(self):\n        return 1\n",
+        "p/a.py": "class A:\n    def get(self):\n        return helper_a()\n"
+                  "def helper_a():\n    return target()\n",
+        "p/target.py": "def target():\n    pass\n",
+        "p/main.py": "from a import A\n\ndef main():\n    x = A()\n    return x.get()\n"
+                     "def loose(obj):\n    return obj.get()\n"}
+
+
+def test_trace_cites_the_definitions_it_walks():
+    p = _graph(GETS).trace("main", "target")
+    assert [(c.file, c.line) for c in p.cites] == [("p/main.py", 3), ("p/a.py", 2), ("p/a.py", 4),
+                                                   ("p/target.py", 1)]
+    assert str(p.cites[1]) == "A.get (method) @ p/a.py:2 ← called at :5"
+
+
+def test_trace_marks_hops_that_go_by_name():
+    p = _graph(GETS).trace("loose", "target")
+    assert str(p.cites[1]) == "A.get (method) @ p/a.py:2 ← called at :7 ≈ by name, 2 candidates"
+
+
+def test_trace_from_class_method_and_homonym_note():
+    g = _graph(GETS)
+    assert not g.trace("B.get", "target").found
+    p = g.trace("get", "target")
+    assert p.found and "`get` matches 2 definitions (this path uses p/a.py:2)" in p.render()
+
+
+def test_trace_does_not_depend_on_capsule_order():
+    g = _graph(GETS)
+    rev = GraphQuery(dict(reversed(list(g.caps.items()))))
+    for a, b in (("main", "target"), ("loose", "target"), ("get", "target")):
+        assert rev.trace(a, b).render() == g.trace(a, b).render()
+
+
+def test_trace_marks_by_name_hops_even_with_one_candidate():
+    # `Path(x).resolve()` de pathlib cae por nombre en el único `resolve` del repo
+    p = _graph({"p/s.py": "class Scope:\n    def resolve(self):\n        return 1\n",
+                "p/m.py": "def run(x):\n    return Path(x).resolve()\n"}).trace("run", "resolve")
+    assert str(p.cites[1]) == "Scope.resolve (method) @ p/s.py:2 ← called at :2 ≈ by name"

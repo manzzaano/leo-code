@@ -14,11 +14,15 @@ Self-check:  python -m leo_code.core.graphquery
 
 from __future__ import annotations
 
+import ast
 import builtins
+import re
 import sys
 from collections import defaultdict, deque
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
+
+from leo_code.core.parser import call_form
 
 
 @dataclass(frozen=True)
@@ -32,12 +36,15 @@ class Cite:
     sig: str = ""  # solo where: la firma, para no necesitar otra llamada
     via: str = ""  # solo impact: por quién llega (desde profundidad 2)
     depth: int = 0
+    hop: str = ""  # solo trace: dónde se llama desde el salto anterior y si va por nombre
 
     def __str__(self) -> str:
         loc = f"{self.file}:{self.line}"
         out = f"{self.name} ({self.type}) @ {loc}" + (f" [{self.repo}]" if self.repo else "")
         if self.via:
             out += f" ← via {self.via} · depth {self.depth}"
+        if self.hop:
+            out += f" ← {self.hop}"
         return out + (f"\n      {self.sig}" if self.sig else "")
 
 
@@ -82,6 +89,17 @@ def _same_family(a, b) -> bool:
 
 def _xlang_targets(c) -> set:
     return {_bare(x.get("to", "")) for x in ((getattr(c, "properties", None) or {}).get("xlang_calls") or [])}
+
+
+_DEF_LINE = re.compile(r"\s*(export\s+)?(async\s+)?(def|function|class)\s")
+
+
+def rough_lines(c, bare: str) -> list[int]:
+    """Líneas con `bare(` por regex: superconjunto de las llamadas reales (y lo único
+    que hay fuera de Python)."""
+    call = re.compile(rf"\b{re.escape(bare)}\s*(?:<[^()\n]*>)?\s*\(")
+    return [c.start_line + i for i, t in enumerate((c.content or "").splitlines())
+            if call.search(t) and not _DEF_LINE.match(t)]
 
 
 def _qual(c) -> str:
@@ -629,6 +647,26 @@ class GraphQuery:
         t = self._scope.targets(caller, *form)
         return t is None or any(x.id == d.id for x in t)
 
+    def call_lines(self, c, bare: str, d=None) -> list[int]:
+        """Líneas donde `c` llama a `bare`. Python con ast: sin docstrings ni comentarios
+        (eran el 2,4% de líneas de más en django) y, con una def `d`, solo las llamadas que
+        pueden ir a ella. El resto de lenguajes, por regex."""
+        text = c.content or ""
+        if (c.file_path or "").endswith(".py"):
+            try:
+                tree = ast.parse(text)
+            except SyntaxError:
+                tree = None
+            if tree is not None:
+                out = set()
+                for n in ast.walk(tree):
+                    form = call_form(n.func) if isinstance(n, ast.Call) else None
+                    if form and form[0] == bare and (d is None or self.hits_def(c, form, d)):
+                        f = n.func   # línea del nombre llamado: `attr` en `obj\n.attr()`
+                        out.add(c.start_line - 1 + (f.end_lineno if isinstance(f, ast.Attribute) else f.lineno))
+                return sorted(out)
+        return rough_lines(c, bare)
+
     def callers_of_def(self, d) -> list:
         """Callers de UNA definición (no de todas sus homónimas): los que la resuelven a
         ella y los que no se resuelven. Como incomingCalls de LSP, que parte de un ítem."""
@@ -665,6 +703,11 @@ class GraphQuery:
         defs = [c for c in self._resolve(name) if self._is_def(c)]
         return [c for c in defs if _qual(c) == name] or defs
 
+    def nodes_named(self, name: str) -> list:
+        """Extremos de trace: las defs, o si no hay, lo que no sea un import (cápsulas sin
+        `content`, como en el chequeo (d), no cuentan como def para _is_def)."""
+        return self.defs_named(name) or [c for c in self._resolve(name) if not _is_import(c)]
+
     def impact(self, name: str, limit: int = 200) -> Proof:
         """Cierre transitivo de quién se rompe si cambias `name` (callers de callers…).
 
@@ -696,57 +739,68 @@ class GraphQuery:
             notes.append(f"{n_aux} of them in tests/benchmarks")
         return Proof("impact", name, cites, note=" · ".join(notes))
 
+    def _hops(self, c) -> list[tuple]:
+        """(def destino, exacta, nº de defs posibles) por llamada de `c`: las resueltas van a
+        su def; las demás, a todas las defs con ese nombre (no se quita una arista incierta)."""
+        calls = getattr(c, "calls", None) or []
+        forms = (c.properties or {}).get("call_forms")
+        by_name, resolved = (calls, ()) if forms is None else self._split(c, forms, calls)
+        out = [(d, True, 1) for d in resolved]
+        for n in dict.fromkeys(by_name):
+            if self._edge_ok(c, n):
+                ts = [t for t in self._resolve(n) if not _is_import(t)]
+                out += [(t, False, len(ts)) for t in ts]
+        return out
+
     def trace(self, src: str, dst: str, max_depth: int = 12) -> Proof:
         """Camino de llamadas más corto src → dst (BFS), con cada salto citado.
 
         Es el "¿cómo fluye de A a B?": devuelve la cadena de funciones que conecta
         ambos extremos. Funciona cross-repo y cross-lenguaje si las aristas existen.
+        Por definición (id), no por nombre: antes, tras cada salto se seguían los callees de
+        todas las homónimas y se citaba la primera def del nombre (27/10: en django solo 4
+        de 203 caminos citaban defs coherentes, y 112/200 cambiaban al reordenar el índice).
         """
-        src_caps = self._resolve(src)
-        if not src_caps:
-            return Proof("trace", f"{src} → {dst}")
-        dst_bare = _bare(dst)
-        # adyacencia: nombre -> set(callees por nombre)
-        start_names = {c.name for c in src_caps} | {_bare(c.name) for c in src_caps}
-        # BFS sobre nombres siguiendo `calls`
-        prev: dict[str, str | None] = {n: None for n in start_names}
-        q = deque(start_names)
-        hit = None
-        depth = {n: 0 for n in start_names}
-        while q:
-            cur = q.popleft()
-            if depth[cur] > max_depth:
+        query = f"{src} → {dst}"
+        srcs = sorted(self.nodes_named(src), key=_pos)
+        dst_defs = self.nodes_named(dst)
+        dsts = {c.id for c in dst_defs}
+        prev: dict = {c.id: None for c in srcs}
+        q, hit = deque((c, 0) for c in srcs), None
+        while q and hit is None:
+            c, depth = q.popleft()
+            # una clase agrega las llamadas de todos sus métodos: como salto intermedio
+            # inventaría caminos (construir `A()` no ejecuta `A.get`); solo vale de origen
+            if depth >= max_depth or (depth and c.type == "class"):
                 continue
-            if _bare(cur) == dst_bare and cur not in start_names:
-                hit = cur; break
-            for c in self._resolve(cur):
-                for callee, _ in self._callees_of(c):
-                    if not self._edge_ok(c, callee):
-                        continue
-                    if _bare(callee) == dst_bare:
-                        prev[callee] = cur; hit = callee; q.clear(); break
-                    if callee not in prev:
-                        prev[callee] = cur; depth[callee] = depth[cur] + 1
-                        q.append(callee)
-                if hit:
-                    break
-            if hit:
-                break
-        if not hit:
-            return Proof("trace", f"{src} → {dst}")
-        # reconstruir camino
-        path, cur = [], hit
-        while cur is not None:
-            path.append(cur); cur = prev.get(cur)
-        path.reverse()
-        cites, edges = [], []
-        for i, n in enumerate(path):
-            r = self._resolve(n)
-            if r:
-                cites.append(self._cite(r[0]))
-            if i:
-                edges.append((path[i - 1], n))
-        return Proof("trace", f"{src} → {dst}", cites, edges)
+            for t, exact, n in sorted(self._hops(c), key=lambda h: (_pos(h[0]), not h[1])):
+                if t.id not in prev:
+                    prev[t.id] = (c, exact, n)
+                    if t.id in dsts:
+                        hit = t
+                        break
+                    q.append((t, depth + 1))
+        if hit is None:
+            return Proof("trace", query)
+        path, hops = [hit], []
+        while prev[path[-1].id] is not None:
+            c, exact, n = prev[path[-1].id]
+            hops.append((exact, n)); path.append(c)
+        path.reverse(); hops.reverse()
+        cites = [replace(self._cite(path[0]), name=_qual(path[0]))]
+        for a, b, (exact, n) in zip(path, path[1:], hops):
+            lines = self.call_lines(a, _bare(b.name), b)
+            http = _bare(b.name) in _xlang_targets(a)
+            hop = ("called at " + ", ".join(f":{ln}" for ln in lines) if lines
+                   else "via HTTP" if http else "")
+            if not exact and not http:   # sin resolver: puede ir a otra def o fuera del repo
+                hop = f"{hop} ≈ by name{f', {n} candidates' if n > 1 else ''}".strip()
+            cites.append(replace(self._cite(b), name=_qual(b), hop=hop))
+        notes = [f"`{x}` matches {len(defs)} definitions (this path uses {c.file}:{c.line}); "
+                 "narrow with Class.method"
+                 for x, defs, c in ((src, srcs, cites[0]), (dst, dst_defs, cites[-1])) if len(defs) > 1]
+        edges = [(_qual(a), _qual(b)) for a, b in zip(path, path[1:])]
+        return Proof("trace", query, cites, edges, note=" · ".join(notes))
 
 
 # ----------------------------------------------------------------------------
