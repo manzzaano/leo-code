@@ -20,7 +20,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional
 
-from leo_code.core.parser import extract_from_file, build_call_graph, Capsule, detect_language, EXT_LANG
+from leo_code.core.parser import extract_from_file, Capsule, detect_language, EXT_LANG
 
 try:
     import orjson
@@ -58,7 +58,6 @@ class Indexer:
             # extract_from_file ya elige el parser: ast (Python), tree-sitter (TS/JS) o
             # regex genérica. No hay un modo "tree-sitter" que forzar desde fuera.
             capsules = extract_from_file(str(path), lang)
-            build_call_graph(capsules)
             return capsules, lang, len(capsules), None
         except Exception as e:
             return [], lang, 0, str(e)
@@ -281,18 +280,11 @@ class Indexer:
                 n += 1
         print(f"[indexer] loaded: {path} ({n} symbols)")
 
-    def _rebuild_call_graph(self) -> None:
-        """Re-resuelve called_by global tras un sync (los edges son cross-file)."""
-        caps = list(self._capsules.values())
-        for c in caps:
-            c.called_by = []
-        build_call_graph(caps)
-
     def sync(self, repo_path: str, since_mtime: float,
              languages: Optional[list[str]] = None) -> dict:
         """Actualización incremental sobre un índice ya cargado: re-parsea solo
-        archivos cambiados (mtime > since_mtime) o nuevos, quita los borrados, y
-        re-resuelve el call-graph. Mucho más barato que build() cuando cambian pocos.
+        archivos cambiados (mtime > since_mtime) o nuevos y quita los borrados.
+        Mucho más barato que build() cuando cambian pocos.
         Devuelve {changed, new, deleted, reparsed_capsules, removed, capsules}.
         """
         if languages is None:
@@ -346,7 +338,6 @@ class Indexer:
                     pass
 
         if removed or reparsed:
-            self._rebuild_call_graph()
             # Solo el delta (capsulas nuevas/re-parseadas), no todo el repo — un
             # sync que toca 1 archivo no debe re-embeber las ~1400 capsulas del resto.
             if self.vector_store and touched_capsules:

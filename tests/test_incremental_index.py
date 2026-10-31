@@ -116,3 +116,17 @@ def test_rebuild_prunes_dead_absolute_paths_but_keeps_other_repos(tmp_path):
     paths = {c.file_path for c in idx.get_capsules().values()}
     assert "in_a" in names and "in_b" in names    # B (otro repo vivo) intacto
     assert not any("repo_borrado" in p for p in paths)  # fantasma podado
+
+
+def test_index_does_not_fill_called_by(tmp_path):
+    # Nada del producto lo lee (GraphQuery saca los callers de `calls`) y recalcularlo
+    # costaba ~1 s por cada sync en django, tras cualquier edición.
+    _write(tmp_path / "a.py", "def caller():\n    return helper()\n\ndef helper():\n    return 1\n")
+    idx = Indexer()
+    idx.build(str(tmp_path), languages=["python"])
+    assert all(not c.called_by for c in idx.get_capsules().values())
+    since = time.time()
+    time.sleep(0.05)
+    _write(tmp_path / "a.py", "def caller():\n    return helper()\n\ndef helper():\n    return 2\n")
+    idx.sync(str(tmp_path), since_mtime=since, languages=["python"])
+    assert all(not c.called_by for c in idx.get_capsules().values())
