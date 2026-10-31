@@ -2,6 +2,8 @@
 sin inyectar ruido de nombres comunes. augment_refs lee los archivos reales del repo
 (el indexer siempre indexa archivos de disco), así que los tests usan archivos temp."""
 
+import ast
+
 from leo_code.core.parser import extract_from_python
 from leo_code.core.refgraph import augment_refs
 
@@ -45,3 +47,49 @@ def test_main_block_reaches_functions_of_its_file(tmp_path):
     augment_refs(caps)
     spawn = next(c for c in caps.values() if c.name == "spawn")
     assert "child" in spawn.calls
+
+
+_REFS_SRC = (
+    "import os\n\n"
+    "def deco(f):\n    return f\n\n"
+    "def target():\n    return 1\n\n"
+    "def other():\n    return 2\n\n"
+    "TABLE = {'t': target}\n\n"
+    "@deco\ndef decorated():\n    return TABLE\n\n"
+    "@deco\nclass K:\n    attr = other\n\n"
+    "    @deco\n    def m(self):\n        return self.helper_attr + other()\n\n"
+    "def helper_attr():\n    return os.sep\n\n"
+    "if __name__ == '__main__':\n    decorated()\n"
+)
+
+
+def test_refs_stored_at_parse_match_parsing_the_content(tmp_path):
+    stored = _caps_from(tmp_path / "m.py", _REFS_SRC)
+    assert any("refs" in c.properties for c in stored.values())
+    reparsed = _caps_from(tmp_path / "m.py", _REFS_SRC)
+    for c in reparsed.values():
+        c.properties.pop("refs", None)
+    augment_refs(stored)
+    augment_refs(reparsed)
+    assert {k: set(c.calls) for k, c in stored.items()} == {k: set(c.calls) for k, c in reparsed.items()}
+
+
+def test_stored_refs_avoid_reparsing(tmp_path, monkeypatch):
+    caps = _caps_from(tmp_path / "m.py", _REFS_SRC)
+    parsed = []
+    real = ast.parse
+    monkeypatch.setattr(ast, "parse", lambda s, *a, **k: parsed.append(s) or real(s, *a, **k))
+    augment_refs(caps)
+    decorated = next(c for c in caps.values() if c.name == "decorated")
+    assert "TABLE" in decorated.calls
+    assert "deco" not in decorated.calls            # el decorador no es parte del cuerpo
+    assert decorated.content not in parsed
+
+
+def test_capsules_without_stored_refs_are_parsed(tmp_path):
+    # El parser TS y el genérico no guardan refs
+    caps = _caps_from(tmp_path / "m.py", _REFS_SRC)
+    table = next(c for c in caps.values() if c.name == "TABLE")
+    del table.properties["refs"]
+    augment_refs(caps)
+    assert "target" in table.calls

@@ -54,12 +54,16 @@ def augment_refs(capsules: dict) -> int:
         content = getattr(c, "content", "") or ""
         if not content or _is_import(c):   # un import no es quien usa lo importado
             continue
-        try:
-            tree = ast.parse(textwrap.dedent(content))
-        except SyntaxError:
-            continue
+        stored = (c.properties or {}).get("refs")   # Python: guardadas al indexar (parser._store_refs)
+        if stored is not None:
+            found = unique.intersection(stored.split())
+        else:
+            try:
+                found = _refs(ast.parse(textwrap.dedent(content)))
+            except SyntaxError:
+                continue
         have = set(c.calls); self_bare = _bare(c.name)
-        for nm in _refs(tree):
+        for nm in found:
             if nm != self_bare and nm not in have:
                 c.calls.append(nm); have.add(nm); added += 1
 

@@ -4,6 +4,7 @@ Soporta Python vía ast.parse() y tree-sitter para multi-lenguaje.
 """
 
 import ast
+import bisect
 import hashlib
 import re
 from dataclasses import dataclass, field
@@ -174,6 +175,22 @@ def _local_types(fn) -> dict:
             other.add(n.name)
     # ponytail: un metaclass.__call__ o __new__ que devuelva otro tipo engaña a la regla
     return {k: [list(f) for f in v] for k, v in ctor.items() if k not in other}
+
+
+def _store_refs(tree, capsules: list[Capsule]) -> None:
+    """Guarda los nombres que menciona cada cápsula y no están en `calls`, para las aristas de
+    referencia (refgraph): antes re-parseaba cada cápsula tras cada edición, 7-11 s en django.
+    Un recorrido por archivo; texto y no lista porque son 274k nombres en memoria.
+    Sin `refs`: lo que el parser no da entero o no es código propio (entrypoint recortado)."""
+    # ponytail: reparto por línea; en `a = 1; b = c` la cápsula de `a` también ve `c`
+    occ = sorted((n.lineno, n.id if isinstance(n, ast.Name) else n.attr)
+                 for n in ast.walk(tree) if isinstance(n, (ast.Name, ast.Attribute)))
+    starts = [line for line, _ in occ]
+    for c in capsules:
+        if c.type == "entrypoint" or c.signature.startswith(("from ", "import ")):
+            continue
+        hits = occ[bisect.bisect_left(starts, c.start_line):bisect.bisect_right(starts, c.end_line)]
+        c.properties["refs"] = " ".join(sorted({nm for _, nm in hits}.difference(c.calls)))
 
 
 def extract_from_python(content: str, file_path: str) -> list[Capsule]:
@@ -401,6 +418,8 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
                         "module": module_name,
                     },
                 ))
+
+    _store_refs(tree, capsules)
 
     header = _extract_file_header(content, file_path)
     if header is not None:

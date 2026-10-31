@@ -207,7 +207,7 @@ def _warn_if_huge(repo: str, n: int) -> None:
 # Sube cuando cambia lo que el parser extrae (nuevas cápsulas, nuevas aristas): el índice
 # en disco se re-parsea solo por mtime, así que sin esto una caché vieja seguiría sirviendo
 # símbolos del parser anterior para siempre (p.ej. sin arrow functions ni atributos de clase).
-_INDEX_FORMAT = 6
+_INDEX_FORMAT = 7
 
 
 def repo_index_path(repo: str) -> Path:
