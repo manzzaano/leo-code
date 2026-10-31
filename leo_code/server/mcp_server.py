@@ -155,6 +155,8 @@ _guard_cache: dict[str, tuple[dict, Guardian]] = {}
 def _guardian(repo: str, caps: dict) -> Guardian:
     hit = _guard_cache.get(repo)
     if hit is None or hit[0] is not caps:
+        hit = None                           # soltar el viejo: dos a la vez eran el pico de RAM
+        _guard_cache.pop(repo, None)
         hit = _guard_cache[repo] = (caps, Guardian(caps))
     return hit[1]
 

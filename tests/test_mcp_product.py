@@ -370,3 +370,13 @@ def test_guard_reuses_guardian_until_index_changes(fresh_engine, fullstack, monk
     engine._generation[str(fullstack)] = engine.generation(str(fullstack)) + 1
     mcp_server._graph(args)
     assert len(built) == 2
+
+
+def test_guardian_viejo_se_suelta_antes_de_construir_el_nuevo(monkeypatch):
+    # Dos Guardian vivos a la vez eran el pico de RAM tras una edición (512 MB en django)
+    from leo_code.server import mcp_server as M
+    monkeypatch.setattr(M, "_guard_cache", {"r": ({}, object())})
+    vivos = []
+    monkeypatch.setattr(M, "Guardian", lambda caps: vivos.append("r" in M._guard_cache) or object())
+    M._guardian("r", {"nuevo": 1})
+    assert vivos == [False]
