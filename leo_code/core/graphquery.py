@@ -550,6 +550,7 @@ class GraphQuery:
         # ARISTA y resolverlas ahí costaba un _resolve() (con sort) por arista — a escala
         # real (296k símbolos, nombres muy repetidos) eso disparó who_calls ×54 e impact
         # ×42 y tumbó el SLA del chequeo (d). Aquí es O(1) por arista.
+        self._resolved: dict[str, list] = {}   # memo de _resolve: el grafo no cambia tras construirse
         self._fams: dict[str, set] = defaultdict(set)
         for c in self.caps.values():
             if self._is_def(c):
@@ -575,13 +576,20 @@ class GraphQuery:
 
     def _resolve(self, name: str) -> list:
         """Cápsulas cuyo nombre (cualificado o base) coincide. Prioriza las
-        DEFINICIONES reales sobre imports/pseudo-cápsulas → la prueba cita la def."""
-        hits = self.by_name.get(name) or self.by_name.get(_bare(name)) or []
+        DEFINICIONES reales sobre imports/pseudo-cápsulas → la prueba cita la def.
+        Lista compartida: no modificarla."""
+        memo = self._resolved.get(name)
+        if memo is not None:
+            return memo
+        hits = self.by_name.get(name) or self.by_name.get(_bare(name))
+        if not hits:
+            return []                        # nombre externo: barato y son la mayoría
         seen, out = set(), []
         for c in hits:
             if c.id not in seen:
                 seen.add(c.id); out.append(c)
         out.sort(key=lambda c: 0 if self._is_def(c) else 1)
+        self._resolved[name] = out
         return out
 
     # La resolución es por NOMBRE: en un repo mixto `d.get()` de Python contaba como

@@ -146,3 +146,16 @@ def test_callers_of_a_python_def_exclude_js_callers_of_a_homonym():
     g = GraphQuery(caps)
     assert g.callers_of_def(caps["m.py:main"]) == []
     assert [c.name for c in g.callers_of_def(caps["x.js:main"])] == ["boot"]
+
+
+def test_resolve_memoized_keeps_definitions_first():
+    # test_closure llama a _resolve 168k veces en django: sin memo pagaba un sort en cada una
+    imp = Capsule(id="i", type="function", name="go", file_path="b.py", start_line=1, end_line=1,
+                  language="python", signature="from a import go", content="go")
+    fn = Capsule(id="f", type="function", name="go", file_path="a.py", start_line=1, end_line=1,
+                 language="python", signature="def go()", content="def go(): ...")
+    gq = GraphQuery({"i": imp, "f": fn})
+    first = gq._resolve("go")
+    assert [c.id for c in first] == ["f", "i"]
+    assert gq._resolve("go") is first
+    assert gq._resolve("externo") == [] and "externo" not in gq._resolved   # sin memo de nombres externos
