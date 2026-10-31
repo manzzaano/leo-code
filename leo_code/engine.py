@@ -47,6 +47,7 @@ _indexed_repos: set[str] = set()
 # veces se la llama desde dentro de ensure_structural, que ya lo tiene cogido (flush
 # síncrono). Con un Lock simple eso era un deadlock del propio hilo.
 _index_lock = threading.RLock()
+_save_lock = threading.Lock()       # escrituras del índice en serie (ver _write_index)
 _index_executor = ThreadPoolExecutor(max_workers=1)
 _bm25_stores: dict[str, object] = {}
 
@@ -222,8 +223,12 @@ def generation(repo: str) -> int:
 
 
 def _write_index(repo: str, path: Path, timer: bool = False) -> None:
-    """Escribe el índice de `repo` en `path`. Coge _index_lock: `save()` itera las
-    cápsulas y un sync concurrente las mutaría.
+    """Escribe el índice de `repo` en `path`. _index_lock solo para tomar la instantánea:
+    `sync` sustituye cápsulas, no las modifica, así que serializarla fuera es seguro, y en
+    django retener el lock durante la escritura (~2,4 s) bloqueaba la llamada siguiente.
+    _save_lock mantiene el orden: una instantánea vieja no pisa a una nueva, y comparten
+    el `.tmp<pid>`. Se toma sin esperar: ensure_structural puede llegar aquí con
+    _index_lock cogido y esperar teniéndolo interbloqueaba con un temporizador.
 
     La ruta se fija al AGENDAR, no aquí: entre el cambio y la escritura diferida la
     caché puede haber cambiado de sitio (tests que la mueven, LEO_CACHE_DIR), y un
@@ -231,19 +236,25 @@ def _write_index(repo: str, path: Path, timer: bool = False) -> None:
 
     timer=True: la llama el temporizador, que solo escribe si sigue siendo el agendado
     (un flush pudo adelantarse y escribirlo ya, o un cambio posterior reagendarlo)."""
-    with _index_lock:
-        if timer and (_save_timers.get(repo) or (None,))[0] is not threading.current_thread():
-            return
-        _save_timers.pop(repo, None)
-        idx = _get_indexer()
-        prefix = repo + os.sep
-        if not any(_in_repo(c.file_path, repo, prefix) for c in idx.get_capsules().values()):
-            return   # nada de este repo que cachear (repo vacío, o ya purgado)
-        try:
+    while True:
+        with _index_lock:
+            if timer and (_save_timers.get(repo) or (None,))[0] is not threading.current_thread():
+                return
+            if _save_lock.acquire(blocking=False):
+                _save_timers.pop(repo, None)
+                idx = _get_indexer()
+                prefix = repo + os.sep
+                items = [c for c in idx.get_capsules().values() if _in_repo(c.file_path, repo, prefix)]
+                break
+        time.sleep(0.01)
+    try:
+        if items:   # si no, nada de este repo que cachear (repo vacío, o ya purgado)
             path.parent.mkdir(parents=True, exist_ok=True)
-            idx.save(str(path), repo=repo)
-        except Exception as e:   # el índice en disco es una CACHÉ: fallar al escribirla
-            print(f"[leo-mcp] could not write the index cache: {e}", file=sys.stderr)
+            idx.save(str(path), items=items)
+    except Exception as e:   # el índice en disco es una CACHÉ: fallar al escribirla
+        print(f"[leo-mcp] could not write the index cache: {e}", file=sys.stderr)
+    finally:
+        _save_lock.release()
 
 
 def _schedule_save(repo: str) -> None:
@@ -279,7 +290,7 @@ def flush_index(repo: str | None = None) -> None:
             _write_index(r, pending[1])
     # una escritura diferida que ya empezó tiene el lock: esperarla. Si no, el proceso sale
     # con el hilo daemon a medias y el índice no llega a disco (medido en django)
-    with _index_lock:
+    with _save_lock:
         pass
 
 

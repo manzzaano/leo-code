@@ -226,16 +226,18 @@ class Indexer:
 
         return count
 
-    def save(self, path: str = "kc_index.json.gz", repo: str | None = None):
+    def save(self, path: str = "kc_index.json.gz", repo: str | None = None,
+             items: list[Capsule] | None = None):
         """Persiste el índice a disco: JSON Lines (una cápsula por línea) en gzip.
 
         En streaming, cápsula a cápsula: un único documento JSON obligaba a tener a la vez
         el dict, el texto y el gzip enteros (113 MB de JSON en django), y al cargarlo orjson
         reservaba ~12× la entrada (pico de 1,7 GB comprometidos, medido).
 
-        repo: guarda solo las cápsulas de ese repo (caché por repo). Escritura atómica:
-        el cliente MCP mata el server sin aviso y un gzip a medias no debe quedar."""
-        items = list(self._capsules.values())
+        repo: guarda solo las cápsulas de ese repo (caché por repo). items: instantánea ya
+        tomada, en vez de leer el índice. Escritura atómica: el cliente MCP mata el server
+        sin aviso y un gzip a medias no debe quedar."""
+        items = list(self._capsules.values()) if items is None else items
         if repo:
             repo_abs = os.path.abspath(repo)
             items = [c for c in items if _under(c.file_path, repo_abs)]
