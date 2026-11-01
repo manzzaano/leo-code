@@ -2,6 +2,7 @@
 // (Microsoft tsc, parser distinto al tree-sitter de leo). Por símbolo function/method/class
 // recoge los callees: CallExpression y NewExpression con callee Identifier (foo()) o
 // PropertyAccess (obj.foo()), y elementos JSX en mayúscula. Tagged templates NO cuentan.
+// Los tipos (interface/type/enum/namespace) son símbolos sin callees.
 // Salida: JSON {archivo: [[name, line, [calls...]], ...]} por stdout.
 //
 // Uso:  node benchmark/ts_oracle.js <repo_dir>
@@ -81,6 +82,14 @@ for (const f of files) {
       const l = n.left;
       const nm = ts.isIdentifier(l) ? l.text : (ts.isPropertyAccessExpression(l) ? l.name.text : null);
       if (nm && nm !== "exports") name = nm;
+    }
+    let typeName = null;
+    if (ts.isInterfaceDeclaration(n) || ts.isTypeAliasDeclaration(n) || ts.isEnumDeclaration(n)) typeName = n.name.text;
+    else if (ts.isModuleDeclaration(n) && !ts.isStringLiteral(n.name)
+             && !(n.flags & ts.NodeFlags.GlobalAugmentation)) typeName = n.name.getText(sf);
+    if (typeName) {
+      const line = sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
+      syms.push([typeName, line, []]);
     }
     if (name) {
       const line = sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;

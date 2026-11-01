@@ -6,6 +6,7 @@ import pytest
 pytest.importorskip("tree_sitter_typescript")
 
 from leo_code.core.graphquery import GraphQuery, rough_lines
+from leo_code.core.guardian import Guardian
 from leo_code.core.parser_ts import extract_from_tree_sitter
 
 
@@ -67,3 +68,57 @@ def test_assigned_function_is_a_symbol():
            "module.exports = function () { four(); };\nx.y = 1;\n")
     names = {c.name: c.calls for c in _ex(src, "x.js", "javascript")}
     assert names == {"b": ["one"], "m": ["two"], "e": ["three"]}   # `exports` no es un nombre
+
+
+# --- E1: tipos como símbolos, sin aristas ---
+
+TYPES = """\
+export interface Props { a: string }
+type Id = string;
+enum Color { Red }
+namespace NS { export const x = 1; }
+declare module "pkg" { export const y: number; }
+"""
+
+
+def test_types_are_symbols_without_edges():
+    caps = _ex(TYPES)
+    assert {c.name for c in caps} == {"Props", "Id", "Color", "NS"}
+    assert all(c.type == "type_def" and c.calls == [] for c in caps)
+
+
+def test_where_finds_a_type():
+    assert _gq(_ex(TYPES)).where("Props").cites[0].line == 1
+
+
+def test_guard_on_a_type_does_not_claim_safety():
+    caps = _ex(TYPES + "function use(p: Props){}\n")
+    out = Guardian({c.id: c for c in caps}).review("Props").render()
+    assert "breaks nothing" not in out and "not modeled" in out
+
+
+def test_impact_on_a_type_warns():
+    assert "not modeled" in _gq(_ex(TYPES)).impact("Props").render()
+
+
+def test_type_sharing_a_name_keeps_call_edges():
+    caps = _ex("interface Foo {}\nclass Foo {}\nfunction f(){ return new Foo(); }")
+    gq = _gq(caps)
+    assert [c.name for c in gq.impact("Foo").cites] == ["f"]
+    assert "not modeled" in gq.impact("Foo").note
+
+
+def test_type_is_never_a_call_target():
+    caps = _ex("interface run {}\nfunction a(){ run(); }")
+    gq = _gq(caps)
+    assert gq.callees("a").cites == []
+    assert not gq.trace("a", "run").found
+
+
+def test_context_prefers_the_exact_case_of_a_type(tmp_path):
+    from leo_code.engine import _get_indexer, compute_context
+    for i in range(8):
+        (tmp_path / f"a{i}.ts").write_text(f"class G{i} {{ canActivate() {{ return true; }} }}\n", encoding="utf-8")
+    (tmp_path / "z.ts").write_text("export interface CanActivate { marker_ok: boolean }\n", encoding="utf-8")
+    _get_indexer().build(str(tmp_path), languages=["typescript"])
+    assert "marker_ok" in compute_context(str(tmp_path), "CanActivate", task_type_in="code_query")["context"]

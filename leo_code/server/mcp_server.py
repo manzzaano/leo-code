@@ -230,7 +230,7 @@ def _who_calls(gq: GraphQuery, symbol: str) -> str:
     callers = (gq.callers_of_def(target) if target
                else list({c.id: c for c in gq._callers_of(symbol)}.values()))
     if not callers:
-        return Proof("who_calls", symbol).render()
+        return Proof("who_calls", symbol, note=gq.type_note(symbol)).render()
     sites, kept, covered = {}, [], set()
     for c in sorted(callers, key=lambda c: (c.end_line or 0) - (c.start_line or 0)):
         # Si hasta las líneas por regex ya están cubiertas (la clase cuyos métodos ya

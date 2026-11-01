@@ -609,6 +609,8 @@ def compute_context(repo: str, query: str, task_type_in: str = "auto",
     # tal cual; el resto entra en la fusión ordenado por palabras compartidas con la query.
     named = [c for c in loose_match
              if c.name.split(".")[-1].lower() in query_words and not _demoted(c, query_parts)]
+    # el corte a 5 de abajo: `CanActivate` (interface) no debe perder frente a N `canActivate`
+    named.sort(key=lambda c: c.name.split(".")[-1] not in query)
     loose_match.sort(key=lambda c: (_demoted(c, query_parts),
                                     -len(query_parts & set(code_tokens(f"{c.name} {Path(c.file_path).stem}")))))
     specific_match.sort(

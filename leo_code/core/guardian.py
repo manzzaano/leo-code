@@ -52,7 +52,7 @@ class ChangeReport:
         lines = [f"changing `{self.symbol}`"
                  + ("  [✓ reached by a test]" if self.changed_covered else "  [✗ NO test]")]
         if not self.affected:
-            lines.append("  → breaks nothing that is indexed.")
+            lines.append(f"  → {self.note}" if self.note else "  → breaks nothing that is indexed.")
             return "\n".join(lines)
         risk = self.uncovered
         n_tests = sum(a.is_test for a in self.affected)

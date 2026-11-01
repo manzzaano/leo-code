@@ -63,7 +63,8 @@ class Proof:
 
     def render(self) -> str:
         if not self.cites:
-            return f"[{self.kind}] no results for '{self.query}'."
+            miss = f"[{self.kind}] no results for '{self.query}'."
+            return f"{miss}\n  {self.note}" if self.note else miss
         head = f"[{self.kind}] {self.query} — {len(self.cites)} result(s), with proof:"
         lines = [head] + [f"  · {c}" for c in self.cites]
         if self.edges:
@@ -507,6 +508,11 @@ def _is_import(c) -> bool:
     return (getattr(c, "signature", "") or "").lstrip().startswith(("from ", "import "))
 
 
+# Un tipo (interface/type/enum/namespace) es símbolo pero no nodo de llamadas: nadie lo «llama»
+# y sus usos (`x: Foo`) no son aristas, así que «0 dependientes» no significaría nada seguro.
+TYPE_NOTE = "type declaration: its uses in annotations are not modeled as dependents, search for them before changing it"
+
+
 def _is_aux_path(c) -> bool:
     """Tests y benchmarks van detrás del código del producto."""
     parts = (c.file_path or "").replace("\\", "/").split("/")
@@ -640,6 +646,9 @@ class GraphQuery:
         n_imp = len({c.file_path for c in hits if _is_import(c)}) if defs else 0
         return Proof("where", name, cites, note=f"imported in {n_imp} files" if n_imp else "")
 
+    def type_note(self, name: str) -> str:
+        return TYPE_NOTE if any(c.type == "type_def" for c in self._resolve(name)) else ""
+
     def who_calls(self, name: str, limit: int = 50) -> Proof:
         callers = self._callers_of(name)
         seen, uniq = set(), []
@@ -699,7 +708,7 @@ class GraphQuery:
         out, edges, seen = [], [], set()
         for _, ts in self._callees_of(c):
             for t in ts:
-                if t.id in seen:
+                if t.id in seen or t.type == "type_def":
                     continue
                 seen.add(t.id)
                 out.append(self._cite(t)); edges.append((c.name, t.name))
@@ -746,6 +755,8 @@ class GraphQuery:
         n_aux = sum(map(_is_aux_path, order))
         if n_aux:
             notes.append(f"{n_aux} of them in tests/benchmarks")
+        if self.type_note(name):
+            notes.append(TYPE_NOTE)
         return Proof("impact", name, cites, note=" · ".join(notes))
 
     def _hops(self, c) -> list[tuple]:
@@ -757,7 +768,7 @@ class GraphQuery:
         out = [(d, True, 1) for d in resolved]
         for n in dict.fromkeys(by_name):
             if self._edge_ok(c, n):
-                ts = [t for t in self._resolve(n) if not _is_import(t)]
+                ts = [t for t in self._resolve(n) if not _is_import(t) and t.type != "type_def"]
                 out += [(t, False, len(ts)) for t in ts]
         return out
 

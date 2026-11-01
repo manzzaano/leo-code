@@ -47,7 +47,7 @@ def run(repo: str = "."):
     idx = Indexer()
     idx.build(repo, languages=["typescript", "javascript"], verbose=False)
 
-    code_types = {"function", "method", "class", "async_function", "component"}
+    code_types = {"function", "method", "class", "async_function", "type_def", "component"}
     # Símbolos: las aristas solo se comparan en los que leo ya tiene, y así un hueco del
     # parser no se veía (#9). Por (archivo, nombre): un decorador desalinea la línea.
     leo_syms = {(str(Path(c.file_path).resolve()), c.name.split(".")[-1])

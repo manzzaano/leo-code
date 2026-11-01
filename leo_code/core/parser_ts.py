@@ -144,7 +144,13 @@ _DEF_NODES = {
     "method_definition": "method",
     "class_declaration": "class",
     "abstract_class_declaration": "class",
+    "interface_declaration": "interface",
+    "type_alias_declaration": "type",
+    "enum_declaration": "enum",
+    "internal_module": "namespace",
+    "module": "namespace",
 }
+_TYPE_KINDS = {"interface", "type", "enum", "namespace"}
 
 # TS/JS idiomático declara funciones como variables u objetos de funciones, no con
 # `function`: `const Page = () => …`, `const load = useCallback(() => …)`,
@@ -188,14 +194,16 @@ def extract_from_tree_sitter(content: str, file_path: str, language: str) -> lis
     def emit(name: str, kind: str, node) -> None:
         start = node.start_point[0] + 1
         end = node.end_point[0] + 1
-        ctype = kind
+        is_type = kind in _TYPE_KINDS
+        ctype = "type_def" if is_type else kind
         body = "\n".join(lines[start - 1:end])
         caps.append(Capsule(
             id=f"{file_path}:{start}:{name}",
             type=ctype, name=name, file_path=file_path,
             start_line=start, end_line=end,
             language=language, signature=f"{kind} {name}",
-            content=body[:3000], calls=_calls_in(node),
+            # un tipo no tiene aristas: `namespace` agregaría las de los símbolos que contiene
+            content=body[:3000], calls=[] if is_type else _calls_in(node),
             properties={"lineas": end - start + 1},
         ))
 
@@ -230,7 +238,8 @@ def extract_from_tree_sitter(content: str, file_path: str, language: str) -> lis
         kind = _DEF_NODES.get(n.type)
         if kind:
             name_node = n.child_by_field_name("name")
-            if name_node is not None:
+            # `declare module "pkg"` nombra un paquete ajeno, no un símbolo
+            if name_node is not None and not (kind == "namespace" and name_node.type == "string"):
                 emit(name_node.text.decode("utf-8", "replace"), kind, n)
         stack.extend(n.children)
     return caps
