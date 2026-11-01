@@ -95,9 +95,10 @@ _DEF_LINE = re.compile(r"\s*(export\s+)?(async\s+)?(def|function|class)\s")
 
 
 def rough_lines(c, bare: str) -> list[int]:
-    """Líneas con `bare(` por regex: superconjunto de las llamadas reales (y lo único
-    que hay fuera de Python)."""
-    call = re.compile(rf"\b{re.escape(bare)}\s*(?:<[^()\n]*>)?\s*\(")
+    """Líneas con `bare(` o `<bare` (JSX) por regex: superconjunto de las llamadas reales
+    (y lo único que hay fuera de Python)."""
+    name = re.escape(bare)
+    call = re.compile(rf"\b{name}\s*(?:<[^()\n]*>)?\s*\(|<(?:[\w$]+\.)*{name}\b")
     return [c.start_line + i for i, t in enumerate((c.content or "").splitlines())
             if call.search(t) and not _DEF_LINE.match(t)]
 

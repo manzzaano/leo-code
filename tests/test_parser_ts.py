@@ -45,3 +45,10 @@ def test_call_with_type_arguments_and_unary():
     src = "function k(els){ return !!forEach<A | B, boolean>(els, x => g(x)); }"
     caps = extract_from_tree_sitter(src, "x.ts", "typescript")
     assert {"forEach", "g"} <= _calls("k", caps)
+
+
+def test_awaited_call_with_type_arguments():
+    # `await this.get<T>(k)`: tree-sitter envuelve el callee en await_expression.
+    caps = extract_from_tree_sitter("async function a(){ await this.get<T>(k); await go<T>(1); }",
+                                    "x.ts", "typescript")
+    assert _calls("a", caps) == {"get", "go"}

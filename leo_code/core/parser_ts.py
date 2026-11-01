@@ -8,7 +8,7 @@ compilador TS daba precisión 74% / recall 60%.
 Aquí los límites de cada símbolo (function/method/class) y sus llamadas vienen del
 árbol de sintaxis de tree-sitter, con la MISMA regla de callee que el oráculo:
 CallExpression cuyo callee es `identifier` (foo()) o `member_expression` (obj.foo())
-→ nombre base. Sin cap, sin truncado, sin denylist.
+→ nombre base, igual en `new Foo()` y en `<Foo/>`. Sin cap, sin truncado, sin denylist.
 """
 
 from __future__ import annotations
@@ -50,8 +50,8 @@ def _callee_name(call_node) -> str | None:
     if fn is None:
         return None
     # Quirk de tree-sitter: en `!!fn<T>(x)` el `function` queda como unary_expression
-    # envolviendo al callee. tsc resuelve a la llamada interna; desenvolvemos el unario.
-    while fn is not None and fn.type == "unary_expression":
+    # envolviendo al callee. tsc resuelve a la llamada interna; desenvolvemos el unario. Igual con `await fn<T>(x)`.
+    while fn is not None and fn.type in ("unary_expression", "await_expression"):
         fn = fn.children[-1] if fn.children else None
     if fn is None:
         return None
@@ -64,6 +64,62 @@ def _callee_name(call_node) -> str | None:
     return None
 
 
+def _new_name(node) -> str | None:
+    """`new Foo()` / `new ns.Foo()` → Foo. Sin esto ninguna clase TS tenía dependientes
+    (medido: 2428/2451 en nest): en TS se instancia con `new`, no con una llamada."""
+    k = node.child_by_field_name("constructor")
+    if k is None:
+        return None
+    if k.type == "identifier":
+        return k.text.decode("utf-8", "replace")
+    if k.type == "member_expression":
+        prop = k.child_by_field_name("property")
+        return prop.text.decode("utf-8", "replace") if prop is not None else None
+    return None
+
+
+def _jsx_name(node) -> str | None:
+    """`<Card/>` / `<ui.Modal>` → componente. En minúscula es etiqueta HTML (`<div>`,
+    `<motion.div>`), no un símbolo. Medido: 288 componentes de excalidraw sin callers."""
+    k = node.child_by_field_name("name")
+    if k is None or k.type not in ("identifier", "member_expression", "nested_identifier"):
+        return None
+    nm = k.text.decode("utf-8", "replace").rsplit(".", 1)[-1]
+    return nm if nm[:1].isupper() else None
+
+
+_CALL_NODES = {"call_expression": _callee_name, "new_expression": _new_name,
+               "jsx_opening_element": _jsx_name, "jsx_self_closing_element": _jsx_name}
+
+
+def _new_name(node) -> str | None:
+    """`new Foo()` / `new ns.Foo()` → Foo. Sin esto ninguna clase TS tenía dependientes
+    (medido: 2428/2451 en nest): en TS se instancia con `new`, no con una llamada."""
+    k = node.child_by_field_name("constructor")
+    if k is None:
+        return None
+    if k.type == "identifier":
+        return k.text.decode("utf-8", "replace")
+    if k.type == "member_expression":
+        prop = k.child_by_field_name("property")
+        return prop.text.decode("utf-8", "replace") if prop is not None else None
+    return None
+
+
+def _jsx_name(node) -> str | None:
+    """`<Card/>` / `<ui.Modal>` → componente. En minúscula es etiqueta HTML (`<div>`,
+    `<motion.div>`), no un símbolo. Medido: 288 componentes de excalidraw sin callers."""
+    k = node.child_by_field_name("name")
+    if k is None or k.type not in ("identifier", "member_expression", "nested_identifier"):
+        return None
+    nm = k.text.decode("utf-8", "replace").rsplit(".", 1)[-1]
+    return nm if nm[:1].isupper() else None
+
+
+_CALL_NODES = {"call_expression": _callee_name, "new_expression": _new_name,
+               "jsx_opening_element": _jsx_name, "jsx_self_closing_element": _jsx_name}
+
+
 def _calls_in(node) -> list[str]:
     """Todos los nombres llamados dentro del subárbol (incluye anidados, como el oráculo)."""
     out: list[str] = []
@@ -71,8 +127,9 @@ def _calls_in(node) -> list[str]:
     stack = [node]
     while stack:
         n = stack.pop()
-        if n.type == "call_expression":
-            nm = _callee_name(n)
+        namer = _CALL_NODES.get(n.type)
+        if namer:
+            nm = namer(n)
             if nm and nm not in seen:
                 seen.add(nm); out.append(nm)
         stack.extend(n.children)
@@ -128,14 +185,10 @@ def extract_from_tree_sitter(content: str, file_path: str, language: str) -> lis
     lines = content.split("\n")
     caps: list[Capsule] = []
 
-    def name_of(node):
-        nm = node.child_by_field_name("name")
-        return nm.text.decode("utf-8", "replace") if nm is not None else None
-
     def emit(name: str, kind: str, node) -> None:
         start = node.start_point[0] + 1
         end = node.end_point[0] + 1
-        ctype = "class" if kind == "class" else ("method" if kind == "method" else "function")
+        ctype = kind
         body = "\n".join(lines[start - 1:end])
         caps.append(Capsule(
             id=f"{file_path}:{start}:{name}",
@@ -163,19 +216,8 @@ def extract_from_tree_sitter(content: str, file_path: str, language: str) -> lis
                 emit(key.text.decode("utf-8", "replace"), "function", n)
         kind = _DEF_NODES.get(n.type)
         if kind:
-            name = name_of(n)
-            if name:
-                start = n.start_point[0] + 1
-                end = n.end_point[0] + 1
-                ctype = "class" if kind == "class" else ("method" if kind == "method" else "function")
-                body = "\n".join(lines[start - 1:end])
-                caps.append(Capsule(
-                    id=f"{file_path}:{start}:{name}",
-                    type=ctype, name=name, file_path=file_path,
-                    start_line=start, end_line=end,
-                    language=language, signature=f"{kind} {name}",
-                    content=body[:3000], calls=_calls_in(n),
-                    properties={"lineas": end - start + 1},
-                ))
+            name_node = n.child_by_field_name("name")
+            if name_node is not None:
+                emit(name_node.text.decode("utf-8", "replace"), kind, n)
         stack.extend(n.children)
     return caps

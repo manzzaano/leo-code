@@ -1,7 +1,7 @@
 // Oráculo TS INDEPENDIENTE: re-deriva el grafo de llamadas con el COMPILADOR TypeScript
 // (Microsoft tsc, parser distinto al tree-sitter de leo). Por símbolo function/method/class
-// recoge los callees: CallExpression con callee Identifier (foo()) o PropertyAccess
-// (obj.foo()). Tagged templates y NewExpression NO cuentan (no son CallExpression).
+// recoge los callees: CallExpression y NewExpression con callee Identifier (foo()) o
+// PropertyAccess (obj.foo()), y elementos JSX en mayúscula. Tagged templates NO cuentan.
 // Salida: JSON {archivo: [[name, line, [calls...]], ...]} por stdout.
 //
 // Uso:  node benchmark/ts_oracle.js <repo_dir>
@@ -21,10 +21,14 @@ function walkFiles(dir, out) {
 function callsIn(node) {
   const out = new Set();
   (function rec(n) {
-    if (ts.isCallExpression(n)) {
+    if (ts.isCallExpression(n) || ts.isNewExpression(n)) {
       const c = n.expression;
       if (ts.isIdentifier(c)) out.add(c.text);
       else if (ts.isPropertyAccessExpression(c)) out.add(c.name.text);
+    } else if (ts.isJsxOpeningElement(n) || ts.isJsxSelfClosingElement(n)) {
+      const t = n.tagName;
+      const nm = ts.isIdentifier(t) ? t.text : (ts.isPropertyAccessExpression(t) ? t.name.text : "");
+      if (/^[A-Z]/.test(nm)) out.add(nm);
     }
     ts.forEachChild(n, rec);
   })(node);
@@ -60,13 +64,15 @@ for (const f of files) {
   const syms = [];
   (function rec(n) {
     let name = null;
-    if (ts.isFunctionDeclaration(n) && n.name) name = n.name.text;
-    else if (ts.isMethodDeclaration(n) && n.name) name = n.name.getText(sf);
+    // Con cuerpo: abstract y overloads son firmas, y leo aún no las indexa.
+    if (ts.isFunctionDeclaration(n) && n.name && n.body) name = n.name.text;
+    else if (ts.isMethodDeclaration(n) && n.name && n.body) name = n.name.getText(sf);
     else if (ts.isClassDeclaration(n) && n.name) name = n.name.text;
     // Funciones declaradas como variable u objeto de funciones (const f = () => …,
     // const f = useCallback(() => …), { jobs: () => … }): misma regla en parser_ts.py.
     else if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && fnValue(n.initializer)) name = n.name.text;
-    else if (ts.isPropertyAssignment(n) && fnValue(n.initializer)) name = n.name.getText(sf);
+    // Clave con nombre: `[K]: …` y `"a-b": …` no son símbolos, tampoco en parser_ts.py.
+    else if (ts.isPropertyAssignment(n) && ts.isIdentifier(n.name) && fnValue(n.initializer)) name = n.name.text;
     if (name) {
       const line = sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
       syms.push([name, line, callsIn(n)]);

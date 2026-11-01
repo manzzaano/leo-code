@@ -47,7 +47,14 @@ def run(repo: str = "."):
     idx = Indexer()
     idx.build(repo, languages=["typescript", "javascript"], verbose=False)
 
-    code_types = {"function", "method", "class", "async_function"}
+    code_types = {"function", "method", "class", "async_function", "component"}
+    # Símbolos: las aristas solo se comparan en los que leo ya tiene, y así un hueco del
+    # parser no se veía (#9). Por (archivo, nombre): un decorador desalinea la línea.
+    leo_syms = {(str(Path(c.file_path).resolve()), c.name.split(".")[-1])
+                for c in idx.get_capsules().values()}
+    seen_files = {f for f, _ in leo_syms}                 # lo que leo excluye a propósito no cuenta
+    wanted = {k[:2] for k in omap if k[0] in seen_files}
+    lost = sorted(wanted - leo_syms)
     tot_leo = tot_or = tot_int = 0
     matched = 0
     false_e, miss_e = [], []
@@ -71,12 +78,14 @@ def run(repo: str = "."):
 
     precision = tot_int / tot_leo if tot_leo else 1.0
     recall = tot_int / tot_or if tot_or else 1.0
+    sym_recall = 1 - len(lost) / len(wanted)
     print(f"TS símbolos comparados: {matched:,}  ·  aristas leo: {tot_leo:,}  ·  tsc: {tot_or:,}")
+    print(f"SÍMBOLOS perdidos: {len(lost)} ({sym_recall*100:.3f}%)", [f"{Path(f).name}:{n}" for f, n in lost[:12]])
     print(f"PRECISIÓN (sin falsas):   {precision*100:.3f}%  ({len(false_e)} falsas)")
     print(f"RECALL    (sin perdidas): {recall*100:.3f}%  ({len(miss_e)} perdidas)")
     for n, ln, e in (false_e + miss_e)[:12]:
         print(f"    disputa {n}:{ln} → {e}")
-    return precision, recall, matched
+    return precision, min(recall, sym_recall), matched
 
 
 if __name__ == "__main__":
