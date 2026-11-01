@@ -47,6 +47,29 @@ def _file_nodes(path: Path) -> dict:
     return out
 
 
+def _scope_defs(path: Path) -> set:
+    """(nombre, línea) de las defs que leo debe indexar: las de módulo y de clase de primer
+    nivel, también bajo if/try/with. Las anidadas no: sus llamadas suben a la def exterior."""
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
+    except SyntaxError:
+        return set()
+    out = set()
+
+    def visit(node, in_class):
+        for ch in ast.iter_child_nodes(node):
+            if isinstance(ch, _DEF):
+                if not (in_class and isinstance(ch, ast.ClassDef)):
+                    out.add((ch.name, ch.lineno))
+                if isinstance(ch, ast.ClassDef) and not in_class:
+                    visit(ch, True)
+            else:
+                visit(ch, in_class)
+
+    visit(tree, False)
+    return out
+
+
 def run(repo: str = ".", verbose_limit: int = 12):
     from leo_code.rag.indexer import Indexer
     idx = Indexer()
@@ -59,6 +82,11 @@ def run(repo: str = ".", verbose_limit: int = 12):
     for c in caps.values():
         if c.type in code_types and (c.file_path or "").endswith(".py"):
             by_file.setdefault(c.file_path, []).append(c)
+
+    # Símbolos: las aristas solo se comparan en lo que leo ya tiene, y un hueco no se veía (#9)
+    at = {(c.file_path, c.name.split(".")[-1], c.start_line) for c in caps.values()}
+    lost = [(f, n, ln) for f in {c.file_path for c in caps.values() if (c.file_path or "").endswith(".py")}
+            for n, ln in _scope_defs(Path(f)) if (f, n, ln) not in at]
 
     tot_leo = tot_oracle = tot_inter = 0
     symbols = 0
@@ -93,6 +121,9 @@ def run(repo: str = ".", verbose_limit: int = 12):
     print(f"símbolos verificados: {symbols:,}  ·  aristas leo: {tot_leo:,}  ·  oráculo: {tot_oracle:,}")
     print(f"PRECISIÓN (sin aristas falsas):   {precision*100:.3f}%  ({len(false_edges)} falsas)")
     print(f"RECALL    (sin aristas perdidas): {recall*100:.3f}%  ({len(missed_edges)} perdidas)")
+    print(f"SÍMBOLOS perdidos: {len(lost)}", [f"{Path(f).name}:{ln} {n}" for f, n, ln in lost[:verbose_limit]])
+    if lost:
+        recall = 0.0   # no hay arista que comparar en un símbolo que no existe
     if false_edges:
         print("  falsas (leo dice, oráculo no):")
         for n, ln, e in false_edges[:verbose_limit]:

@@ -193,6 +193,52 @@ def _store_refs(tree, capsules: list[Capsule]) -> None:
         c.properties["refs"] = " ".join(sorted({nm for _, nm in hits}.difference(c.calls)))
 
 
+_BRANCHES = (ast.If, ast.Try, ast.TryStar, ast.ExceptHandler, ast.With, ast.AsyncWith)
+_DEFS = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+
+
+def _branch_defs(node):
+    """Defs bajo if/try/with de `node`, sin entrar en otras defs. Las funciones anidadas se
+    quedan fuera a propósito: sus llamadas ya suben a la función que las contiene."""
+    for ch in ast.iter_child_nodes(node):
+        if isinstance(ch, _DEFS):
+            yield ch
+        elif isinstance(ch, _BRANCHES):
+            yield from _branch_defs(ch)
+
+
+def _scope_nodes(node):
+    """Hijos directos de un módulo o clase, más las defs condicionales (`try: … except
+    ImportError: def f()`): medido en django, 75 defs que perdían símbolo y llamadas."""
+    for ch in ast.iter_child_nodes(node):
+        yield ch
+        if isinstance(ch, _BRANCHES):
+            yield from _branch_defs(ch)
+
+
+_BRANCHES = (ast.If, ast.Try, ast.TryStar, ast.ExceptHandler, ast.With, ast.AsyncWith)
+_DEFS = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+
+
+def _branch_defs(node):
+    """Defs bajo if/try/with de `node`, sin entrar en otras defs. Las funciones anidadas se
+    quedan fuera a propósito: sus llamadas ya suben a la función que las contiene."""
+    for ch in ast.iter_child_nodes(node):
+        if isinstance(ch, _DEFS):
+            yield ch
+        elif isinstance(ch, _BRANCHES):
+            yield from _branch_defs(ch)
+
+
+def _scope_nodes(node):
+    """Hijos directos de un módulo o clase, más las defs condicionales (`try: … except
+    ImportError: def f()`): medido en django, 75 defs que perdían símbolo y llamadas."""
+    for ch in ast.iter_child_nodes(node):
+        yield ch
+        if isinstance(ch, _BRANCHES):
+            yield from _branch_defs(ch)
+
+
 def extract_from_python(content: str, file_path: str) -> list[Capsule]:
     """Extrae cápsulas del AST de un archivo Python. 0 dependencias externas."""
     capsules = []
@@ -204,7 +250,7 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
     module_name = Path(file_path).name
     src_lines = _source_lines(content)
 
-    for node in ast.iter_child_nodes(tree):
+    for node in _scope_nodes(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 capsules.append(Capsule(
@@ -291,7 +337,7 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
 
         elif isinstance(node, ast.ClassDef):
             bases = [ast.unparse(b) for b in node.bases]
-            methods = [n.name for n in ast.iter_child_nodes(node)
+            methods = [n.name for n in _scope_nodes(node)
                        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
             doc = ast.get_docstring(node)
             lines = (node.end_lineno or node.lineno) - node.lineno + 1
@@ -362,7 +408,7 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
                     ))
 
             # Emitir cada método como cápsula buscable (antes solo vivían en props["metodos"]).
-            for m in node.body:
+            for m in _scope_nodes(node):
                 if not isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     continue
                 m_args = [a.arg for a in m.args.args]
