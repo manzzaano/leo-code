@@ -46,3 +46,24 @@ def test_jsx_in_javascript():
 def test_jsx_call_site_line():
     caps = _ex("function Page() {\n  return (\n    <Card/>\n  );\n}", "x.tsx")
     assert rough_lines(_one("Page", caps), "Card") == [3]
+
+
+# --- D: funciones en campos y asignaciones ---
+
+def test_class_field_with_function_is_a_symbol():
+    caps = _ex("class C {\n  onClick = () => { go(); };\n  #priv = function () { hid(); };\n  n = 1;\n}")
+    assert _one("onClick", caps).calls == ["go"] and _one("onClick", caps).type == "method"
+    assert _one("#priv", caps).calls == ["hid"]
+    assert not [c for c in caps if c.name == "n"]
+
+
+def test_js_class_field_with_function_is_a_symbol():
+    caps = _ex("class C { handle = () => go(); }", "x.js", "javascript")
+    assert _one("handle", caps).calls == ["go"]
+
+
+def test_assigned_function_is_a_symbol():
+    src = ("a.b = function () { one(); };\nFoo.prototype.m = () => two();\nexports.e = () => three();\n"
+           "module.exports = function () { four(); };\nx.y = 1;\n")
+    names = {c.name: c.calls for c in _ex(src, "x.js", "javascript")}
+    assert names == {"b": ["one"], "m": ["two"], "e": ["three"]}   # `exports` no es un nombre

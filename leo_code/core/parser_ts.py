@@ -214,6 +214,19 @@ def extract_from_tree_sitter(content: str, file_path: str, language: str) -> lis
             if (key is not None and key.type in ("property_identifier", "identifier")
                     and _fn_value(n.child_by_field_name("value")) is not None):
                 emit(key.text.decode("utf-8", "replace"), "function", n)
+        elif n.type in ("public_field_definition", "field_definition"):
+            # `class C { onClick = () => … }`: en TS el nombre es `name`, en JS `property`
+            key = n.child_by_field_name("name") or n.child_by_field_name("property")
+            if (key is not None and key.type in ("property_identifier", "private_property_identifier")
+                    and _fn_value(n.child_by_field_name("value")) is not None):
+                emit(key.text.decode("utf-8", "replace"), "method", n)
+        elif n.type == "assignment_expression" and _fn_value(n.child_by_field_name("right")) is not None:
+            # `a.b = function(){}`, `Foo.prototype.m = () => …`, `exports.e = …`
+            left = n.child_by_field_name("left")
+            prop = left.child_by_field_name("property") if left.type == "member_expression" else None
+            nm = (prop if prop is not None else left).text.decode("utf-8", "replace")
+            if (left.type == "identifier" or prop is not None) and nm != "exports":
+                emit(nm, "function", n)
         kind = _DEF_NODES.get(n.type)
         if kind:
             name_node = n.child_by_field_name("name")

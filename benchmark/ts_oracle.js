@@ -73,6 +73,15 @@ for (const f of files) {
     else if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && fnValue(n.initializer)) name = n.name.text;
     // Clave con nombre: `[K]: …` y `"a-b": …` no son símbolos, tampoco en parser_ts.py.
     else if (ts.isPropertyAssignment(n) && ts.isIdentifier(n.name) && fnValue(n.initializer)) name = n.name.text;
+    // Campos de clase y asignaciones con función: misma regla en parser_ts.py.
+    else if (ts.isPropertyDeclaration(n) && fnValue(n.initializer)
+             && (ts.isIdentifier(n.name) || ts.isPrivateIdentifier(n.name))) name = n.name.text;
+    else if (ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.EqualsToken
+             && fnValue(n.right)) {
+      const l = n.left;
+      const nm = ts.isIdentifier(l) ? l.text : (ts.isPropertyAccessExpression(l) ? l.name.text : null);
+      if (nm && nm !== "exports") name = nm;
+    }
     if (name) {
       const line = sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
       syms.push([name, line, callsIn(n)]);
