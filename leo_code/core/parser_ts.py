@@ -92,34 +92,6 @@ _CALL_NODES = {"call_expression": _callee_name, "new_expression": _new_name,
                "jsx_opening_element": _jsx_name, "jsx_self_closing_element": _jsx_name}
 
 
-def _new_name(node) -> str | None:
-    """`new Foo()` / `new ns.Foo()` → Foo. Sin esto ninguna clase TS tenía dependientes
-    (medido: 2428/2451 en nest): en TS se instancia con `new`, no con una llamada."""
-    k = node.child_by_field_name("constructor")
-    if k is None:
-        return None
-    if k.type == "identifier":
-        return k.text.decode("utf-8", "replace")
-    if k.type == "member_expression":
-        prop = k.child_by_field_name("property")
-        return prop.text.decode("utf-8", "replace") if prop is not None else None
-    return None
-
-
-def _jsx_name(node) -> str | None:
-    """`<Card/>` / `<ui.Modal>` → componente. En minúscula es etiqueta HTML (`<div>`,
-    `<motion.div>`), no un símbolo. Medido: 288 componentes de excalidraw sin callers."""
-    k = node.child_by_field_name("name")
-    if k is None or k.type not in ("identifier", "member_expression", "nested_identifier"):
-        return None
-    nm = k.text.decode("utf-8", "replace").rsplit(".", 1)[-1]
-    return nm if nm[:1].isupper() else None
-
-
-_CALL_NODES = {"call_expression": _callee_name, "new_expression": _new_name,
-               "jsx_opening_element": _jsx_name, "jsx_self_closing_element": _jsx_name}
-
-
 def _calls_in(node) -> list[str]:
     """Todos los nombres llamados dentro del subárbol (incluye anidados, como el oráculo)."""
     out: list[str] = []

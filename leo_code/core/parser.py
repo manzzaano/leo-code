@@ -216,29 +216,6 @@ def _scope_nodes(node):
             yield from _branch_defs(ch)
 
 
-_BRANCHES = (ast.If, ast.Try, ast.TryStar, ast.ExceptHandler, ast.With, ast.AsyncWith)
-_DEFS = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
-
-
-def _branch_defs(node):
-    """Defs bajo if/try/with de `node`, sin entrar en otras defs. Las funciones anidadas se
-    quedan fuera a propósito: sus llamadas ya suben a la función que las contiene."""
-    for ch in ast.iter_child_nodes(node):
-        if isinstance(ch, _DEFS):
-            yield ch
-        elif isinstance(ch, _BRANCHES):
-            yield from _branch_defs(ch)
-
-
-def _scope_nodes(node):
-    """Hijos directos de un módulo o clase, más las defs condicionales (`try: … except
-    ImportError: def f()`): medido en django, 75 defs que perdían símbolo y llamadas."""
-    for ch in ast.iter_child_nodes(node):
-        yield ch
-        if isinstance(ch, _BRANCHES):
-            yield from _branch_defs(ch)
-
-
 def extract_from_python(content: str, file_path: str) -> list[Capsule]:
     """Extrae cápsulas del AST de un archivo Python. 0 dependencias externas."""
     capsules = []
