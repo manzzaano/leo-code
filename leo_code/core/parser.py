@@ -193,12 +193,13 @@ def _store_refs(tree, capsules: list[Capsule]) -> None:
         c.properties["refs"] = " ".join(sorted({nm for _, nm in hits}.difference(c.calls)))
 
 
-_BRANCHES = (ast.If, ast.Try, ast.TryStar, ast.ExceptHandler, ast.With, ast.AsyncWith)
+_BRANCHES = (ast.If, ast.Try, ast.TryStar, ast.ExceptHandler, ast.With, ast.AsyncWith,
+             ast.For, ast.AsyncFor, ast.While, ast.Match, ast.match_case)
 _DEFS = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
 
 
 def _branch_defs(node):
-    """Defs bajo if/try/with de `node`, sin entrar en otras defs. Las funciones anidadas se
+    """Defs bajo if/try/with/for/while/match de `node`, sin entrar en otras defs. Las funciones anidadas se
     quedan fuera a propósito: sus llamadas ya suben a la función que las contiene."""
     for ch in ast.iter_child_nodes(node):
         if isinstance(ch, _DEFS):

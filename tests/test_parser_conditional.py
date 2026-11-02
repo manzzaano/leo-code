@@ -49,3 +49,23 @@ def test_conditional_def_edges_reach_impact():
 def test_class_lists_conditional_methods():
     caps = extract_from_python(SRC, "t.py")
     assert "method" in next(c for c in caps if c.name == "A").properties["metodos"]
+
+
+LOOPS = """\
+for f in fs:
+    def per_item(op):
+        return op()
+while ok:
+    def waiting():
+        pass
+match v:
+    case 1:
+        def matched():
+            pass
+"""
+
+
+def test_loop_and_match_defs_are_indexed():
+    # scipy/sparse/_data.py: `for npfunc in …: def _create_method(op)` (oráculo de CI)
+    names = {c.name for c in extract_from_python(LOOPS, "t.py")}
+    assert {"per_item", "waiting", "matched"} <= names

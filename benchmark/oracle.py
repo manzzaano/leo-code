@@ -49,7 +49,7 @@ def _file_nodes(path: Path) -> dict:
 
 def _scope_defs(path: Path) -> set:
     """(nombre, línea) de las defs que leo debe indexar: las de módulo y de clase de primer
-    nivel, también bajo if/try/with. Las anidadas no: sus llamadas suben a la def exterior."""
+    nivel, también bajo if/try/with/for/while/match. Las anidadas no: sus llamadas suben a la def exterior."""
     try:
         tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
     except SyntaxError:
