@@ -87,6 +87,19 @@ def test_types_are_symbols_without_edges():
     assert all(c.type == "type_def" and c.calls == [] for c in caps)
 
 
+def test_generator_function_value_is_a_symbol():
+    # `const f = function*(){}` es FunctionExpression para tsc (repo TypeScript en la CI)
+    caps = _ex("const gen = function* () { yield run(); };\nconst agen = async function* () {};")
+    assert {c.name for c in caps} == {"gen", "agen"}
+    assert _one("gen", caps).calls == ["run"]
+
+
+def test_dotted_namespace_declares_each_segment():
+    # tsc: `namespace A.B.C` son tres módulos anidados (repo TypeScript en la CI)
+    caps = _ex("namespace A.B.C { export class K {} }")
+    assert {c.name for c in caps} == {"A", "B", "C", "K"}
+
+
 def test_where_finds_a_type():
     assert _gq(_ex(TYPES)).where("Props").cites[0].line == 1
 

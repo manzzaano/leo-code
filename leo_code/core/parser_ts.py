@@ -131,7 +131,7 @@ _TYPE_KINDS = {"interface", "type", "enum", "namespace"}
 # MISMA regla en el oráculo tsc (benchmark/ts_oracle.js): VariableDeclaration /
 # PropertyAssignment cuyo initializer es arrow/function, o una llamada que envuelve una
 # (patrón useCallback/useMemo/memo).
-_FN_VALUES = {"arrow_function", "function_expression"}
+_FN_VALUES = {"arrow_function", "function_expression", "generator_function"}
 # Envoltorios que DEVUELVEN la función (siguen siendo una función con nombre). Lista
 # blanca a propósito: `const idx = xs.findIndex(t => …)` o `useMemo(() => …)` devuelven
 # un VALOR, no una función, y colarlos inventaba símbolos (visto en NEXUS: `idx`, `widths`).
@@ -154,6 +154,13 @@ def _fn_value(node):
             if child.type in _FN_VALUES:
                 return child
     return None
+
+
+def _identifiers(node) -> list[str]:
+    """Identificadores de un `nested_identifier`, en orden."""
+    if node.type in ("identifier", "property_identifier"):
+        return [node.text.decode("utf-8", "replace")]
+    return [s for ch in node.children for s in _identifiers(ch)]
 
 
 def extract_from_tree_sitter(content: str, file_path: str, language: str) -> list[Capsule]:
@@ -211,7 +218,14 @@ def extract_from_tree_sitter(content: str, file_path: str, language: str) -> lis
         if kind:
             name_node = n.child_by_field_name("name")
             # `declare module "pkg"` nombra un paquete ajeno, no un símbolo
-            if name_node is not None and not (kind == "namespace" and name_node.type == "string"):
+            if name_node is None or (kind == "namespace" and name_node.type == "string"):
+                pass
+            elif name_node.type == "nested_identifier":
+                # `namespace A.B.C` declara A, B y C (como tsc); los segmentos son
+                # identifier aunque haya comentarios entre ellos
+                for seg in _identifiers(name_node):
+                    emit(seg, kind, n)
+            else:
                 emit(name_node.text.decode("utf-8", "replace"), kind, n)
         stack.extend(n.children)
     return caps
