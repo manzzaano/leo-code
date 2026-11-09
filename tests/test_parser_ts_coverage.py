@@ -135,3 +135,14 @@ def test_context_prefers_the_exact_case_of_a_type(tmp_path):
     (tmp_path / "z.ts").write_text("export interface CanActivate { marker_ok: boolean }\n", encoding="utf-8")
     _get_indexer().build(str(tmp_path), languages=["typescript"])
     assert "marker_ok" in compute_context(str(tmp_path), "CanActivate", task_type_in="code_query")["context"]
+
+
+def test_unicode_escapes_in_names_are_decoded():
+    # tsc nombra `class C<barra>u0032` como C2: quien pregunte por C2 debe encontrarlo
+    u = chr(92) + "u"
+    src = "\n".join([f"class C{u}0032 {{ m{u}{{61}}() {{}} }}",
+                     f"function f{u}0078() {{}}",
+                     f"export type {u}0078 = 10;"])
+    names = {c.name for c in _ex(src)}
+    assert {"C2", "ma", "fx", "x"} <= names
+    assert not any(u in n for n in names)

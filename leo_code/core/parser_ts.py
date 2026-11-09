@@ -13,6 +13,7 @@ CallExpression cuyo callee es `identifier` (foo()) o `member_expression` (obj.fo
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from leo_code.core.parser import Capsule
@@ -156,6 +157,11 @@ def _fn_value(node):
     return None
 
 
+# `class C\u0032` se llama C2 para tsc; un identificador no admite otras barras
+_BS_U = chr(92) + "u"
+_ESCAPE = re.compile(r"\\u(?:\{([0-9a-fA-F]+)\}|([0-9a-fA-F]{4}))")
+
+
 def _identifiers(node) -> list[str]:
     """Identificadores de un `nested_identifier`, en orden."""
     if node.type in ("identifier", "property_identifier"):
@@ -171,6 +177,8 @@ def extract_from_tree_sitter(content: str, file_path: str, language: str) -> lis
     caps: list[Capsule] = []
 
     def emit(name: str, kind: str, node) -> None:
+        if _BS_U in name and not name.startswith(("'", '"', "[")):
+            name = _ESCAPE.sub(lambda m: chr(int(m.group(1) or m.group(2), 16)), name)
         start = node.start_point[0] + 1
         end = node.end_point[0] + 1
         is_type = kind in _TYPE_KINDS
