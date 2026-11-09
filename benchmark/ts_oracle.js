@@ -62,12 +62,17 @@ for (const f of files) {
   let sf;
   try { sf = ts.createSourceFile(f, fs.readFileSync(f, "utf8"), ts.ScriptTarget.Latest, true); }
   catch { continue; }
+  // Sintaxis inválida (tests de recuperación de errores del compilador): cada parser se
+  // recupera a su manera, no hay verdad que comparar.
+  if (sf.parseDiagnostics && sf.parseDiagnostics.length) continue;
   const syms = [];
   (function rec(n) {
     let name = null;
     // Con cuerpo: abstract y overloads son firmas, y leo aún no las indexa.
     if (ts.isFunctionDeclaration(n) && n.name && n.body) name = n.name.text;
-    else if (ts.isMethodDeclaration(n) && n.name && n.body) name = n.name.getText(sf);
+    // `.text` resuelve los escapes unicode del nombre (como parser_ts.py); los computados no tienen `.text`
+    else if (ts.isMethodDeclaration(n) && n.name && n.body)
+      name = (ts.isIdentifier(n.name) || ts.isPrivateIdentifier(n.name)) ? n.name.text : n.name.getText(sf);
     else if (ts.isClassDeclaration(n) && n.name) name = n.name.text;
     // Funciones declaradas como variable u objeto de funciones (const f = () => …,
     // const f = useCallback(() => …), { jobs: () => … }): misma regla en parser_ts.py.
@@ -86,7 +91,8 @@ for (const f of files) {
     let typeName = null;
     if (ts.isInterfaceDeclaration(n) || ts.isTypeAliasDeclaration(n) || ts.isEnumDeclaration(n)) typeName = n.name.text;
     else if (ts.isModuleDeclaration(n) && !ts.isStringLiteral(n.name)
-             && !(n.flags & ts.NodeFlags.GlobalAugmentation)) typeName = n.name.getText(sf);
+             && !(n.flags & ts.NodeFlags.GlobalAugmentation))
+      typeName = ts.isIdentifier(n.name) ? n.name.text : n.name.getText(sf);
     if (typeName) {
       const line = sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
       syms.push([typeName, line, []]);
