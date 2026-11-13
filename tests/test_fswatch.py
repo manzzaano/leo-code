@@ -121,3 +121,18 @@ def test_doctor_reporta_el_estado_del_watcher(repo, tmp_path, monkeypatch, capsy
     monkeypatch.setattr(engine, "_WATCH", False)
     assert cli.cmd_doctor(args) == 0
     assert "LEO_WATCH=0" in capsys.readouterr().out
+
+
+def test_watch_no_impide_salir_del_proceso(repo):
+    """Un comando de una sola pasada (`leo-mcp index`) debe poder terminar sin parar el
+    watcher. watchdog 7 en Windows crea un hilo lector no-daemon (winapi.py) que hereda
+    el daemon del hilo que arranca el observer: si es el principal, el proceso no sale."""
+    import threading
+    idx = Indexer(hygiene=True)
+    try:
+        assert idx.watch(str(repo)) is True
+        vivos = [t.name for t in threading.enumerate()
+                 if t is not threading.main_thread() and not t.daemon]
+        assert vivos == [], f"hilos no-daemon tras watch(): {vivos}"
+    finally:
+        idx.stop_watch()

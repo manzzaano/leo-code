@@ -408,7 +408,22 @@ class Indexer:
         try:
             obs = Observer()
             obs.schedule(Handler(), repo_abs, recursive=True)
-            obs.start()
+            # Se arranca desde un hilo daemon: watchdog 7 en Windows crea un hilo lector
+            # con threading.Thread a secas (winapi.py), que hereda el daemon del hilo que
+            # lo crea. Desde el principal, `leo-mcp index` no terminaba nunca.
+            fallo: list[BaseException] = []
+
+            def _start():
+                try:
+                    obs.start()
+                except BaseException as e:
+                    fallo.append(e)
+
+            starter = threading.Thread(target=_start, daemon=True)
+            starter.start()
+            starter.join()
+            if fallo:
+                raise fallo[0]
         except Exception:
             with self._dirty_lock:
                 self._observers[repo_abs] = None
@@ -432,7 +447,7 @@ class Indexer:
 
     def stop_watch(self, repo_path: str | None = None):
         """Para el/los observer(s). El proceso puede salir sin esto (los hilos de
-        watchdog son daemon); existe para los tests y para cerrar limpio."""
+        watchdog arrancan como daemon, ver watch()); existe para los tests y para cerrar limpio."""
         with self._dirty_lock:
             items = (list(self._observers.items()) if repo_path is None
                      else [(os.path.abspath(repo_path), self._observers.get(os.path.abspath(repo_path)))])
