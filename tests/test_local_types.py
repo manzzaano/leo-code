@@ -46,3 +46,17 @@ def test_un_builtin_tapado_por_una_clase_del_repo_va_a_la_del_repo():
     shadow = "class set:\n    def add(self, x):\n        pass\n"
     assert "add" in _callees("s = set(); s.add(1)", shadow)
     assert "add" not in _callees("s = {1}; s.add(1)", shadow)   # un literal es siempre builtin
+
+
+def test_import_local_distinto_por_funcion_no_comparte_destino():
+    srcs = {"p/a.py": "class C:\n    def run(self):\n        pass\n",
+            "p/b.py": "class C:\n    def run(self):\n        pass\n",
+            "p/m.py": "def f():\n    from p.a import C\n    x = C()\n    x.run()\n"
+                      "def g():\n    from p.b import C\n    x = C()\n    x.run()\n"}
+    caps = {}
+    for path, src in srcs.items():
+        caps.update({c.id: c for c in extract_from_python(src, path)})
+    g = GraphQuery(caps)
+    for fn, want in (("f", "p/a.py"), ("g", "p/b.py")):
+        caller = next(c for c in caps.values() if c.name == fn and c.type == "function")
+        assert {d.file_path for _, ds in g._callees_of(caller) for d in ds if d.name == "run"} == {want}

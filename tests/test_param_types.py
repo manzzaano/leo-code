@@ -68,3 +68,27 @@ def test_lo_demas_sigue_por_nombre(params, body, extra):
     out = _targets(params, body, extra)
     called = body.rsplit(".", 1)[1].split("(")[0]
     assert any(t.endswith("." + called) and not t.startswith(("Index.", "Sub.")) for t in out), out
+
+
+def _graph_targets(files: dict[str, str], fn: str) -> set[str]:
+    caps = {}
+    for path, src in files.items():
+        caps.update({c.id: c for c in extract_from_python(src, path)})
+    g = GraphQuery(caps)
+    caller = next(c for c in caps.values() if c.name == fn and c.type == "function")
+    return {f"{d.file_path}:{d.name}" for _, ds in g._callees_of(caller) for d in ds}
+
+
+def test_import_local_distinto_por_funcion_no_comparte_destino():
+    files = {"p/a.py": "class C:\n    def run(self):\n        pass\n",
+             "p/b.py": "class C:\n    def run(self):\n        pass\n",
+             "p/m.py": "def f(x: 'C'):\n    from p.a import C\n    x.run()\n"
+                       "def g(x: 'C'):\n    from p.b import C\n    x.run()\n"}
+    assert _graph_targets(files, "f") == {"p/a.py:run"}
+    assert _graph_targets(files, "g") == {"p/b.py:run"}
+
+
+def test_builtin_con_subclase_indirecta_en_el_repo_sigue_por_nombre():
+    # AppError hereda de ValueError, que hereda de Exception: `e: Exception` puede ser AppError
+    extra = "class AppError(ValueError):\n    def render(self):\n        pass\n"
+    assert "AppError.render" in _targets("e: Exception", "e.render()", extra)

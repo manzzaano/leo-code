@@ -449,22 +449,17 @@ class _PyScope:
                 if name not in _BUILTINS:
                     by_name.append(name)
                 continue
-            if recv in pt:                    # def f(x: C): x.foo() → C y sus subclases
-                key = f"^{pt[recv]}\0{name}"
-                if key not in memo:
-                    memo[key] = self._param_typed(pt[recv], name, local, top, binds, here)
-                t = memo[key]
-                if t is None:
-                    by_name.append(name)
+            if recv in pt or recv in lt:      # def f(x: C) → C y subclases; x = C() → la MRO de C
+                param = recv in pt
+                typed = self._param_typed if param else self._typed
+                forms = pt[recv] if param else lt[recv]
+                if local:                     # import dentro de la función: C depende de ella
+                    t = typed(forms, name, local, top, binds, here)
                 else:
-                    for d in t:
-                        resolved[d.id] = d
-                continue
-            if recv in lt:                    # x = C(...); x.foo() → la MRO de C (paso 3)
-                key = f"{lt[recv]}\0{name}"
-                if key not in memo:
-                    memo[key] = self._typed(lt[recv], name, local, top, binds, here)
-                t = memo[key]
+                    key = f"{'^' if param else ''}{forms}\0{name}"
+                    if key not in memo:
+                        memo[key] = typed(forms, name, local, top, binds, here)
+                    t = memo[key]
                 if t is None:
                     by_name.append(name)
                 else:
@@ -516,8 +511,10 @@ class _PyScope:
         hereda de ella), `object`, no es clase del repo o no tiene `name`."""
         [(c, m)] = forms
         if self._is_builtin(c, m, local, top, binds):
-            # `x: str` fuera del repo, salvo que una clase del repo herede de `str`
-            return None if c == "object" or c in self._sub_builtins else ()
+            # `x: str` fuera del repo, salvo que una clase del repo herede de `str` o de una subclase
+            # ponytail: no ve subclases a través de una base de fuera (`IntEnum` para `int`)
+            bt = getattr(builtins, c)
+            return None if c == "object" or any(issubclass(getattr(builtins, n), bt) for n in self._sub_builtins) else ()
         out = {}
         for k in self._form_keys(c, m, local, top, binds, here) or [None]:
             if k is None or any(n == "Protocol" for a in self._mro(k) for n, _ in self.classes.get(a, ())):
