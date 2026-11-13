@@ -8,10 +8,26 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20  # un cuelgue al salir (watchdog en Windows) no debe comerse 6 h
+    env:
+      PYTHONUTF8: "1"
+    defaults:
+      run:
+        shell: bash
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        os: [ubuntu-latest]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+        install: ['.[dev]']
+        include:
+          # Windows con la instalación base, como la tiene un usuario: sin torch ni
+          # extras http (los dos tests ignorados los importan al cargar).
+          - os: windows-latest
+            python-version: "3.12"
+            install: ". pytest pytest-asyncio jedi"
+            pytest-args: "--ignore=tests/test_server_metrics.py --ignore=tests/test_vector_store_lock.py"
 
     steps:
       - uses: actions/checkout@v4
@@ -21,10 +37,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install
-        run: pip install -e ".[dev]"
+        run: pip install -e ${{ matrix.install }}
 
       - name: Test
-        run: python -m pytest --tb=short -q
+        run: python -m pytest --tb=short -q ${{ matrix.pytest-args }}
 
       - name: Calidad de get_context con preguntas en lenguaje natural
         run: python benchmark/nl_retrieval_bench.py
