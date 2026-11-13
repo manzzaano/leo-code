@@ -188,6 +188,14 @@ def test_who_calls_bare_name_with_homonyms_says_how_to_narrow(fresh_engine, tmp_
     assert "2 definitions named save (A.save, B.save)" in out
 
 
+def test_who_calls_homonym_functions_name_their_files(fresh_engine, tmp_path):
+    _write(tmp_path / "svc" / "a.py", "def main():\n    return 1\ndef run():\n    main()\n")
+    repo = _write(tmp_path / "svc" / "b.py", "def main():\n    return 2\n").parent
+    out = mcp_server._graph({"op": "who_calls", "symbol": "main", "repo_path": str(repo)})
+    assert "2 definitions named main (main @ a.py:1, main @ b.py:1)" in out
+    assert "Class.method" not in out   # funciones de módulo: no hay clase con la que acotar
+
+
 def test_who_calls_puts_product_first_and_says_when_it_cuts(fresh_engine, tmp_path):
     _write(tmp_path / "svc" / "core.py", "def helper():\n    return 1\n"
                                          "def zz_main():\n    return helper()\n")

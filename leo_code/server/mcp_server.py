@@ -257,9 +257,13 @@ def _who_calls(gq: GraphQuery, symbol: str) -> str:
                      f"({sum(map(_is_aux_path, kept))} in tests/benchmarks)")
     if target is None and len(defs) > 1:
         names = sorted({_qual(c) for c in defs})
+        # Funciones de módulo homónimas: el nombre no las distingue, el archivo sí.
+        distinct = len(names) == len(defs)
+        if not distinct:
+            names = sorted(f"{_qual(c)} @ {c.file_path}:{c.start_line}" for c in defs)
         lines.append(f"  {len(defs)} definitions named {bare} ({', '.join(names[:5])}"
-                     f"{', …' if len(names) > 5 else ''}): callers of all of them. "
-                     'Narrow with symbol="Class.method".')
+                     f"{', …' if len(names) > 5 else ''}): callers of all of them."
+                     + (' Narrow with symbol="Class.method".' if distinct else ""))
     return "\n".join(lines)
 
 
