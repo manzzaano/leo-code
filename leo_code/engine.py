@@ -129,6 +129,34 @@ class _NoVectorStore:
 _NO_VECTOR_STORE = _NoVectorStore()
 
 
+class _SafeVectorStore:
+    """La semántica es un extra: si qdrant falla (p. ej. una colección escrita por otra
+    versión del cliente) se avisa una vez por stderr y el repo sigue sin ella, con
+    exacto + BM25. Antes el error de qdrant tumbaba get_context entero."""
+
+    def __init__(self, vs):
+        self._vs = vs
+
+    def _call(self, name, *a, **k):
+        try:
+            return getattr(self._vs, name)(*a, **k)
+        except Exception as e:
+            if self._vs is not _NO_VECTOR_STORE:
+                print(f"[leo-mcp] semantic recall off for this repo: {type(e).__name__}: "
+                      f"{str(e)[:200]}", file=sys.stderr)
+                self._vs = _NO_VECTOR_STORE
+            return getattr(_NO_VECTOR_STORE, name)(*a, **k)
+
+    def add(self, capsules):
+        return self._call("add", capsules)
+
+    def search(self, query, top_k=50):
+        return self._call("search", query, top_k=top_k)
+
+    def count(self):
+        return self._call("count")
+
+
 def _get_vector_store(repo_path: str):
     if not SEMANTIC:
         return _NO_VECTOR_STORE
@@ -143,7 +171,7 @@ def _get_vector_store(repo_path: str):
                 # en disco entre reinicios → los embeddings se reusan en vez de re-embeber
                 # las ~1400 cápsulas en cada arranque del server/MCP.
                 stable = hashlib.md5(repo_path.encode("utf-8")).hexdigest()[:8]
-                _vector_stores[repo_path] = VectorStore(
+                _vector_stores[repo_path] = _SafeVectorStore(VectorStore(
                     collection_name=f"leo_mcp_{stable}",
                     path=os.environ.get("LEO_QDRANT_PATH") or str(_CACHE_DIR / "qdrant"),
                     # El hash estable YA identifica el repo; el aislamiento entre
@@ -151,7 +179,7 @@ def _get_vector_store(repo_path: str):
                     # no un sufijo de PID en el nombre de coleccion — con PID cada
                     # reinicio/subproceso pierde los embeddings ya calculados.
                     use_process_id=False,
-                )
+                ))
     return _vector_stores[repo_path]
 
 
