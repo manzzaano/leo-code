@@ -30,7 +30,6 @@ classifiers = [
 dependencies = [
     "mcp>=2.3,<3",
     "orjson>=3.9",
-    "rank-bm25>=0.2",
     "tree-sitter>=0.23",
     "tree-sitter-typescript>=0.23",
     "tree-sitter-javascript>=0.23",
@@ -53,6 +52,7 @@ dev = [
     "pytest>=8",
     "pytest-asyncio>=0.24",
     "jedi>=0.19",   # juez del oráculo de resolución (benchmark/resolution_oracle.py)
+    "rank-bm25>=0.2",  # oráculo del BM25 propio (tests/test_bm25_okapi.py)
 ]
 
 [project.scripts]

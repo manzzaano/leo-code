@@ -412,9 +412,10 @@ def _is_project(repo: str) -> bool:
 # Extensiones C que el servidor importa perezosamente. En Windows, el primer import de
 # una de ellas dentro de un worker se cuelga mientras el hilo lector de stdin tiene un
 # ReadFile síncrono pendiente sobre el pipe (medido 2026-09-15: 1ª get_context colgada
-# en la instalación base, stack en numpy/_core/multiarray create_module vía rank_bm25).
+# en la instalación base, stack en numpy/_core/multiarray create_module vía rank_bm25;
+# numpy ya no es dependencia base, pero la regla vale para el resto).
 # Se importan en el hilo principal ANTES de que el servidor empiece a leer stdin.
-_PRELOAD = ("numpy", "rank_bm25", "orjson", "tree_sitter", "tree_sitter_typescript", "tree_sitter_javascript")
+_PRELOAD = ("orjson", "tree_sitter", "tree_sitter_typescript", "tree_sitter_javascript")
 
 
 def _preload_native():
