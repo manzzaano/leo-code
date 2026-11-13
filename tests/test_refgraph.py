@@ -93,3 +93,24 @@ def test_capsules_without_stored_refs_are_parsed(tmp_path):
     del table.properties["refs"]
     augment_refs(caps)
     assert "target" in table.calls
+
+
+def test_registro_a_nivel_de_modulo_cuenta_como_dependiente(tmp_path):
+    # Revisión E, H1: `atexit.register(f)` suelto en el módulo no dejaba dependiente de `f`;
+    # se atribuye a la cabecera del archivo (decisión 13/11), no a todas sus funciones.
+    from leo_code.core.guardian import Guardian
+    for name, src in {
+        "con_cabecera.py": "import atexit, signal\n\ndef _cleanup():\n    pass\n\n"
+                           "def _on_term(s, f):\n    pass\n\ndef _late():\n    pass\n\n"
+                           "HANDLERS = []\natexit.register(_cleanup)\n"
+                           "signal.signal(signal.SIGTERM, _on_term)\nHANDLERS.append(_late)\n",
+        "sin_cabecera.py": "def _cleanup():\n    pass\n\ndef _on_term(s, f):\n    pass\n\n"
+                           "def _late():\n    pass\n\n__import__('atexit').register(_cleanup)\n"
+                           "_on_term and _late\n",
+    }.items():
+        caps = _caps_from(tmp_path / name, src)
+        g = Guardian(caps)
+        for fn in ("_cleanup", "_on_term", "_late"):
+            deps = [(a.cite.name, a.cite.line) for a in g.review(fn).affected]
+            assert any(n.endswith(".__header__") for n, _ in deps), (name, fn, deps)
+            assert not any(n in ("_cleanup", "_on_term", "_late") for n, _ in deps), (name, fn, deps)

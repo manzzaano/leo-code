@@ -511,7 +511,7 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
 
     _store_refs(tree, capsules)
 
-    header = _extract_file_header(content, file_path)
+    header = _with_module_stmts(_extract_file_header(content, file_path), tree, content, file_path)
     if header is not None:
         capsules.append(header)
 
@@ -828,6 +828,29 @@ def detect_frameworks(capsules: list[Capsule]) -> list[Capsule]:
         if step is not None:
             step(c)
     return capsules
+
+
+def _with_module_stmts(header: Optional[Capsule], tree, content: str, file_path: str) -> Optional[Capsule]:
+    """Sentencias sueltas de módulo tras la cabecera (`atexit.register(f)`, `app.add_url_rule(…)`,
+    `HANDLERS.append(f)`): van al contenido de la cabecera, así refgraph la hace dependiente
+    de lo que nombran. Sin esto `f` no tenía dependientes; atribuirlas a todas las funciones
+    del archivo era casi todo el repo (28/10). Sin cabecera, se crea con esas sentencias."""
+    end = header.end_line if header is not None else 0
+    stmts = [n for n in tree.body if isinstance(n, ast.Expr) and n.lineno > end
+             and not (isinstance(n.value, ast.Constant) and isinstance(n.value.value, str))]
+    if not stmts:
+        return header
+    extra = "\n".join(ast.get_source_segment(content, n) or "" for n in stmts)
+    if header is None:
+        module_name = Path(file_path).stem
+        header = Capsule(id=_make_id(file_path, 1, f"file_header:{module_name}"), type="file_header",
+                         name=f"{module_name}.__header__", file_path=file_path,
+                         start_line=stmts[0].lineno, end_line=stmts[-1].end_lineno or stmts[-1].lineno,
+                         language="python", signature=f"[imports] {module_name}", content=extra,
+                         properties={"module": module_name, "constants": "", "import_lines": 0})
+    else:
+        header.content += "\n" + extra
+    return header
 
 
 def _extract_file_header(content: str, file_path: str) -> Optional[Capsule]:
