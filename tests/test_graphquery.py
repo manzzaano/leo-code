@@ -122,6 +122,13 @@ def test_where_names_the_class_of_a_method_and_shows_its_signature():
     assert "def BM25Index.search(self, query, top_k) -> list" in out
 
 
+def test_where_with_class_method_cites_only_that_class():
+    a, b = _cap("search", file="bm25.py", t="method"), _cap("search", file="store.py", t="method")
+    a.properties, b.properties = {"qualified": "BM25Index.search"}, {"qualified": "VectorStore.search"}
+    p = GraphQuery({b.id: b, a.id: a}).where("BM25Index.search")
+    assert [c.file for c in p.cites] == ["bm25.py"]
+
+
 def test_impact_says_through_whom_and_at_what_depth():
     p = GraphQuery(_chain()).impact("usersTable")
     fetch = next(c for c in p.cites if c.name == "fetchUser")

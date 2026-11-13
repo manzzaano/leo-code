@@ -640,7 +640,9 @@ class GraphQuery:
         porque _is_def no cuenta dataclass/constant (y no se toca: la resolución depende de él)."""
         hits = self._resolve(name)
         defs = [c for c in hits if not _is_import(c)]
-        cites = [replace(self._cite(c), name=(c.properties or {}).get("qualified") or c.name,
+        # `Clase.método`: solo esa clase si existe (como defs_named en who_calls/impact)
+        defs = [c for c in defs if _qual(c) == name] or defs
+        cites =[replace(self._cite(c), name=(c.properties or {}).get("qualified") or c.name,
                          sig=" ".join((c.signature or "").split())[:160])
                  for c in (sorted(defs, key=_is_aux_path) if defs else hits)]
         n_imp = len({c.file_path for c in hits if _is_import(c)}) if defs else 0
