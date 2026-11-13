@@ -23,6 +23,9 @@ def _callees(body: str, extra: str = "") -> set[str]:
     "s = []; s.append(1); s.add(1)",
     "s: set[int] = {1}; s.add(1)",
     "s = {1}; s = {2}; s.add(1)",
+    "s = set(); s.add(1)",
+    "s: set[int] = set(); s.add(1)",   # el caso que lo motivó (orggraph `langs`)
+    "s = set(); s = {2}; s.add(1)",
 ])
 def test_builtin_exacto_no_llama_a_metodos_del_repo(body):
     assert "add" not in _callees(body)
@@ -33,7 +36,7 @@ def test_builtin_exacto_no_llama_a_metodos_del_repo(body):
     "s: Index = Index(); s.add(1)",     # AnnAssign con constructor del repo
     "y.add(1)",                         # parámetro sin tipo: por nombre
     "s = {1}; s = make(); s.add(1)",    # una ligadura desconocida: por nombre
-    "s = set(); s.add(1)",              # constructor builtin: por nombre (test_graph_local_types)
+    "s = type(y)(); s.add(1)",          # no es una forma simple: por nombre
 ])
 def test_lo_que_no_es_builtin_exacto_sigue_llegando(body):
     assert "add" in _callees(body)

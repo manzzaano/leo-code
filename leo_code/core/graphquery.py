@@ -123,6 +123,10 @@ def _norm(path: str) -> str:
 
 
 _BUILTINS = frozenset(dir(builtins))
+# Clases builtin cuyo constructor da una instancia exacta. Sin `type` (devuelve una clase
+# cualquiera, quizá del repo) ni `super`. ponytail: un `from x import *` que redefina
+# `dict` engaña a la regla; nombres de un import con * no están en la tabla de imports.
+_BUILTIN_TYPES = frozenset(n for n in _BUILTINS if isinstance(getattr(builtins, n), type)) - {"type", "super"}
 _NONE: dict = {}   # default de .get() compartido: `.get(k, {})` crearía un dict por llamada (GC, chequeo (e))
 # No son defs llamables. Por exclusión y no por lista: el clasificador reetiqueta defs
 # (middleware, model, endpoint…) y una lista cerrada las dejaba sin resolver.
@@ -484,8 +488,9 @@ class _PyScope:
         para cada C. None si alguna C no es una clase del repo o el método no se encuentra."""
         keys = []
         for c, m in ctors:
-            if m == "{}":
-                continue   # literal/comprensión: builtin exacto, sus métodos están fuera del repo
+            if m == "{}" or (not m and c in _BUILTIN_TYPES and c not in local
+                             and c not in top and c not in binds):
+                continue   # literal o `set()`: builtin exacto, sus métodos están fuera del repo
             b = local.get(m or c) or binds.get(m or c)
             if m:
                 defs = self._bound(b, c, m, here) if b else None
