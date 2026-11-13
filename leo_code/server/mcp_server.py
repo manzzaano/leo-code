@@ -157,7 +157,7 @@ def _guardian(repo: str, caps: dict) -> Guardian:
     if hit is None or hit[0] is not caps:
         hit = None                           # soltar el viejo: dos a la vez eran el pico de RAM
         _guard_cache.pop(repo, None)
-        hit = _guard_cache[repo] = (caps, Guardian(caps))
+        hit = _guard_cache[repo] = (caps, Guardian(caps, repo))
     return hit[1]
 
 

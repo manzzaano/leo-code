@@ -99,14 +99,14 @@ def _load_caps(repo: str) -> list:
     return engine._repo_caps(idx, repo)
 
 
-def _report(caps: list, symbols: list) -> tuple[str, str] | None:
+def _report(caps: list, symbols: list, repo: str | None = None) -> tuple[str, str] | None:
     """(contexto para el agente, línea para el humano), o None si no hay nada que avisar."""
     from leo_code.core.boundary import link_http_edges
     from leo_code.core.guardian import Guardian
 
     by_id = {c.id: c for c in caps}
     link_http_edges(by_id)   # un fetch del frontend también es un dependiente
-    guard = Guardian(by_id)
+    guard = Guardian(by_id, repo)
     for cap in symbols:
         report = guard.review(cap.name)
         risky = report.uncovered   # ya sin tests: un test dependiente es cobertura
@@ -138,8 +138,8 @@ def run(payload: dict, started: float) -> dict | None:
     if not raw_path:
         return None
     path = Path(str(raw_path))
-    if not path.is_file() or _is_test_path(path):
-        return None   # archivo nuevo (Write) o test: nada que romper
+    if not path.is_file():
+        return None   # archivo nuevo (Write): nada que romper
 
     from leo_code.rag.indexer import Indexer
     if path.suffix.lower() not in Indexer.CODE_EXTENSIONS:
@@ -147,9 +147,11 @@ def run(payload: dict, started: float) -> dict | None:
 
     repo = os.path.abspath(os.getenv("LEO_REPO") or payload.get("cwd") or ".")
     try:
-        path.relative_to(repo)
+        rel = path.relative_to(repo)
     except ValueError:
         return None   # fuera del repo indexado
+    if _is_test_path(rel):
+        return None   # un test: nada que romper (ruta en el repo: el repo puede vivir bajo `test/`)
 
     if time.monotonic() - started > _DEADLINE_S:
         return None
@@ -163,7 +165,7 @@ def run(payload: dict, started: float) -> dict | None:
     if not symbols or time.monotonic() - started > _DEADLINE_S:
         return None
 
-    found = _report(caps, symbols)
+    found = _report(caps, symbols, repo)
     if found is None:
         return None
     context, human = found

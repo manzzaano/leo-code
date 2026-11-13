@@ -371,7 +371,7 @@ def test_guard_reuses_guardian_until_index_changes(fresh_engine, fullstack, monk
     # Guardian(caps) se construía en CADA llamada: django 11-18 s por guard.
     built = []
     real = mcp_server.Guardian
-    monkeypatch.setattr(mcp_server, "Guardian", lambda caps: built.append(1) or real(caps))
+    monkeypatch.setattr(mcp_server, "Guardian", lambda caps, *a: built.append(1) or real(caps, *a))
     args = {"op": "guard", "symbol": "get_session", "repo_path": str(fullstack)}
     first = mcp_server._graph(args)
     assert mcp_server._graph(args) == first and len(built) == 1
@@ -385,6 +385,6 @@ def test_guardian_viejo_se_suelta_antes_de_construir_el_nuevo(monkeypatch):
     from leo_code.server import mcp_server as M
     monkeypatch.setattr(M, "_guard_cache", {"r": ({}, object())})
     vivos = []
-    monkeypatch.setattr(M, "Guardian", lambda caps: vivos.append("r" in M._guard_cache) or object())
+    monkeypatch.setattr(M, "Guardian", lambda caps, *a: vivos.append("r" in M._guard_cache) or object())
     M._guardian("r", {"nuevo": 1})
     assert vivos == [False]

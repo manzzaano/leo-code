@@ -16,7 +16,9 @@ Self-check:  python -m leo_code.core.guardian
 
 from __future__ import annotations
 
+import os
 from collections import deque
+from pathlib import Path
 from dataclasses import dataclass, field
 
 from leo_code.core.graphquery import GraphQuery, Cite
@@ -68,8 +70,19 @@ class ChangeReport:
         return "\n".join(lines)
 
 
+
+def _in_repo(file_path: str | None, root: str | None) -> Path:
+    """Ruta del archivo relativa al repo (tal cual si no se sabe el repo o cae fuera)."""
+    p = Path(file_path or "")
+    if root:
+        try:
+            return Path(os.path.abspath(p)).relative_to(root)
+        except ValueError:
+            pass
+    return p
+
 class Guardian:
-    def __init__(self, capsules: dict):
+    def __init__(self, capsules: dict, repo: str | None = None):
         # El guardián usa el grafo AUMENTADO con aristas de referencia/dispatch
         # (completitud: cambiar X que se invoca por dict debe marcar a quien lo despacha).
         # Sobre una COPIA de las listas `calls` para NO contaminar el grafo directo y
@@ -85,19 +98,19 @@ class Guardian:
         self.caps = aug
         self.gq = GraphQuery(aug)
         self._covered: set[str] | None = None
+        self._root = os.path.abspath(repo) if repo else None   # la regla de test mira la ruta DENTRO del repo, no sus carpetas padre
         # cita (archivo, línea, nombre) → su cápsula: la cobertura va por definición
         self._at = {(c.file_path or "?", c.start_line or 0, c.name): c for c in aug.values()}
 
     # ---- cobertura: símbolos alcanzados por algún test ----
     @staticmethod
-    def _is_test(c) -> bool:
+    def _is_test(c, root: str | None = None) -> bool:
         if c.type == "test":
             return True
         # Mismo criterio que el hook: «test» suelto en el nombre del archivo marcaba
         # producto como test (django: testing.py, testserver.py).
-        from pathlib import Path
         from leo_code.guard_hook import _is_test_path
-        return (c.name or "").lower().startswith("test_") or _is_test_path(Path(c.file_path or ""))
+        return (c.name or "").lower().startswith("test_") or _is_test_path(_in_repo(c.file_path, root))
 
     def test_closure(self) -> set[str]:
         """Ids de las definiciones alcanzables desde algún test (transitivo).
@@ -108,7 +121,7 @@ class Guardian:
         if self._covered is not None:
             return self._covered
         seen: set[str] = set()
-        q: deque = deque(d for c in self.caps.values() if self._is_test(c)
+        q: deque = deque(d for c in self.caps.values() if self._is_test(c, self._root)
                          for d, _, _ in self.gq._hops(c))
         while q:
             d = q.popleft()
@@ -129,7 +142,7 @@ class Guardian:
     def review(self, changed_symbol: str, limit: int = 200) -> ChangeReport:
         impact = self.gq.impact(changed_symbol, limit=limit)
         caps = [self._at[(c.file, c.line, c.name)] for c in impact.cites]
-        affected = [Affected(c, self.is_covered(cap), self._is_test(cap))
+        affected = [Affected(c, self.is_covered(cap), self._is_test(cap, self._root))
                     for c, cap in zip(impact.cites, caps)]
         defs = self.gq.defs_named(changed_symbol)
         return ChangeReport(symbol=changed_symbol,
@@ -200,7 +213,7 @@ def guard_repo(repo: str = ".", staged: bool = False, base: str | None = None) -
     idx.build(repo, verbose=False)
     caps = idx.get_capsules()
     link_http_edges(caps)                 # aristas HTTP para impacto cross-lenguaje
-    g = Guardian(caps)
+    g = Guardian(caps, repo)
     reports = g.review_diff(git_diff(repo, staged, base))
     return reports, summarize(reports)
 
@@ -276,7 +289,7 @@ if __name__ == "__main__":
         idx.build(args.repo, verbose=False)
         caps = idx.get_capsules()
         link_http_edges(caps)
-        print(Guardian(caps).review(args.symbol).render())
+        print(Guardian(caps, args.repo).review(args.symbol).render())
         sys.exit(0)
 
     if not args.staged and not args.base:

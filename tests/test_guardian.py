@@ -157,3 +157,17 @@ def test_impact_cut_is_announced_and_cli_counts_unique():
     from leo_code.core.guardian import summarize
     reps = g.review_many(["core", "core2"])          # mismos 5 dependientes para los dos
     assert summarize(reps)["uncovered_risk"] == 5
+
+
+def test_is_test_mira_la_ruta_dentro_del_repo():
+    # Repo clonado bajo una carpeta `test/` o `spec/`: antes todo contaba como test y guard
+    # no avisaba de nada (revisión E, H6).
+    for root in ("/home/u/test/app", "C:/work/spec/app"):
+        caps = {c.id: c for c in [
+            _cap("build", file=f"{root}/logic.py", calls=["read_db"]),
+            _cap("read_db", file=f"{root}/db.py"),
+            _cap("test_x", file=f"{root}/tests/test_other.py", t="test"),
+        ]}
+        g = Guardian(caps, repo=root)
+        assert not g.is_covered("read_db"), root
+        assert [a.cite.name for a in g.review("read_db").uncovered] == ["build"], root
