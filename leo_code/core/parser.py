@@ -145,20 +145,37 @@ def _resolution_props(node) -> dict:
     return props
 
 
+# Literales y comprensiones: su tipo es exacto (nunca una subclase), como `set()`.
+_LITERAL_TYPES = {ast.Dict: "dict", ast.DictComp: "dict", ast.Set: "set", ast.SetComp: "set",
+                  ast.List: "list", ast.ListComp: "list", ast.Tuple: "tuple", ast.JoinedStr: "str"}
+
+
+def _literal_form(v) -> tuple[str, str] | None:
+    t = _LITERAL_TYPES.get(type(v))
+    if t is None and isinstance(v, ast.Constant) and type(v.value) in (str, bytes):
+        t = type(v.value).__name__
+    return (t, "{}") if t else None   # receptor "{}": marca de literal, no es un nombre
+
+
 def _local_types(fn) -> dict:
-    """Variables de `fn` cuyas asignaciones son TODAS `x = C(...)` / `x = m.C(...)`:
+    """Variables de `fn` cuyas asignaciones son TODAS `x = C(...)` / `x = m.C(...)` (también
+    `x: T = C(...)`) o un literal/comprensión (tipo builtin):
     nombre → formas de `call_form` de cada C (paso 3). Es el tipo como unión de lo asignado
     (pyright; el grafo de asignaciones de PyCG), sin flujo. Cualquier otra forma de ligar
     el nombre (parámetro, bucle, `with`, `except`, import, `global`…) lo descarta, también
     dentro de funciones anidadas: la unión puede salir mayor, nunca menor."""
     ctor, other, seen = {}, set(), set()
     for n in ast.walk(fn):
-        if isinstance(n, ast.Assign):
-            f = call_form(n.value.func) if isinstance(n.value, ast.Call) else None
-            t = n.targets[0]
-            if len(n.targets) == 1 and isinstance(t, ast.Name) and f and f[1] not in (".", "super()"):
+        if isinstance(n, (ast.Assign, ast.AnnAssign)):
+            v = n.value
+            f = (call_form(v.func) if isinstance(v, ast.Call) else _literal_form(v)) if v else None
+            ts = n.targets if isinstance(n, ast.Assign) else [n.target]
+            t = ts[0]
+            if len(ts) == 1 and isinstance(t, ast.Name) and f and f[1] not in (".", "super()"):
                 ctor.setdefault(t.id, {})[f] = None
                 seen.add(t)
+            elif v is None and isinstance(t, ast.Name):
+                seen.add(t)   # `x: T` sin valor solo declara: no liga
         elif isinstance(n, ast.Name) and isinstance(n.ctx, (ast.Store, ast.Del)) and n not in seen:
             other.add(n.id)
         elif isinstance(n, ast.arg):

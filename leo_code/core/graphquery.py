@@ -484,6 +484,8 @@ class _PyScope:
         para cada C. None si alguna C no es una clase del repo o el método no se encuentra."""
         keys = []
         for c, m in ctors:
+            if m == "{}":
+                continue   # literal/comprensión: builtin exacto, sus métodos están fuera del repo
             b = local.get(m or c) or binds.get(m or c)
             if m:
                 defs = self._bound(b, c, m, here) if b else None
@@ -494,7 +496,7 @@ class _PyScope:
             if not ks:
                 return None
             keys += ks
-        return self._explicit(keys, name)
+        return self._explicit(keys, name) if keys else []
 
     def _bound(self, b: list, name: str, recv: str, here: str) -> list | None:
         """Destinos de `name()` (recv '') o `recv.name()` cuando el nombre clave viene del import `b`."""
