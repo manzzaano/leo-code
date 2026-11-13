@@ -222,6 +222,8 @@ class _PyScope:
                     if b != k:
                         subs[b].append(k)
         self.subs = {k: tuple(v) for k, v in subs.items()}     # tuplas de str: el GC las suelta
+        # builtins con subclase en el repo: `x: str` podría ser una de ellas
+        self._sub_builtins = {n for fs in self.classes.values() for n, r in fs if not r and n in _BUILTIN_TYPES}
         self._mros: dict[str, tuple] = {}
         self._descs: dict[str, tuple] = {}
 
@@ -422,6 +424,7 @@ class _PyScope:
         local = {b[0]: b for b in lb} if lb else {}
         cls, me = props.get("class"), props.get("self_arg")
         lt = props.get("local_types") or _NONE
+        pt = props.get("param_types") or _NONE
         top = self.top.get(here, _NONE)
         binds = self.binds.get(here, _NONE)
         memo = self._memo.get(here)
@@ -445,6 +448,17 @@ class _PyScope:
             if recv == "" and name not in local and name not in top and name not in binds:
                 if name not in _BUILTINS:
                     by_name.append(name)
+                continue
+            if recv in pt:                    # def f(x: C): x.foo() → C y sus subclases
+                key = f"^{pt[recv]}\0{name}"
+                if key not in memo:
+                    memo[key] = self._param_typed(pt[recv], name, local, top, binds, here)
+                t = memo[key]
+                if t is None:
+                    by_name.append(name)
+                else:
+                    for d in t:
+                        resolved[d.id] = d
                 continue
             if recv in lt:                    # x = C(...); x.foo() → la MRO de C (paso 3)
                 key = f"{lt[recv]}\0{name}"
@@ -488,20 +502,45 @@ class _PyScope:
         para cada C. None si alguna C no es una clase del repo o el método no se encuentra."""
         keys = []
         for c, m in ctors:
-            if m == "{}" or (not m and c in _BUILTIN_TYPES and c not in local
-                             and c not in top and c not in binds):
+            if m == "{}" or self._is_builtin(c, m, local, top, binds):
                 continue   # literal o `set()`: builtin exacto, sus métodos están fuera del repo
-            b = local.get(m or c) or binds.get(m or c)
-            if m:
-                defs = self._bound(b, c, m, here) if b else None
-            else:
-                defs = top[c] if c not in local and c in top else (
-                    self._bind_targets(b, here) if b else None)
-            ks = self._keys_of(defs)
+            ks = self._form_keys(c, m, local, top, binds, here)
             if not ks:
                 return None
             keys += ks
         return self._explicit(keys, name) if keys else []
+
+    def _param_typed(self, forms: list, name: str, local, top, binds, here: str):
+        """`x.name()` con `x` un parámetro anotado `x: C`: como `self.name()` en C (C y sus
+        subclases). None (por nombre) si C es Protocol (estructural: quien la cumple no
+        hereda de ella), `object`, no es clase del repo o no tiene `name`."""
+        [(c, m)] = forms
+        if self._is_builtin(c, m, local, top, binds):
+            # `x: str` fuera del repo, salvo que una clase del repo herede de `str`
+            return None if c == "object" or c in self._sub_builtins else ()
+        out = {}
+        for k in self._form_keys(c, m, local, top, binds, here) or [None]:
+            if k is None or any(n == "Protocol" for a in self._mro(k) for n, _ in self.classes.get(a, ())):
+                return None
+            t = self._dispatch(k, name, False)
+            if t is None:
+                return None
+            out.update((d.id, d) for d in (t if type(t) is tuple else (t,)))
+        return tuple(out.values())
+
+    @staticmethod
+    def _is_builtin(c: str, m: str, local, top, binds) -> bool:
+        return not m and c in _BUILTIN_TYPES and c not in local and c not in top and c not in binds
+
+    def _form_keys(self, c: str, m: str, local, top, binds, here: str) -> list:
+        """Clases del repo a las que apunta el nombre `C` / `m.C` desde este archivo."""
+        b = local.get(m or c) or binds.get(m or c)
+        if m:
+            defs = self._bound(b, c, m, here) if b else None
+        else:
+            defs = top[c] if c not in local and c in top else (
+                self._bind_targets(b, here) if b else None)
+        return self._keys_of(defs)
 
     def _bound(self, b: list, name: str, recv: str, here: str) -> list | None:
         """Destinos de `name()` (recv '') o `recv.name()` cuando el nombre clave viene del import `b`."""

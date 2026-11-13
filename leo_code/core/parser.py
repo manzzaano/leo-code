@@ -142,7 +142,56 @@ def _resolution_props(node) -> dict:
         types = _local_types(node)
         if types:
             props["local_types"] = types
+        types = _param_types(node)
+        if types:
+            props["param_types"] = types
     return props
+
+
+def _ann_form(a) -> tuple[str, str] | None:
+    """Clase de una anotación, con la forma de `call_form`: `Foo`, `m.Foo`, `"Foo"`,
+    `Foo | None`, `Optional[Foo]`. Lo demás (uniones, genéricos) no se sigue."""
+    if isinstance(a, ast.Constant) and isinstance(a.value, str):
+        try:
+            a = ast.parse(a.value, mode="eval").body
+        except SyntaxError:
+            return None
+    if isinstance(a, ast.BinOp) and isinstance(a.op, ast.BitOr):
+        sides = [s for s in (a.left, a.right) if not (isinstance(s, ast.Constant) and s.value is None)]
+        return _ann_form(sides[0]) if len(sides) == 1 else None
+    if isinstance(a, ast.Subscript) and call_form(a.value) in (("Optional", ""), ("Optional", "typing")):
+        return _ann_form(a.slice)
+    if isinstance(a, ast.Name) or (isinstance(a, ast.Attribute) and isinstance(a.value, ast.Name)):
+        return call_form(a)
+    return None
+
+
+def _param_types(fn) -> dict:
+    """Parámetros anotados de `fn` que nada vuelve a ligar: nombre → [forma de su clase].
+    GraphQuery los despacha como `self.m()` (la clase y sus subclases). Otra ligadura del
+    nombre en `fn` o en sus funciones/lambdas anidadas (sus llamadas suben a `fn`) lo descarta."""
+    a = fn.args
+    own = set(a.posonlyargs + a.args + a.kwonlyargs)
+    types = {p.arg: f for p in own if p.annotation is not None and (f := _ann_form(p.annotation))}
+    for n in ast.walk(fn):
+        if not types:
+            break
+        if isinstance(n, ast.Name) and isinstance(n.ctx, (ast.Store, ast.Del)):
+            types.pop(n.id, None)
+        elif isinstance(n, ast.arg) and n not in own:
+            types.pop(n.arg, None)
+        elif isinstance(n, (ast.Global, ast.Nonlocal)):
+            for x in n.names:
+                types.pop(x, None)
+        elif isinstance(n, ast.alias):
+            types.pop((n.asname or n.name).split(".")[0], None)
+        elif isinstance(n, (ast.ExceptHandler, ast.MatchAs, ast.MatchStar)) and n.name:
+            types.pop(n.name, None)
+        elif isinstance(n, ast.MatchMapping) and n.rest:
+            types.pop(n.rest, None)
+        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and n is not fn:
+            types.pop(n.name, None)
+    return {k: [list(f)] for k, f in types.items()}
 
 
 # Literales y comprensiones: su tipo es exacto (nunca una subclase), como `set()`.
