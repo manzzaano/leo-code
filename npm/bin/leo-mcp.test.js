@@ -29,3 +29,15 @@ test("without uvx it falls back to a private venv", () => {
   const plan = buildCommand({ env: {}, argv: ["index"], which: noTools, version: "1.2.3" });
   assert.deepStrictEqual(plan, { mode: "venv", from: "leo-mcp==1.2.3", argv: ["index"] });
 });
+
+test("which finds tools when Windows names the variable Path, not PATH", () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const { which } = require("./leo-mcp.js");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "leo-which-"));
+  const exe = path.join(dir, process.platform === "win32" ? "uvx.EXE" : "uvx");
+  fs.writeFileSync(exe, "");
+  // {...process.env} on Windows keeps the original casing: usually "Path".
+  assert.strictEqual(which("uvx", { Path: dir, PATHEXT: ".EXE" }), exe);
+});
