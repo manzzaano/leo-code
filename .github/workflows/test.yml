@@ -45,6 +45,9 @@ jobs:
       - name: Calidad de get_context con preguntas en lenguaje natural
         run: python benchmark/nl_retrieval_bench.py
 
+      - name: Ahorro por consulta de get_context (≥80% vs leer los archivos)
+        run: python benchmark/token_efficiency.py
+
       - name: Import smoke test
         run: |
           python -c "from leo_code.core.parser import Capsule, extract_from_file"

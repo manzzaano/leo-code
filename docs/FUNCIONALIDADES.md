@@ -27,7 +27,7 @@ Inventario completo del producto, por importancia. Cada funcionalidad se revisa 
 
 | # | Funcionalidad | Dónde | Revisión |
 |---|---|---|---|
-| 11 | Exactitud del grafo comprobada en CI (100% vs `ast` y `tsc`) | `benchmark/audit_formal.py`, `audit.yml` | |
+| 11 | Exactitud del grafo comprobada en CI (100% vs `ast` y `tsc`) | `benchmark/audit_formal.py`, `audit.yml` | 14/11: A. FORMAL 7/7 en local (leo-code + django) y en CI. `benchmark/audit.py` (local, en `.gitignore`) daba 6/9 por obsolescencia (3 wheels, `_GRAPH_TOOLS`, agente); lo único que no gateaba nadie, el ahorro por consulta ≥80 % de `token_efficiency.py` (95,9 %, 1,3 s), pasa a ser paso de `test.yml`. audit.py no se borra: es local y sin copia en git |
 | 12 | Resolución de llamadas Python (imports, MRO, tipos locales): 74,9% django / 80,2% sympy exactas, recall 100% | `graphquery.py:95-466` | |
 | 13 | Enlace frontend `fetch` → ruta backend | `core/boundary.py:136` | |
 | 14 | Hook de aviso antes de editar (Claude Code) | `guard_hook.py` | |
