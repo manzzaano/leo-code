@@ -49,6 +49,15 @@ def test_jsx_call_site_line():
     assert rough_lines(_one("Page", caps), "Card") == [3]
 
 
+def test_generico_ts_no_es_linea_de_llamada():
+    # `Promise<Service>` o `Map<string, Service>` no llaman a Service; JSX `<Service/>` sí
+    caps = _ex("async function f(): Promise<Service> {\n  const m: Array<Service> = [];\n"
+               "  return new Service();\n}", "x.ts")
+    assert rough_lines(_one("f", caps), "Service") == [3]
+    caps = _ex("function P() {\n  return cond ? <Service/> : (<ui.Service/>);\n}", "x.tsx")
+    assert rough_lines(_one("P", caps), "Service") == [2]
+
+
 # --- D: funciones en campos y asignaciones ---
 
 def test_class_field_with_function_is_a_symbol():
