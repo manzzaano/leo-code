@@ -1,5 +1,6 @@
 """Tests: indexado incremental (sync) — re-parsea solo lo cambiado/nuevo/borrado."""
 
+import os
 import time
 from pathlib import Path
 
@@ -21,10 +22,13 @@ def test_sync_reparses_only_changed(tmp_path):
     names0 = {c.name for c in idx.get_capsules().values()}
     assert {"foo", "bar"} <= names0
 
+    # mtimes fijados a mano: con sleep + time.time() fallaba a veces (el mtime del sistema
+    # de archivos y time.time() no avanzan con el mismo tick en Windows)
     cache_mtime = time.time()
-    time.sleep(0.05)  # > tick del reloj de Windows (~15,6 ms)
+    os.utime(b, (cache_mtime - 100, cache_mtime - 100))
     # cambia solo a.py: foo -> foo2
     _write(a, "def foo2():\n    return 9\n")
+    os.utime(a, (cache_mtime + 100, cache_mtime + 100))
 
     stats = idx.sync(str(tmp_path), since_mtime=cache_mtime, languages=["python"])
     assert stats["changed"] == 1          # solo a.py
