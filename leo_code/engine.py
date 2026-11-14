@@ -545,11 +545,14 @@ def compute_context(repo: str, query: str, task_type_in: str = "auto",
     idx = _get_indexer()
     all_caps = idx.get_capsules()
     repo_prefix = repo + os.sep
-    caps = {
-        k: v for k, v in all_caps.items()
-        if os.path.abspath(v.file_path).startswith(repo_prefix) or
-           os.path.abspath(v.file_path) == repo
-    }
+    # ruta DENTRO del repo, para casar palabras de la pregunta: con la absoluta, «data»
+    # casaba con todo lo que viva bajo C:/Users/…/AppData (y «code» con todo leo-code)
+    rel: dict[str, str] = {}
+    for k, v in all_caps.items():
+        p = os.path.abspath(v.file_path)
+        if p.startswith(repo_prefix) or p == repo:
+            rel[k] = p[len(repo_prefix):].lower().replace("\\", "/")
+    caps = {k: all_caps[k] for k in rel}
     vs = _get_vector_store(repo)
 
     from leo_code.rag.classifier import classify_task, TOKEN_BUDGET
@@ -624,8 +627,8 @@ def compute_context(repo: str, query: str, task_type_in: str = "auto",
 
     specific_match: list = []  # ALL capsules from explicitly-named files (highest priority)
     loose_match: list = []     # ruta o nombre que casa con alguna palabra: candidatos, no líderes
-    for c in caps.values():
-        fp = (c.file_path or "").lower().replace("\\", "/")
+    for k, c in caps.items():
+        fp = rel[k]
         nm = c.name.lower()
         if c.file_path in specific_file_paths:
             specific_match.append(c)
@@ -659,7 +662,7 @@ def compute_context(repo: str, query: str, task_type_in: str = "auto",
         ),
     )
     # specific_match first → guarantees target file content leads the context
-    exact = specific_match[:20] + [c for c in named if c not in specific_match][:5]
+    exact = specific_match[:20] + named[:5]   # named sale de loose_match: nunca está en specific_match
     exact_ids = {c.id for c in exact}
     loose_match = [c for c in loose_match if c.id not in exact_ids][:15]
 
