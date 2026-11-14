@@ -22,14 +22,10 @@ from __future__ import annotations
 import ast
 import textwrap
 
-from leo_code.core.graphquery import _bare
+from leo_code.core.graphquery import _bare, _is_import
 
 _DEF_TYPES = {"function", "method", "class", "async_function", "dataclass", "exception", "test",
               "constant", "variable"}
-
-
-def _is_import(c) -> bool:
-    return (c.signature or "").lstrip().startswith(("from ", "import "))
 
 
 def augment_refs(capsules: dict) -> int:
