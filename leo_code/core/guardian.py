@@ -128,7 +128,9 @@ class Guardian:
             if d.id in seen:
                 continue
             seen.add(d.id)
-            q.extend(t for t, _, _ in self.gq._hops(d) if t.id not in seen)
+            hops = self.gq.ctor_hops(d)   # alcanzar una clase no ejecuta todos sus métodos
+            q.extend(t for t, _, _ in (self.gq._hops(d) if hops is None else hops)
+                     if t.id not in seen)
         self._covered = seen
         return seen
 

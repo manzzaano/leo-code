@@ -206,6 +206,7 @@ class _PyScope:
         self._memo: dict[str, dict[str, list | None]] = {}   # archivo → llamada → destinos
         # jerarquía: bases resueltas con los imports (las de fuera del repo no entran)
         self._loose: list[tuple] = []      # (nombre de la base desconocida, clase que hereda)
+        self._ext: set[str] = set()        # clases con una base de fuera del repo (no builtin)
         self.bases = {k: self._class_keys(k, forms) for k, forms in self.classes.items()}
         subs = defaultdict(list)
         for k, bs in self.bases.items():
@@ -290,6 +291,8 @@ class _PyScope:
                 b = self.binds.get(here, _NONE).get(recv)
                 files = self._bind_module(b, here) if b else None
                 defs = self._in_module(files, name, 0) if files else files
+            if defs == [] and (recv or name not in _BUILTINS):
+                self._ext.add(cls)          # su __init__ de fuera puede llamar a métodos del repo
             keys = self._keys_of(defs)
             if defs is None or (defs and not keys):     # desconocida, o una def que no es clase
                 keys = [f"\0{cls}\0{i}"]
@@ -816,6 +819,21 @@ class GraphQuery:
                 ts = [t for t in self._resolve(n) if not _is_import(t) and t.type != "type_def"]
                 out += [(t, False, len(ts)) for t in ts]
         return out
+
+    def ctor_hops(self, c) -> list[tuple] | None:
+        """Lo que ejecuta construir la clase `c`: su `__new__`/`__init__`/`__post_init__`, también
+        heredados. La cápsula de clase agrega las llamadas de todos sus métodos y `A()` no
+        ejecuta `A.get`. None si no se sabe (no es clase Python, o una base de fuera puede
+        traer el `__init__` y llamar a cualquier método): entonces vale `_hops`."""
+        k, sc = f"{_norm(c.file_path)}\0{c.name}", self._scope
+        if c.type not in ("class", "dataclass", "exception") or k not in sc.classes \
+                or any(x in sc._ext for x in sc._mro(k)):
+            return None
+        init = sc._lookup(k, "__init__")
+        if init is None:
+            return None
+        ds = [*init, *(sc._lookup(k, "__new__") or ()), *(sc._lookup(k, "__post_init__") or ())]
+        return [(d, True, 1) for d in ds]
 
     def trace(self, src: str, dst: str, max_depth: int = 12) -> Proof:
         """Camino de llamadas más corto src → dst (BFS), con cada salto citado.

@@ -171,3 +171,28 @@ def test_is_test_mira_la_ruta_dentro_del_repo():
         g = Guardian(caps, repo=root)
         assert not g.is_covered("read_db"), root
         assert [a.cite.name for a in g.review("read_db").uncovered] == ["build"], root
+
+
+def test_construir_una_clase_no_cubre_sus_metodos(tmp_path):
+    # La cápsula de clase agrega las llamadas de TODOS sus métodos: un test que solo hace
+    # `Svc()` cubría lo que llama `run`. Construir ejecuta `__init__` (también el heredado).
+    caps = _repo_caps(tmp_path, {
+        "a.py": ("def setup():\n    return 1\n\ndef helper():\n    return 2\n\n"
+                 "class Base:\n    def __init__(self):\n        setup()\n\n"
+                 "class Svc(Base):\n    def run(self):\n        return helper()\n"),
+        "test_a.py": "from a import Svc\n\ndef test_svc():\n    assert Svc()\n",
+    })
+    g = Guardian(caps)
+    assert g.is_covered("Svc") and g.is_covered("setup")
+    assert not g.is_covered("run") and not g.is_covered("helper")
+
+
+def test_clase_con_base_de_fuera_sigue_cubriendo_por_la_clase(tmp_path):
+    # Sin `__init__` en el repo y con una base de fuera (Thread, TestCase…), esa base puede
+    # llamar a cualquier método: no se quita cobertura que no se puede descartar.
+    caps = _repo_caps(tmp_path, {
+        "a.py": ("import threading\n\ndef helper():\n    return 2\n\n"
+                 "class Svc(threading.Thread):\n    def run(self):\n        return helper()\n"),
+        "test_a.py": "from a import Svc\n\ndef test_svc():\n    assert Svc()\n",
+    })
+    assert Guardian(caps).is_covered("helper")
