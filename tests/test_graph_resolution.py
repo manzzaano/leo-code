@@ -200,3 +200,24 @@ def test_trace_marks_by_name_hops_even_with_one_candidate():
     p = _graph({"p/s.py": "class Scope:\n    def resolve(self):\n        return 1\n",
                 "p/m.py": "def run(x):\n    return Path(x).resolve()\n"}).trace("run", "resolve")
     assert str(p.cites[1]) == "Scope.resolve (method) @ p/s.py:2 ← called at :2 ≈ by name"
+
+
+CTOR = {"p/s.py": ("from dataclasses import dataclass\nfrom t import target, other\n\nclass Base:\n    def __init__(self):\n        target()\n\n"
+                   "class Svc(Base):\n    def run(self):\n        return other()\n\n"
+                   "@dataclass\nclass Data:\n    def __post_init__(self):\n        target()\n"),
+        "p/t.py": "def target():\n    pass\n\ndef other():\n    pass\n",
+        "p/m.py": ("from s import Svc, Data\n\ndef main():\n    return Svc()\n\n"
+                   "def make():\n    return Data()\n")}
+
+
+def test_trace_entra_en_el_init_al_construir_una_clase():
+    # Antes una clase intermedia cortaba el camino: construir ejecuta su __init__ (heredado)
+    p = _graph(CTOR).trace("main", "target")
+    assert [c.name for c in p.cites] == ["main", "Svc", "Base.__init__", "target"]
+    assert str(p.cites[2]) == "Base.__init__ (method) @ p/s.py:5 ← on construction"
+    assert _graph(CTOR).trace("make", "target").found          # __post_init__ también
+
+
+def test_trace_no_inventa_caminos_por_los_metodos_de_la_clase():
+    # `Svc()` no ejecuta `Svc.run`, que es el que llama a `other`
+    assert not _graph(CTOR).trace("main", "other").found

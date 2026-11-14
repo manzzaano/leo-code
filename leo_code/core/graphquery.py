@@ -123,6 +123,8 @@ def _norm(path: str) -> str:
 
 
 _BUILTINS = frozenset(dir(builtins))
+_CLASS_TYPES = ("class", "dataclass", "exception")
+_CTORS = ("__new__", "__init__", "__post_init__")
 # Clases builtin cuyo constructor da una instancia exacta. Sin `type` (devuelve una clase
 # cualquiera, quizá del repo) ni `super`. ponytail: un `from x import *` que redefina
 # `dict` engaña a la regla; nombres de un import con * no están en la tabla de imports.
@@ -826,7 +828,7 @@ class GraphQuery:
         ejecuta `A.get`. None si no se sabe (no es clase Python, o una base de fuera puede
         traer el `__init__` y llamar a cualquier método): entonces vale `_hops`."""
         k, sc = f"{_norm(c.file_path)}\0{c.name}", self._scope
-        if c.type not in ("class", "dataclass", "exception") or k not in sc.classes \
+        if c.type not in _CLASS_TYPES or k not in sc.classes \
                 or any(x in sc._ext for x in sc._mro(k)):
             return None
         init = sc._lookup(k, "__init__")
@@ -853,10 +855,13 @@ class GraphQuery:
         while q and hit is None:
             c, depth = q.popleft()
             # una clase agrega las llamadas de todos sus métodos: como salto intermedio
-            # inventaría caminos (construir `A()` no ejecuta `A.get`); solo vale de origen
-            if depth >= max_depth or (depth and c.type == "class"):
+            # inventaría caminos (construir `A()` no ejecuta `A.get`); se sigue por lo que
+            # ejecuta construirla, y si no se sabe, solo vale de origen
+            hops = self.ctor_hops(c) if depth else None
+            if depth >= max_depth or (hops is None and depth and c.type in _CLASS_TYPES):
                 continue
-            for t, exact, n in sorted(self._hops(c), key=lambda h: (_pos(h[0]), not h[1])):
+            for t, exact, n in sorted(self._hops(c) if hops is None else hops,
+                                      key=lambda h: (_pos(h[0]), not h[1])):
                 if t.id not in prev:
                     prev[t.id] = (c, exact, n)
                     if t.id in dsts:
@@ -875,7 +880,8 @@ class GraphQuery:
             lines = self.call_lines(a, _bare(b.name), b)
             http = _bare(b.name) in _xlang_targets(a)
             hop = ("called at " + ", ".join(f":{ln}" for ln in lines) if lines
-                   else "via HTTP" if http else "")
+                   else "via HTTP" if http
+                   else "on construction" if a.type in _CLASS_TYPES and b.name in _CTORS else "")
             if not exact and not http:   # sin resolver: puede ir a otra def o fuera del repo
                 hop = f"{hop} ≈ by name{f', {n} candidates' if n > 1 else ''}".strip()
             cites.append(replace(self._cite(b), name=_qual(b), hop=hop))
