@@ -185,8 +185,8 @@ def cmd_doctor(args) -> int:
     return 0 if ok else 1
 
 
-def _hook_command() -> str:
-    """Comando del hook de guard, apuntando a ESTE intérprete.
+def _hook_command(module: str = "leo_code.guard_hook") -> str:
+    """Comando de un hook de leo, apuntando a ESTE intérprete.
 
     No pasa por `npx`/`uvx` a propósito: el hook corre en cada edición y un arranque de
     npx por edición no cabe en el presupuesto (medido con el intérprete directo: 0,28 s
@@ -194,12 +194,12 @@ def _hook_command() -> str:
     ejecutar `leo-mcp init`.
     """
     exe = sys.executable
-    return f'"{exe}" -m leo_code.guard_hook' if " " in exe else f"{exe} -m leo_code.guard_hook"
+    return f'"{exe}" -m {module}' if " " in exe else f"{exe} -m {module}"
 
 
-def _install_guard_hook(root: Path) -> int:
-    """Añade el hook PreToolUse al settings.json del proyecto, sin pisar lo que haya."""
-    target = root / ".claude" / "settings.json"
+def _install_hook(target: Path, event: str, matcher: str, module: str) -> int:
+    """Añade un hook de leo a un settings.json de Claude Code, sin pisar lo que haya.
+    Idempotente; si el intérprete cambió de sitio, re-apunta la entrada existente."""
     data = {}
     if target.exists():
         try:
@@ -207,28 +207,35 @@ def _install_guard_hook(root: Path) -> int:
         except json.JSONDecodeError as e:
             print(f"{target} is not valid JSON ({e}); not touching it.", file=sys.stderr)
             return 1
-    entries = data.setdefault("hooks", {}).setdefault("PreToolUse", [])
-    command = _hook_command()
+    entries = data.setdefault("hooks", {}).setdefault(event, [])
+    command = _hook_command(module)
     for group in entries:
         for h in group.get("hooks", []):
-            if "leo_code.guard_hook" in str(h.get("command", "")):
+            if module in str(h.get("command", "")):
                 if h.get("command") != command:
                     h["command"] = command   # el entorno cambió de sitio: repuntar
                     _write_json(target, data)
-                    print(f"Updated the leo-mcp guard hook in {target}")
+                    print(f"Updated the leo-mcp {event} hook in {target}")
                     return 0
-                print(f"leo-mcp guard hook already in {target}")
+                print(f"leo-mcp {event} hook already in {target}")
                 return 0
-    entry = {"matcher": "Edit|Write",
-             "hooks": [{"type": "command", "command": command}]}
+    entry = {"matcher": matcher, "hooks": [{"type": "command", "command": command}]}
     entries.append(entry)
     _write_json(target, data)
     print(f"Added to {target}:")
-    print(json.dumps({"hooks": {"PreToolUse": [entry]}}, indent=2))
-    print("  It warns you before Claude edits a symbol whose dependents have no test, and"
-          " stays quiet otherwise. It never blocks an edit. Turn it off with LEO_GUARD_HOOK=0"
-          " or by deleting those lines.")
+    print(json.dumps({"hooks": {event: [entry]}}, indent=2))
     return 0
+
+
+def _install_guard_hook(root: Path) -> int:
+    """Añade el hook PreToolUse al settings.json del proyecto, sin pisar lo que haya."""
+    target = root / ".claude" / "settings.json"
+    code = _install_hook(target, "PreToolUse", "Edit|Write", "leo_code.guard_hook")
+    if code == 0:
+        print("  It warns you before Claude edits a symbol whose dependents have no test, and"
+              " stays quiet otherwise. It never blocks an edit. Turn it off with LEO_GUARD_HOOK=0"
+              " or by deleting those lines.")
+    return code
 
 
 def _maybe_hook(args, root: Path) -> int:
