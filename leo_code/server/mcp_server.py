@@ -90,7 +90,7 @@ _GRAPH_TOOL = types.Tool(
     ),
     input_schema={"type": "object", "properties": {
         "op": {"type": "string", "enum": list(_GRAPH_OPS)},
-        "symbol": {"type": "string", "description": "Function, method or class name (where/who_calls/impact/guard)."},
+        "symbol": {"type": "string", "description": "Function, method or class name (where/who_calls/impact/guard); with homonyms, `Class.method` or `path/file.py:name`."},
         "src": {"type": "string", "description": "Start symbol (trace)."},
         "dst": {"type": "string", "description": "End symbol (trace)."},
         **_REPO_PROP},
@@ -261,9 +261,11 @@ def _who_calls(gq: GraphQuery, symbol: str) -> str:
         distinct = len(names) == len(defs)
         if not distinct:
             names = sorted(f"{_qual(c)} @ {c.file_path}:{c.start_line}" for c in defs)
+        narrow = ("Class.method" if distinct
+                  else f"{min(defs, key=lambda c: (c.file_path, c.start_line or 0)).file_path}:{bare}")
         lines.append(f"  {len(defs)} definitions named {bare} ({', '.join(names[:5])}"
                      f"{', …' if len(names) > 5 else ''}): callers of all of them."
-                     + (' Narrow with symbol="Class.method".' if distinct else ""))
+                     f' Narrow with symbol="{narrow}".')
     return "\n".join(lines)
 
 

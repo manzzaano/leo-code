@@ -115,8 +115,23 @@ def _pos(c) -> tuple:
 
 
 def _bare(name: str) -> str:
-    """Nombre base sin calificador de clase/módulo: 'A.method' → 'method'."""
+    """Nombre base sin calificador de clase/módulo ni archivo: 'a.py:A.method' → 'method'."""
+    if ":" in name:
+        name = _split_file(name)[1]
     return name.split(".")[-1]
+
+
+def _split_file(name: str) -> tuple[str, str]:
+    """`ruta/a.py:nombre` → ("ruta/a.py", "nombre"); sin archivo → ("", name). Acota
+    funciones de módulo homónimas, que `Clase.método` no distingue."""
+    path, sep, sym = name.rpartition(":")
+    return (_norm(path), sym) if sep and "." in path and sym else ("", name)
+
+
+def _in_file(c, path: str) -> bool:
+    """¿Está `c` en `path`? Por segmentos completos: `b.py` no casa con `sub/ab.py`."""
+    f = _norm(c.file_path)
+    return f == path or f.endswith("/" + path)
 
 
 def _norm(path: str) -> str:
@@ -637,6 +652,11 @@ class GraphQuery:
         memo = self._resolved.get(name)
         if memo is not None:
             return memo
+        path, sym = _split_file(name)
+        if path:
+            out = [c for c in self._resolve(sym) if _in_file(c, path)]
+            self._resolved[name] = out
+            return out
         hits = self.by_name.get(name) or self.by_name.get(_bare(name))
         if not hits:
             return []                        # nombre externo: barato y son la mayoría
@@ -690,7 +710,8 @@ class GraphQuery:
         hits = self._resolve(name)
         defs = [c for c in hits if not _is_import(c)]
         # `Clase.método`: solo esa clase si existe (como defs_named en who_calls/impact)
-        defs = [c for c in defs if _qual(c) == name] or defs
+        sym = _split_file(name)[1]
+        defs = [c for c in defs if _qual(c) == sym] or defs
         cites =[replace(self._cite(c), name=(c.properties or {}).get("qualified") or c.name,
                          sig=" ".join((c.signature or "").split())[:160])
                  for c in (sorted(defs, key=_is_aux_path) if defs else hits)]
@@ -740,16 +761,25 @@ class GraphQuery:
         """Callers de UNA definición (no de todas sus homónimas): los que la resuelven a
         ella y los que no se resuelven. Como incomingCalls de LSP, que parte de un ítem."""
         name, out, fam = _bare(d.name), [], _family(d)
+        named = {c.id for c in self.callers.get(d.name) or self.callers.get(name) or ()}
         for c in {c.id: c for c in self._callers_of(d.name)}.values():
             cf = _family(c)
             # otro lenguaje que tiene su propio homónimo: solo vale la arista HTTP explícita
             if fam and cf and cf != fam and name not in _xlang_targets(c):
                 continue
-            forms = [f for f in (c.properties or {}).get("call_forms") or () if f[0] == name]
-            # sin forma con ese nombre: arista de refgraph/boundary, se queda
-            if not forms or any(self.hits_def(c, f, d) for f in forms):
+            allf = (c.properties or {}).get("call_forms") or ()
+            forms = [f for f in allf if f[0] == name]
+            if (any(self.hits_def(c, f, d) for f in forms)
+                    # sin forma con ese nombre: arista de refgraph/boundary (llega por nombre)
+                    or (not forms and c.id in named)
+                    # alias resuelto (`import run as other`): solo si va a ESTA def
+                    or any(self._goes_to(c, f, d) for f in allf if f[0] != name)):
                 out.append(c)
         return out
+
+    def _goes_to(self, caller, form, d) -> bool:
+        t = self._scope.targets(caller, *form)
+        return t is not None and any(x.id == d.id for x in t)
 
     def callees(self, name: str, limit: int = 50) -> Proof:
         targets = self._resolve(name)
@@ -770,7 +800,8 @@ class GraphQuery:
     def defs_named(self, name: str) -> list:
         """Definiciones de `name`; con `Clase.método`, solo las de esa clase si existen."""
         defs = [c for c in self._resolve(name) if self._is_def(c)]
-        return [c for c in defs if _qual(c) == name] or defs
+        sym = _split_file(name)[1]
+        return [c for c in defs if _qual(c) == sym] or defs
 
     def nodes_named(self, name: str) -> list:
         """Extremos de trace: las defs, o si no hay, lo que no sea un import (cápsulas sin

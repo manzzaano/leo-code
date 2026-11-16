@@ -388,3 +388,55 @@ def test_guardian_viejo_se_suelta_antes_de_construir_el_nuevo(monkeypatch):
     monkeypatch.setattr(M, "Guardian", lambda caps, *a: vivos.append("r" in M._guard_cache) or object())
     M._guardian("r", {"nuevo": 1})
     assert vivos == [False]
+
+
+def _three_mains(tmp_path):
+    """a.py y b.py definen `main`; a.run llama a la suya, c.go a la de b (importada)."""
+    _write(tmp_path / "svc" / "a.py", "def main():\n    return 1\ndef run():\n    main()\n")
+    _write(tmp_path / "svc" / "b.py", "def main():\n    return 2\n")
+    return _write(tmp_path / "svc" / "c.py", "from b import main\ndef go():\n    main()\n").parent
+
+
+def test_who_calls_file_qualified_lists_only_callers_of_that_file(fresh_engine, tmp_path):
+    """Funciones de módulo homónimas: `archivo.py:nombre` acota a una def, como `Clase.método`."""
+    repo = _three_mains(tmp_path)
+    out = mcp_server._graph({"op": "who_calls", "symbol": "b.py:main", "repo_path": str(repo)})
+    assert "go (function) @ c.py:2 → calls at :3" in out
+    assert "run (function)" not in out
+    assert "definitions named" not in out
+
+
+def test_who_calls_homonym_functions_suggest_file_qualifier(fresh_engine, tmp_path):
+    repo = _three_mains(tmp_path)
+    out = mcp_server._graph({"op": "who_calls", "symbol": "main", "repo_path": str(repo)})
+    assert 'Narrow with symbol="a.py:main".' in out
+
+
+def test_impact_and_where_accept_file_qualifier(fresh_engine, tmp_path):
+    repo = _three_mains(tmp_path)
+    imp = mcp_server._graph({"op": "impact", "symbol": "a.py:main", "repo_path": str(repo)})
+    assert "run" in imp and "go" not in imp
+    where = mcp_server._graph({"op": "where", "symbol": "b.py:main", "repo_path": str(repo)})
+    assert "b.py:1" in where and "a.py:1" not in where
+
+
+def test_file_qualifier_matches_path_suffix_not_substring(fresh_engine, tmp_path):
+    """`b.py:main` no es `sub/ab.py:main`: se casa por segmentos de ruta completos."""
+    _write(tmp_path / "svc" / "sub" / "ab.py", "def main():\n    return 3\n")
+    repo = _three_mains(tmp_path)
+    where = mcp_server._graph({"op": "where", "symbol": "b.py:main", "repo_path": str(repo)})
+    assert "b.py:1" in where and "ab.py" not in where
+
+
+def test_aliased_import_counts_only_for_the_def_it_resolves_to(fresh_engine, tmp_path):
+    """`from b import run as other; other()` va a b.run: no es caller de a.run (antes salía
+    como caller de TODAS las `run`, porque no tiene forma de llamada llamada `run`)."""
+    _write(tmp_path / "svc" / "a.py", "def run():\n    return 1\n")
+    _write(tmp_path / "svc" / "b.py", "def run():\n    return 2\n")
+    repo = _write(tmp_path / "svc" / "c.py", "from b import run as other\ndef go():\n    other()\n").parent
+    a = mcp_server._graph({"op": "who_calls", "symbol": "a.py:run", "repo_path": str(repo)})
+    b = mcp_server._graph({"op": "who_calls", "symbol": "b.py:run", "repo_path": str(repo)})
+    assert "go (function)" not in a
+    assert "go (function) @ c.py:2" in b
+    imp = mcp_server._graph({"op": "impact", "symbol": "a.py:run", "repo_path": str(repo)})
+    assert "go" not in imp
