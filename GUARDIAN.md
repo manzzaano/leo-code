@@ -59,7 +59,7 @@ The MCP server exposes the same check as `graph` with `op=guard`: the agent call
 `graph(op="guard", symbol="<symbol>")` and gets the blast radius and coverage before it edits.
 
 In Claude Code, `leo-mcp init` also installs a pre-edit hook that runs this check on its own and
-warns, in one line, only when an edit reaches dependents with no test. See
+warns, in one line, only when the edited symbol has a direct caller with no test. See
 [the README](README.md#it-warns-you-before-your-agent-breaks-something).
 
 Like the rest of leo-mcp, it works on a static graph: dependencies through queues, WebSockets,

@@ -75,7 +75,9 @@ def test_avisa_de_los_dependientes_sin_test(repo):
     assert "test_safe_reader" not in ctx, ("un test que depende del símbolo es cobertura, "
                                           "no riesgo: nada cubre a un test y saldrían todos")
     assert "test_core.py" not in ctx, "y menos aún citando archivos de test"
-    assert "get_session" in hook["systemMessage"]
+    # A (16/11): `systemMessage` es campo universal, en el nivel superior; dentro de
+    # hookSpecificOutput Claude Code no se lo enseña a la persona (docs de hooks).
+    assert "get_session" in out["systemMessage"]
     assert "permissionDecision" not in hook, "el hook informa, no decide"
 
 
@@ -314,3 +316,4 @@ def test_hook_command_real_corre_en_bash(tmp_path):
                        capture_output=True, text=True, timeout=60,
                        env={**os.environ, "PYTHONPATH": str(ROOT)})
     assert p.returncode == 0, p.stderr[-300:]
+

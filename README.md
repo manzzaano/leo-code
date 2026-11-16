@@ -115,16 +115,18 @@ leo-mcp indexed C:\...\NEXUS  (build in 0.17s)
 ## It warns you before your agent breaks something
 
 `leo-mcp init` (and `init --user`) also installs a `PreToolUse` hook in Claude Code. Before the agent edits a
-symbol, leo looks up who depends on it. If some of those dependents have **no test**, it says
-so — to the agent, so that it checks them, and to you, in one line:
+symbol, leo looks up who calls it. If one of its **direct callers** has **no test**, it says
+so — to the agent, with each caller as `file:line`, so that it checks them, and to you, in one
+line:
 
 ```
-leo: ensure_structural -> 208 dependents, 11 with no test
+leo: ensure_structural → 2 direct caller(s) with no test (200 dependents)
 ```
 
 The rest of the time it says nothing, by design: a warning that fires on every edit is a
-warning you turn off. Dependents that *are* covered by a test raise nothing, and editing a
-test file raises nothing.
+warning you turn off. Callers that *are* covered by a test raise nothing, untested code
+further up the chain only counts toward the total, and editing a test file raises nothing.
+On leo-code itself it speaks on about 1 edit in 4.
 
 It costs 0.28 s per edit on a 1,220-symbol index. It never builds an index (no index yet →
 silence), it goes quiet above a 4 MB index instead of adding seconds to every edit, and it

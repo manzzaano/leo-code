@@ -99,32 +99,49 @@ def _load_caps(repo: str) -> list:
     return engine._repo_caps(idx, repo)
 
 
+def _rel(path: str, repo: str | None) -> str:
+    """Ruta relativa al repo con `/`, como cita el server MCP; absoluta si no se puede."""
+    try:
+        return Path(os.path.relpath(path, repo)).as_posix() if repo else path
+    except ValueError:                       # otra unidad en Windows
+        return path
+
+
 def _report(caps: list, symbols: list, repo: str | None = None) -> tuple[str, str] | None:
-    """(contexto para el agente, línea para el humano), o None si no hay nada que avisar."""
+    """(contexto para el agente, línea para el humano), o None si no hay nada que avisar.
+
+    Revisión #14 (16/11): avisa solo si algún llamador DIRECTO (resuelto por definición,
+    sin homónimas de otros archivos) no está cubierto por un test. Contar dependientes
+    transitivos avisaba en el 72% de las ediciones de leo-code: casi todo acaba en un
+    `main` sin test. El total transitivo va como cifra, no como motivo."""
     from leo_code.core.boundary import link_http_edges
+    from leo_code.core.graphquery import _qual
     from leo_code.core.guardian import Guardian
 
     by_id = {c.id: c for c in caps}
     link_http_edges(by_id)   # un fetch del frontend también es un dependiente
     guard = Guardian(by_id, repo)
     for cap in symbols:
-        report = guard.review(cap.name)
-        risky = report.uncovered   # ya sin tests: un test dependiente es cobertura
+        risky = {c.id: c for c in guard.gq.callers_of_def(cap)
+                 if not guard._is_test(c, guard._root) and not guard.is_covered(c)}
         if not risky:
             continue
+        risky = sorted(risky.values(), key=lambda c: (c.file_path or "", c.start_line or 0))
+        rel, name = _rel(cap.file_path, repo), _qual(cap)
+        total = len(guard.review(f"{rel}:{name}").affected)
         shown = risky[:_MAX_SYMBOLS_REPORTED]
         rest = len(risky) - len(shown)
-        lines = [f"leo-mcp: `{cap.name}` ({Path(cap.file_path).name}:{cap.start_line}) is used by "
-                 f"{len(report.affected)} symbol(s); these have NO test covering them:"]
-        lines += [f"  · {a.cite.name} ({a.cite.type}) @ {a.cite.file}:{a.cite.line}" for a in shown]
+        lines = [f"leo-mcp: `{name}` ({rel}:{cap.start_line}) has {len(risky)} direct caller(s) "
+                 f"with NO test covering them ({total} dependent(s) in total):"]
+        lines += [f"  · {_qual(c)} ({c.type}) @ {_rel(c.file_path, repo)}:{c.start_line}"
+                  for c in shown]
         if rest > 0:
             lines.append(f"  · …and {rest} more")
         lines.append("Check those call sites before you change the signature or the behaviour, "
                      "or cover them first. This comes from the static call graph: dependencies "
                      "through WebSockets, queues, subprocesses or string-built dispatch are not "
                      "in it, so this list can be incomplete.")
-        human = (f"leo: {cap.name} → {len(report.affected)} dependents, "
-                 f"{len(risky)} with no test")
+        human = f"leo: {name} → {len(risky)} direct caller(s) with no test ({total} dependents)"
         return "\n".join(lines), human
     return None
 
@@ -146,9 +163,12 @@ def run(payload: dict, started: float) -> dict | None:
         return None
 
     repo = os.path.abspath(os.getenv("LEO_REPO") or payload.get("cwd") or ".")
-    try:
-        rel = path.relative_to(repo)
-    except ValueError:
+    if os.name == "nt":
+        # Windows no distingue mayúsculas: `c:/users/...` es el mismo repo, pero el índice
+        # va por la ruta exacta. realpath devuelve la grafía real del disco.
+        repo, path = os.path.realpath(repo), Path(os.path.realpath(path))
+    rel = Path(_rel(str(path), repo))
+    if rel.is_absolute() or rel.parts[:1] == ("..",):
         return None   # fuera del repo indexado
     if _is_test_path(rel):
         return None   # un test: nada que romper (ruta en el repo: el repo puede vivir bajo `test/`)
@@ -169,10 +189,12 @@ def run(payload: dict, started: float) -> dict | None:
     if found is None:
         return None
     context, human = found
-    # Sin `permissionDecision`: esto informa, no decide.
-    return {"hookSpecificOutput": {"hookEventName": "PreToolUse",
-                                   "additionalContext": context,
-                                   "systemMessage": human}}
+    # Sin `permissionDecision`: esto informa, no decide. `systemMessage` es campo
+    # universal, en el nivel superior: dentro de hookSpecificOutput no se le muestra a
+    # la persona (docs de hooks de Claude Code).
+    return {"systemMessage": human,
+            "hookSpecificOutput": {"hookEventName": "PreToolUse",
+                                   "additionalContext": context}}
 
 
 def main(argv: list[str] | None = None) -> int:
