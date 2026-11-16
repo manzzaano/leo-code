@@ -70,6 +70,54 @@ def _route_literals(text: str, low: str):
     return _SERVER_ROUTE_LOW.findall(low)
 
 
+# A (16/11): en código, `.get('/x')` solo es una RUTA si el receptor es un decorador o un
+# objeto servidor; `axios.get('/x')`, `requests.get`, `client.get` son clientes (antes dos
+# componentes que pedían la misma ruta quedaban unidos entre sí). En `decorators` (Python)
+# cualquier `.get('/x')` es ruta. ponytail: lista corta de nombres de servidor; ampliar si
+# un repo real llama al suyo de otra forma.
+_SERVER_RECV = frozenset(("app", "router", "server", "blueprint", "bp"))
+_RECV_BEFORE = re.compile(r"(@?)([\w$]+)$")
+_SERVER_DEF_BEFORE = re.compile(
+    r"(?:@[\w.$]*|\b(?:app|router|server|blueprint|bp))\.(?:get|post|put|patch|delete|route)\s*\(\s*$")
+# C+D: un literal de ruta como argumento de CUALQUIER llamada es un cliente si casa con una
+# ruta del servidor: los envoltorios (`get<Stats>("/api/stats")` en NEXUS) llaman a fetch
+# por dentro con una variable. Admite `${BASE}/x` y `BASE + "/x"` delante del literal.
+_PATH_LIT = re.compile(r"""[`'"](?:\$\{[^}`]*\})?((?:/|https?://)[^`'"\s]*)[`'"]""")
+_CALL_BEFORE = re.compile(
+    r"""[\w$]\s*(?:<[^<>()]*(?:<[^<>()]*>)?[^<>()]*>)?\s*\(\s*(?:[\w.$]+\s*\+\s*)?$""")
+_PATH_HINTS = ("'/", '"/', "`/", "`${", "http")
+
+
+def _server_literals(low: str, end: int) -> list[str]:
+    """Rutas de servidor en `low[:end]` (en minúsculas): `@x.get('/r')` o
+    `app|router|server|blueprint|bp.get('/r')`."""
+    out = []
+    for m in _SERVER_ROUTE_LOW.finditer(low, 0, end):
+        r = _RECV_BEFORE.search(low, max(0, m.start() - 40), m.start())
+        if r and (r.group(1) or r.group(2) in _SERVER_RECV):
+            out.append(m.group(1))
+    return out
+
+
+def _literal_calls(content: str) -> list[str]:
+    """Rutas literales pasadas a una llamada que no define una ruta de servidor."""
+    out = []
+    for m in _PATH_LIT.finditer(content):
+        before = content[max(0, m.start() - 120):m.start()]
+        if _CALL_BEFORE.search(before) and not _SERVER_DEF_BEFORE.search(before.lower()):
+            out.append(m.group(1))
+    return out
+
+
+def _innermost(eps: list) -> list:
+    """B: una ruta es de la def más interna, no de la clase que contiene su decorador."""
+    def inside(o, e):
+        return (o is not e and o.file_path == e.file_path
+                and (e.start_line or 0) <= (o.start_line or 0) and (o.end_line or 0) <= (e.end_line or 0)
+                and (o.start_line, o.end_line) != (e.start_line, e.end_line))
+    return [e for e in eps if not any(inside(o, e) for o in eps)] if len(eps) > 1 else eps
+
+
 def _hinted_finditer(rx, text: str, low: str, hints):
     """= rx.finditer(text) cuando toda coincidencia EMPIEZA por una pista: prueba el regex
     solo ahí (`low` = text.lower()), no en cada posición. Medido en django: el regex
@@ -101,6 +149,13 @@ def _scan(capsules: dict) -> tuple[dict[str, list], list[tuple]]:
     """
     routes: dict[str, list] = {}
     clients: list[tuple] = []
+    seen: set = set()
+    literal: list = []                   # cápsulas con literales de ruta, para el final
+
+    def add(c, url):
+        t = _norm(url)
+        if (c.id, t) not in seen:
+            seen.add((c.id, t)); clients.append((c, t))
     for c in capsules.values():
         content = getattr(c, "content", "") or ""
         # El parser AST de Python deja los decoradores FUERA de content/signature, en
@@ -111,7 +166,13 @@ def _scan(capsules: dict) -> tuple[dict[str, list], list[tuple]]:
         sig = getattr(c, "signature", "") or ""
         server_text = " ".join((content, sig, deco))
         low = server_text.lower()
-        for r in _route_literals(server_text, low):
+        if len(low) == len(server_text):     # sin copiar: content+sig es el prefijo de low
+            code_low, code_end = low, len(content) + 1 + len(sig)
+        else:
+            code_low = " ".join((content, sig)).lower(); code_end = len(code_low)
+        found = _route_literals(deco, deco.lower()) if deco else []
+        found += _server_literals(code_low, code_end)
+        for r in dict.fromkeys(found):
             routes.setdefault(_norm(r), []).append(c)
         if any(h in low for h in _CLIENT_HINTS):
             # low empieza por content.lower() si lower() no cambió longitudes
@@ -119,7 +180,15 @@ def _scan(capsules: dict) -> tuple[dict[str, list], list[tuple]]:
             for m in _hinted_finditer(_CLIENT_CALL, content, aligned, _CLIENT_HINTS):
                 url = m.group(1)
                 if url.startswith(("/", "http")) or "/" in url:
-                    clients.append((c, _norm(url)))
+                    add(c, url)
+        if ("/" in content or "http" in content) and any(h in content for h in _PATH_HINTS):
+            literal.append((c, content))
+    # Sin rutas de servidor ningún literal puede coser (django, sympy, scipy): no se buscan.
+    for c, content in literal if routes else ():
+        for url in _literal_calls(content):
+            if _norm(url) != "/":            # `x.split("/")` coserían con la ruta raíz de todo backend
+                add(c, url)
+    routes = {t: _innermost(eps) for t, eps in routes.items()}
     return routes, clients
 
 
