@@ -28,8 +28,8 @@ jobs:
           done
       # Resolución (¿a QUÉ def va cada llamada?) con jedi de juez, también por el camino de
       # who_calls/impact/guard: falla si se pierde un solo dependiente o si las exactas
-      # bajan del 70% (16/11: django 75,0%, sympy 79,0%). Caché propia y vacía: el
-      # resultado cambia según qué índice encuentre (medido 16/11: 842 vs 400 juzgadas).
+      # bajan del 70% (16/11: django 75,0%, sympy 79,0%). Caché propia y vacía para no
+      # depender de un índice que haya en disco.
       - name: Oráculo de resolución vs jedi (0 dependientes perdidos, exactas ≥70%)
         run: |
           for r in /tmp/django /tmp/sympy; do
