@@ -4,6 +4,7 @@
   leo-mcp index [repo]       indexa y enseña qué ve leo-mcp (lenguajes, símbolos más usados)
   leo-mcp doctor [repo]      comprueba la instalación y da el snippet de configuración
   leo-mcp init [--client X]  registra leo-mcp en la config MCP del proyecto
+  leo-mcp init --user        lo registra para el usuario (Claude Code), sin tocar el repo
 
 Salida al usuario en inglés. `serve` no escribe NADA en stdout (canal JSON-RPC).
 """
@@ -258,7 +259,62 @@ def _write_json(target: Path, data: dict) -> None:
     target.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
+def _user_settings() -> Path:
+    return Path.home() / ".claude" / "settings.json"
+
+
+def _register_user_mcp(launch: list[str]) -> str:
+    """Registra el MCP con scope user a través del CLI de Claude Code, que es el dueño de
+    ~/.claude.json (lo reescribe mientras corre: editarlo a mano pisaría o sería pisado).
+    Devuelve "added", "exists" o "manual". Un registro existente no se toca nunca: puede
+    llevar variables de entorno del usuario."""
+    claude = shutil.which("claude")
+    if claude:
+        try:
+            out = subprocess.run([claude, "mcp", "add", "--scope", "user", "leo-mcp", "--", *launch],
+                                 capture_output=True, text=True, timeout=60)
+        except (OSError, subprocess.TimeoutExpired):
+            out = None
+        if out is not None and out.returncode == 0:
+            print("Added leo-mcp to Claude Code (user scope, all your projects).")
+            return "added"
+        if out is not None and "already exists" in f"{out.stdout}{out.stderr}":
+            print("leo-mcp is already registered in Claude Code (user scope); leaving it as is.")
+            return "exists"
+    shown = " ".join(f'"{a}"' if " " in a else a for a in launch)
+    print("Register the MCP server by running:\n"
+          f"  claude mcp add --scope user leo-mcp -- {shown}")
+    return "manual"
+
+
+def _init_user(args) -> int:
+    """`init --user`: servidor + aviso antes de editar + índice al abrir sesión, para todos
+    los repos del usuario y sin escribir nada en ninguno."""
+    if args.client != "claude":
+        print("--user is only supported for Claude Code (--client claude).", file=sys.stderr)
+        return 2
+    _register_user_mcp(_launch())
+    if getattr(args, "no_hook", False):
+        return 0
+    if _ephemeral(sys.executable):
+        print("Hooks not installed: leo-mcp is running from uv's cache (npx/uvx), which uv may"
+              " delete. To get them: `uv tool install leo-mcp`, then run `leo-mcp init --user` again.")
+        return 0
+    target = _user_settings()
+    code = _install_hook(target, "PreToolUse", "Edit|Write", "leo_code.guard_hook")
+    if code:
+        return code
+    code = _install_hook(target, "SessionStart", "startup|resume", "leo_code.index_hook")
+    if code == 0:
+        print("  PreToolUse warns before Claude edits a symbol whose dependents have no test"
+              " (off: LEO_GUARD_HOOK=0). SessionStart indexes a git repo in the background when"
+              " a session opens (off: LEO_INDEX_HOOK=0). Neither ever blocks Claude.")
+    return code
+
+
 def cmd_init(args) -> int:
+    if getattr(args, "user", False):
+        return _init_user(args)
     root = Path(args.repo).resolve()
     launch = _launch()
     if args.client == "codex":
@@ -314,8 +370,10 @@ def main(argv: list[str] | None = None) -> int:
         sub.add_parser(name, help=help_).add_argument("repo", nargs="?", default=".")
     p = sub.add_parser("init", help="register leo-mcp in a project's MCP config")
     p.add_argument("--client", choices=CLIENTS, default="claude")
+    p.add_argument("--user", action="store_true",
+                   help="register for your user in Claude Code (all repos), writing nothing in the repo")
     p.add_argument("--no-hook", action="store_true",
-                   help="do not install the pre-edit guard hook (Claude Code only)")
+                   help="do not install the hooks (Claude Code only)")
     p.add_argument("repo", nargs="?", default=".")
     args = ap.parse_args(argv)
     if args.cmd not in (None, "serve"):
