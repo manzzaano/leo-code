@@ -161,9 +161,17 @@ def cmd_doctor(args) -> int:
                            "(watchdog missing, or the OS ran out of watches)")
     # "no me avisa" tiene dos causas posibles y ninguna es obvia: el hook no está
     # instalado, o lo está apagado. Que se vea aquí.
-    hook = Path(repo) / ".claude" / "settings.json"
-    installed = hook.exists() and "leo_code.guard_hook" in hook.read_text(encoding="utf-8",
-                                                                         errors="replace")
+    # Vale el settings del repo (init) o el del usuario (init --user).
+    settings = "".join(f.read_text(encoding="utf-8", errors="replace")
+                       for f in (Path(repo) / ".claude" / "settings.json", _user_settings())
+                       if f.exists())
+    installed = "leo_code.guard_hook" in settings
+    if os.getenv("LEO_INDEX_HOOK") == "0":
+        row("index hook", None, "off (LEO_INDEX_HOOK=0)")
+    elif "leo_code.index_hook" in settings:
+        row("index hook", True, "indexes a git repo in the background when a session opens")
+    else:
+        row("index hook", None, "not installed (run: leo-mcp init --user)")
     if os.getenv("LEO_GUARD_HOOK") == "0":
         row("guard hook", None, "off (LEO_GUARD_HOOK=0)")
     elif installed:
@@ -181,6 +189,7 @@ def cmd_doctor(args) -> int:
     launch = " ".join(_launch())
     print("\nAdd leo-mcp to your agent:")
     print(f"  Claude Code   claude mcp add leo-mcp -- {launch}")
+    print("  Claude Code, all repos (writes nothing in them)   leo-mcp init --user")
     print(f"  any client    leo-mcp init --client {{{','.join(CLIENTS)}}}")
     print("\n" + ("Ready." if ok else "Fix the ERR rows above."))
     return 0 if ok else 1

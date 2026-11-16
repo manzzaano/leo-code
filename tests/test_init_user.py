@@ -153,3 +153,28 @@ def test_desde_cache_uv_registra_pero_no_instala_hooks(env, monkeypatch, capsys)
 def test_main_acepta_el_flag(env):
     assert cli.main(["init", "--user"]) == 0
     assert env.settings.exists()
+
+
+def _doctor(e, monkeypatch, capsys):
+    from leo_code import engine
+    monkeypatch.setattr(engine, "_WATCH", False)   # sin observer de FS en el test
+    capsys.readouterr()
+    cli.cmd_doctor(Namespace(repo=str(e.repo)))
+    return capsys.readouterr().out
+
+
+def test_doctor_ve_los_hooks_de_usuario(env, monkeypatch, capsys):
+    _init_user(env)
+    out = _doctor(env, monkeypatch, capsys)
+    assert "[ok ] guard hook" in out and "[ok ] index hook" in out
+
+
+def test_doctor_sin_index_hook_lo_sugiere(env, monkeypatch, capsys):
+    out = _doctor(env, monkeypatch, capsys)
+    assert "index hook" in out and "leo-mcp init --user" in out
+
+
+def test_doctor_respeta_la_escotilla_del_indice(env, monkeypatch, capsys):
+    _init_user(env)
+    monkeypatch.setenv("LEO_INDEX_HOOK", "0")
+    assert "off (LEO_INDEX_HOOK=0)" in _doctor(env, monkeypatch, capsys)
