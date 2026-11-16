@@ -26,6 +26,15 @@ jobs:
           for r in /tmp/django /tmp/sympy /tmp/scipy; do
             python benchmark/oracle.py --repo "$r"
           done
+      # Resolución (¿a QUÉ def va cada llamada?) con jedi de juez, también por el camino de
+      # who_calls/impact/guard: falla si se pierde un solo dependiente o si las exactas
+      # bajan del 70% (16/11: django 75,0%, sympy 79,0%). Caché propia y vacía: el
+      # resultado cambia según qué índice encuentre (medido 16/11: 842 vs 400 juzgadas).
+      - name: Oráculo de resolución vs jedi (0 dependientes perdidos, exactas ≥70%)
+        run: |
+          for r in /tmp/django /tmp/sympy; do
+            LEO_CACHE_DIR="$(mktemp -d)" LEO_WATCH=0 python benchmark/resolution_oracle.py --repo "$r" --sample 5000 --gate 70
+          done
       - name: Oráculo TS SOUND+COMPLETE vs compilador TypeScript (100%)
         run: NODE_PATH="$(pwd)/node_modules" python benchmark/ts_oracle.py /tmp/TypeScript
       - name: Auditoría formal (a, a-ts, b, c, d) — exit 0 solo al 100%

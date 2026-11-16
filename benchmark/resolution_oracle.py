@@ -16,7 +16,8 @@ A escala no hay grafo hecho a mano: el juez es jedi (`goto` siguiendo imports), 
 puntúa por sitio de llamada (caller, línea:columna, destino).
 
 Uso:  python benchmark/resolution_oracle.py <PyCG>/micro-benchmark/snippets
-      python benchmark/resolution_oracle.py --repo <ruta> [--sample N]
+      python benchmark/resolution_oracle.py --repo <ruta> [--sample N] [--gate MIN_EXACTAS]
+      (--gate: exit 1 si se pierde un dependiente o las exactas bajan de MIN_EXACTAS %)
 """
 
 import ast
@@ -90,6 +91,18 @@ def _site(f) -> tuple[int, int]:
     return f.lineno, f.col_offset
 
 
+def shadowed(scope, ck, sup: bool, g_key, t_key) -> bool:
+    """¿El destino de leo (clase `g_key`) va antes que el de jedi (`t_key`) en la MRO que
+    recorre la llamada escrita en `ck`? Entonces Python ejecuta el de leo y jedi se
+    equivoca (django: `super().clean()` en AbstractUser → AbstractBaseUser.clean, jedi da
+    Model.clean). No es un dependiente perdido; se cuenta aparte."""
+    if not (ck and g_key and t_key):
+        return False
+    mro = scope._mro(ck)
+    seq = mro[mro.index(ck) + 1:] if sup else mro
+    return g_key in seq and t_key in seq and seq.index(g_key) < seq.index(t_key)
+
+
 def score_repo(repo: str, sample: int | None = None, seed: int = 0) -> dict:
     """Juez a escala: jedi (`goto` siguiendo imports) dice a qué def va cada llamada.
 
@@ -152,6 +165,8 @@ def score_repo(repo: str, sample: int | None = None, seed: int = 0) -> dict:
         return cls and f"{_norm(c.file_path)}\0{cls}"
 
     reach_memo = {}
+    product_memo = {}                # def id → ids de sus callers por who_calls/impact/guard
+    product_pairs = product_missed = judge_err = 0
 
     def reach(ck, sup):
         """Clases donde puede caer `self.x()` (o `super().x()`) escrito en la clase `ck`."""
@@ -184,14 +199,28 @@ def score_repo(repo: str, sample: int | None = None, seed: int = 0) -> dict:
             gcaps = [d for d in by_bare.get(name, []) if gq._edge_ok(caller, name)]
         else:
             gcaps = [d for d in resolved if (Path(d.file_path).resolve(), d.start_line) in defs]
-        guessed = {qid(d) for d in gcaps}
         props = caller.properties or {}
-        dyn = set()
         ck = cls_key(caller)
+        if ck and recv and recv in (props.get("self_arg") or None, "super()"):
+            gks = [cls_key(g) for g in gcaps if _bare(g.name) == name]
+            tc = [t for t in tcaps if not any(shadowed(scope, ck, recv == "super()", gk, cls_key(t))
+                                              for gk in gks)]
+            judge_err += len(tcaps) - len(tc)
+            tcaps, targets = tc, {qid(c) for c in tc}
+            if not targets:
+                continue
+        guessed = {qid(d) for d in gcaps}
+        dyn = set()
         if ck and recv and recv in (props.get("self_arg") or None, "super()"):
             ok = reach(ck, recv == "super()")
             dyn = {qid(d) for d in gcaps
                    if _bare(d.name) == name and qid(d) not in targets and cls_key(d) in ok}
+        # Camino del producto: who_calls/impact/guard sacan los callers de callers_of_def.
+        for t in tcaps:
+            if t.id not in product_memo:
+                product_memo[t.id] = {c.id for c in gq.callers_of_def(t)}
+            product_pairs += 1
+            product_missed += caller.id not in product_memo[t.id]
         calls += 1
         exact += guessed == targets
         exact_dispatch += guessed - dyn == targets
@@ -200,6 +229,8 @@ def score_repo(repo: str, sample: int | None = None, seed: int = 0) -> dict:
         dispatch |= {(qid(caller), site, g) for g in dyn}
     return {"truth": truth, "leo": leo, "dispatch": dispatch, "calls": calls, "exact": exact,
             "exact_dispatch": exact_dispatch,
+            "product_pairs": product_pairs, "product_missed": product_missed,
+            "judge_err": judge_err,
             "unjudged": unjudged, "linked_unjudged": linked, "sites": len(sites)}
 
 
@@ -238,12 +269,27 @@ def run(snippets: str) -> tuple[float, float, int]:
     return precision, recall, tests
 
 
-def run_repo(repo: str, sample: int | None) -> tuple[float, float, float]:
+def gate(s: dict, min_exact: float) -> list[str]:
+    """Fallos que tumban la CI: un dependiente perdido (en la resolución o en lo que ve
+    who_calls/guard) o exactas por debajo de `min_exact` %. Vacía = pasa."""
+    if not s["calls"]:
+        return ["oráculo vacuo: jedi no juzgó ninguna llamada"]
+    out = []
+    if lost := len(s["truth"] - s["leo"]):
+        out.append(f"{lost} destinos perdidos en la resolución")
+    if s["product_missed"]:
+        out.append(f"{s['product_missed']} callers perdidos por who_calls/impact/guard")
+    if (ex := s["exact"] / s["calls"] * 100) < min_exact:
+        out.append(f"exactas {ex:.1f}% < {min_exact}%")
+    return out
+
+
+def run_repo(repo: str, sample: int | None) -> dict:
     t0 = time.perf_counter()
     s = score_repo(repo, sample)
     if s["calls"] == 0:
         print(f"❌ ORÁCULO VACUO: jedi no resolvió ninguna llamada interna en {repo!r}.")
-        return 0.0, 0.0, 0.0
+        return s
     tp = len(s["leo"] & s["truth"])
     precision = tp / len(s["leo"]) if s["leo"] else 1.0
     recall = tp / len(s["truth"])
@@ -254,12 +300,17 @@ def run_repo(repo: str, sample: int | None) -> tuple[float, float, float]:
     print(f"PRECISIÓN de resolución: {precision*100:.1f}%  ({len(s['leo']) - tp} destinos falsos)")
     print(f"RECALL de resolución:    {recall*100:.1f}%  ({len(s['truth']) - tp} destinos perdidos)")
     print(f"EXACTAS (leo da justo el destino correcto): {exact*100:.1f}%")
+    if s["judge_err"]:
+        print(f"  {s['judge_err']} destinos de jedi descartados: un override anterior en la MRO "
+              "(el que da leo) los tapa; Python nunca llega a ellos")
+    print(f"RECALL vía who_calls/impact/guard: {s['product_pairs'] - s['product_missed']}"
+          f"/{s['product_pairs']} ({s['product_missed']} callers perdidos)")
     nd = len(s["dispatch"])
     if nd:
         print(f"  de los destinos falsos, {nd} son despacho dinámico (overrides que jedi no ve): "
               f"contándolos válidos, precisión {(tp + nd) / len(s['leo']) * 100:.1f}% · "
               f"exactas {s['exact_dispatch'] / s['calls'] * 100:.1f}%")
-    return precision, recall, exact
+    return s
 
 
 if __name__ == "__main__":
@@ -267,7 +318,12 @@ if __name__ == "__main__":
     utf8_console()
     if len(sys.argv) >= 3 and sys.argv[1] == "--repo":
         n = int(sys.argv[sys.argv.index("--sample") + 1]) if "--sample" in sys.argv else None
-        run_repo(sys.argv[2], n)
+        s = run_repo(sys.argv[2], n)
+        if "--gate" in sys.argv:
+            fails = gate(s, float(sys.argv[sys.argv.index("--gate") + 1]))
+            for f in fails:
+                print(f"❌ {f}")
+            sys.exit(1 if fails else 0)
     elif len(sys.argv) == 2:
         run(sys.argv[1])
     else:

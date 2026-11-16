@@ -3,7 +3,7 @@ Con dos métodos homónimos, la resolución por nombre debe salir con aristas fa
 
 import json
 
-from benchmark.resolution_oracle import score_repo, score_snippet
+from benchmark.resolution_oracle import gate, score_repo, score_snippet
 
 
 def _snippet(tmp_path, code: str, truth: dict):
@@ -109,3 +109,39 @@ def test_by_name_homonyms_are_not_dynamic_dispatch(tmp_path):
     assert s["truth"] == {("main.py:Geo.clean", "5:16", "base.py:Field.clean")}
     assert ("main.py:Geo.clean", "5:16", "main.py:Arr.clean") in s["leo"]
     assert s["dispatch"] == set()
+
+
+def test_repo_judge_checks_the_product_path_too(tmp_path):
+    """who_calls/impact/guard sacan los callers de `callers_of_def`, no de `_scope`: el
+    oráculo comprueba que cada destino que jedi ve tiene a su caller ahí."""
+    (tmp_path / "a.py").write_text("def run():\n    pass\n", encoding="utf-8")
+    (tmp_path / "b.py").write_text("def run():\n    pass\n", encoding="utf-8")
+    (tmp_path / "c.py").write_text("from b import run as other\ndef go():\n    other()\n",
+                                   encoding="utf-8")
+    s = score_repo(str(tmp_path))
+    assert s["product_pairs"] == len(s["truth"]) == 1 and s["product_missed"] == 0
+
+
+def test_gate_fails_on_any_lost_dependent_or_low_exact():
+    ok = {"truth": {1, 2}, "leo": {1, 2, 3}, "calls": 10, "exact": 8,
+          "product_pairs": 2, "product_missed": 0}
+    assert gate(ok, 70) == []
+    assert gate({**ok, "leo": {1, 3}}, 70)                 # un destino perdido
+    assert gate({**ok, "product_missed": 1}, 70)            # perdido por who_calls/guard
+    assert gate({**ok, "exact": 6}, 70)                     # 60 % < 70 %
+    assert gate({**ok, "calls": 0}, 70)                     # oráculo vacuo
+
+
+def test_judge_error_when_leo_target_shadows_jedis_in_the_mro():
+    """django: `super().clean()` en AbstractUser(AbstractBaseUser, PermissionsMixin) va a
+    AbstractBaseUser.clean (la MRO la pone antes), pero jedi da Model.clean. No es un
+    dependiente perdido: Python nunca llega a Model.clean desde ahí."""
+    from benchmark.resolution_oracle import shadowed
+
+    class Scope:
+        def _mro(self, ck):
+            return ["User", "Base", "Mixin", "Model"]
+    assert shadowed(Scope(), "User", True, "Base", "Model")       # super(): Base tapa a Model
+    assert not shadowed(Scope(), "User", True, "Model", "Base")   # al revés sí sería pérdida
+    assert not shadowed(Scope(), "User", True, "User", "Base")    # super() empieza tras User
+    assert not shadowed(Scope(), "User", False, None, "Base")     # leo sin clase: no juzga
