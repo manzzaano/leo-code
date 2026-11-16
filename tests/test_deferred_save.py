@@ -1,6 +1,7 @@
 """El índice en disco se escribe diferido: reescribirlo entero costaba 3 s a 100k
 símbolos y 9 s a 300k, y se pagaba dentro de la llamada al tool tras cada edición."""
 
+import threading
 import time
 
 import pytest
@@ -105,3 +106,51 @@ def test_flush_espera_a_la_escritura_diferida_que_ya_empezo(repo, monkeypatch):
     seguir.set()
     flush.join(5)
     assert engine.repo_index_path(str(repo)).exists()
+
+
+def test_escribir_el_indice_no_retiene_el_lock_y_flush_espera(repo, monkeypatch):
+    """En django la escritura son ~2,4 s: con el lock cogido, la llamada siguiente los pagaba."""
+    engine.ensure_structural(str(repo))
+    idx = engine._get_indexer()
+    real, entered, release = idx.save, threading.Event(), threading.Event()
+
+    def slow(*a, **k):
+        entered.set()
+        release.wait(5)
+        return real(*a, **k)
+
+    monkeypatch.setattr(idx, "save", slow)
+    writer = threading.Thread(target=engine.flush_index, args=(str(repo),))
+    writer.start()
+    try:
+        assert entered.wait(5)
+        got = engine._index_lock.acquire(timeout=1)
+        assert got, "una consulta no debe esperar a la escritura"
+        engine._index_lock.release()
+        waiter = threading.Thread(target=engine.flush_index)
+        waiter.start()
+        waiter.join(0.1)
+        assert waiter.is_alive(), "flush debe esperar a la escritura en curso o el proceso sale a medias"
+    finally:
+        release.set()
+    writer.join(5)
+    waiter.join(5)
+    assert engine.repo_index_path(str(repo)).exists()
+
+
+def test_escribir_con_el_lock_cogido_no_interbloquea(repo):
+    """ensure_structural escribe con _index_lock cogido si la escritura es síncrona, y un
+    temporizador rezagado puede estar a la vez en _write_index: colgó la suite."""
+    engine.ensure_structural(str(repo))
+    path, done = engine.repo_index_path(str(repo)), threading.Event()
+    writer = threading.Thread(target=engine._write_index, args=(str(repo), path), daemon=True)
+
+    def holder():
+        with engine._index_lock:
+            writer.start()
+            time.sleep(0.1)
+            engine._write_index(str(repo), path)
+        done.set()
+
+    threading.Thread(target=holder, daemon=True).start()
+    assert done.wait(5), "interbloqueo entre _index_lock y _save_lock"

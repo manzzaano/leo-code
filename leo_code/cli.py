@@ -107,7 +107,7 @@ def cmd_index(args) -> int:
     for lang, n in langs.items():
         print(f"    {lang:<12}{n:>8,}")
     from leo_code.core.graphquery import GraphQuery
-    gq = GraphQuery({c.id: c for c in caps})  # callers globales (called_by solo es intra-archivo tras build)
+    gq = GraphQuery({c.id: c for c in caps})
     n_callers = lambda c: len({x.name for x in gq._callers_of(c.name)})
     hubs = sorted((c for c in caps if c.type not in ("module", "file_header", "variable", "constant")),
                   key=n_callers, reverse=True)[:5]

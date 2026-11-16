@@ -34,7 +34,7 @@ claude mcp add leo-mcp -- leo-mcp   # Claude Code
 
 Other clients: run `leo-mcp init --client opencode|cursor|codex` inside your project.
 
-Requirements: [uv](https://docs.astral.sh/uv/), which fetches Python for you. Without uv: `pip install leo-mcp` with Python ≥ 3.11. Or without installing anything: `claude mcp add leo-mcp -- npx -y leo-mcp`.
+Requirements: [uv](https://docs.astral.sh/uv/), which fetches Python for you. Without uv: `pip install leo-mcp` with Python ≥ 3.11. Or without installing anything: `claude mcp add leo-mcp -- npx -y leo-mcp`. On native Windows `npx` is a batch file and needs a shell: `claude mcp add leo-mcp -- cmd /c npx -y leo-mcp`.
 No API key: leo-mcp never calls an LLM. It parses your repo locally.
 
 ## What your agent gets

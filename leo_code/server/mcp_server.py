@@ -20,16 +20,14 @@ import re
 import sys
 import threading
 from collections import Counter
-from io import TextIOWrapper
 
-import anyio
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 import mcp.types as types
 
 from leo_code import __version__, engine
 from leo_code.core.boundary import link_http_edges
-from leo_code.core.graphquery import GraphQuery, _bare
+from leo_code.core.graphquery import GraphQuery, Proof, _bare, _is_aux_path, _qual, rough_lines
 from leo_code.core.guardian import Guardian
 from leo_code.core.tokens import count_tokens
 from leo_code.logging_config import setup_logging
@@ -45,26 +43,31 @@ leo-mcp gives you this repository's real call graph, parsed from the AST (full A
 - Before changing a function's signature or behavior, run graph op=guard on it.
 - The graph is static: calls through WebSockets, subprocesses, queues, reflection or string-built dispatch are not edges."""
 
-server = Server("leo-mcp", version=__version__, instructions=INSTRUCTIONS)
-
 _REPO_PROP = {"repo_path": {"type": "string",
                             "description": "Repository root. Defaults to the project the server was started in."}}
 
+# Las dos tools solo leen el repo: idempotentes, sin efectos y sin salir de él.
+_READ_ONLY = types.ToolAnnotations(read_only_hint=True, destructive_hint=False,
+                                   idempotent_hint=True, open_world_hint=False)
+
 _TOOL = types.Tool(
     name="get_context",
+    title="Code context",
+    annotations=_READ_ONLY,
     description=(
         "Code context for a question or task: the AST subgraph of the relevant symbols "
         "(signatures and bodies), compressed, with file:line. Use it before grep/read to "
         "understand how something works, where to make a change, or why something fails."
     ),
-    inputSchema={
+    input_schema={
         "type": "object",
         "properties": {
             "query": {"type": "string", "description": "Question or task about the code, in natural language or a symbol name."},
             **_REPO_PROP,
+            # Sin code_gen: por MCP se reintenta como code_query (ver _get_context).
             "task_type": {"type": "string", "default": "auto",
-                          "description": "auto|code_query|refactor|debug|review|search|code_gen|optimize|audit"},
-            "budget_tokens": {"type": "integer", "default": 0, "description": "Token cap (0 = automatic)."},
+                          "enum": ["auto", "code_query", "refactor", "debug", "review", "search", "optimize", "audit"]},
+            "budget_tokens": {"type": "integer", "default": 0, "minimum": 0, "description": "Token cap (0 = automatic)."},
         },
         "required": ["query"],
     },
@@ -76,6 +79,8 @@ _NEEDS = {"where": ("symbol",), "who_calls": ("symbol",), "impact": ("symbol",),
 _GRAPH_OPS = tuple(_NEEDS)
 _GRAPH_TOOL = types.Tool(
     name="graph",
+    title="Call graph",
+    annotations=_READ_ONLY,
     description=(
         "Deterministic call-graph query with file:line proof, no LLM. "
         "op=where: definition · who_calls: direct callers · impact: everything that transitively "
@@ -83,7 +88,7 @@ _GRAPH_TOOL = types.Tool(
         "crossing frontend fetch -> backend route · guard: impact plus which dependents have no tests. "
         "where/who_calls/impact/guard need `symbol`; trace needs `src` and `dst`."
     ),
-    inputSchema={"type": "object", "properties": {
+    input_schema={"type": "object", "properties": {
         "op": {"type": "string", "enum": list(_GRAPH_OPS)},
         "symbol": {"type": "string", "description": "Function, method or class name (where/who_calls/impact/guard)."},
         "src": {"type": "string", "description": "Start symbol (trace)."},
@@ -93,9 +98,8 @@ _GRAPH_TOOL = types.Tool(
 )
 
 
-@server.list_tools()
-async def list_tools() -> list[types.Tool]:
-    return [_TOOL, _GRAPH_TOOL]
+async def list_tools(_ctx, _params) -> types.ListToolsResult:
+    return types.ListToolsResult(tools=[_TOOL, _GRAPH_TOOL])
 
 
 def _relativize(text: str, repo: str) -> str:
@@ -142,10 +146,26 @@ _GQ_CACHE_MAX = 4
 _gq_cache: dict[str, tuple[int, dict, GraphQuery]] = {}
 
 
+# Guardian por repo, atado al MISMO dict de cápsulas de _gq_cache: si el índice cambia de
+# generación, _repo_graph crea otro dict y el guardián se reconstruye. Construirlo en cada
+# llamada costaba 260 ms en leo-code y 11-18 s en django (augment_refs + test_closure).
+_guard_cache: dict[str, tuple[dict, Guardian]] = {}
+
+
+def _guardian(repo: str, caps: dict) -> Guardian:
+    hit = _guard_cache.get(repo)
+    if hit is None or hit[0] is not caps:
+        hit = None                           # soltar el viejo: dos a la vez eran el pico de RAM
+        _guard_cache.pop(repo, None)
+        hit = _guard_cache[repo] = (caps, Guardian(caps, repo))
+    return hit[1]
+
+
 def _evict_repo(repo: str) -> None:
     """Suelta el grafo de un repo y su watcher: si no lo consultamos, no hay por qué
     seguir observando su árbol ni retener sus cápsulas."""
     _gq_cache.pop(repo, None)
+    _guard_cache.pop(repo, None)
     try:
         engine.flush_index(repo)              # no perder lo indexado de ese repo
         engine._get_indexer().stop_watch(repo)
@@ -195,39 +215,55 @@ _NEXT = {
 }
 
 
-_DEF_LINE = re.compile(r"\s*(export\s+)?(async\s+)?(def|function|class)\s")
-
-
 def _who_calls(gq: GraphQuery, symbol: str) -> str:
     """who_calls con las líneas de LLAMADA, no solo la de definición del caller.
 
     Medido en el harness sobre NEXUS (2026-09-15): con `execute_batch @ executor_agent.py:32`
     los agentes contestaban "call site: línea 32" y perdían la 2ª llamada (:39, :55).
     Una cápsula (p.ej. la clase) cuyas llamadas ya cubre otra más estrecha (su método) se omite.
-    Solo presentación: el grafo auditado (GraphQuery) no cambia.
+    Con una sola definición (o `Clase.método`) se usan los callers de ESA def, no los de
+    todas sus homónimas (27/10: −25% callers en django, −43% en leo-code).
     """
     bare = _bare(symbol)
-    call = re.compile(rf"\b{re.escape(bare)}\s*(?:<[^()\n]*>)?\s*\(")
-    callers = list({c.id: c for c in gq._callers_of(symbol)}.values())
-    sites = {c.id: [c.start_line + i for i, text in enumerate((c.content or "").splitlines())
-                    if call.search(text) and not _DEF_LINE.match(text)] for c in callers}
-    kept, covered = [], set()
+    defs = gq.defs_named(symbol)
+    target = defs[0] if len(defs) == 1 else None
+    callers = (gq.callers_of_def(target) if target
+               else list({c.id: c for c in gq._callers_of(symbol)}.values()))
+    if not callers:
+        return Proof("who_calls", symbol, note=gq.type_note(symbol)).render()
+    sites, kept, covered = {}, [], set()
     for c in sorted(callers, key=lambda c: (c.end_line or 0) - (c.start_line or 0)):
+        # Si hasta las líneas por regex ya están cubiertas (la clase cuyos métodos ya
+        # salieron), no se parsea: en django `get` tardaba 2,6 s por las clases.
+        rough = rough_lines(c, bare)
+        if rough and {(c.file_path, ln) for ln in rough} <= covered:
+            continue
+        sites[c.id] = gq.call_lines(c, bare, target)
         own = {(c.file_path, ln) for ln in sites[c.id]}
         if own and own <= covered:
             continue
         covered |= own
         kept.append(c)
-    if not kept:
-        return gq.who_calls(symbol).render()
-    kept.sort(key=lambda c: (c.file_path, c.start_line))
+    kept.sort(key=lambda c: (_is_aux_path(c), c.file_path, c.start_line))   # producto primero
     n_sites = len(covered)
     head = (f"[who_calls] {symbol} — {n_sites} call site(s) in {len(kept)} caller(s), with proof:"
             if n_sites else f"[who_calls] {symbol} — {len(kept)} caller(s), with proof:")
     lines = [head]
     for c in kept[:50]:
         at = (" → calls at " + ", ".join(f":{ln}" for ln in sites[c.id])) if sites[c.id] else ""
-        lines.append(f"  · {c.name} ({c.type}) @ {c.file_path}:{c.start_line}{at}")
+        lines.append(f"  · {_qual(c)} ({c.type}) @ {c.file_path}:{c.start_line}{at}")
+    if len(kept) > 50:
+        lines.append(f"  … showing 50 of {len(kept)} callers "
+                     f"({sum(map(_is_aux_path, kept))} in tests/benchmarks)")
+    if target is None and len(defs) > 1:
+        names = sorted({_qual(c) for c in defs})
+        # Funciones de módulo homónimas: el nombre no las distingue, el archivo sí.
+        distinct = len(names) == len(defs)
+        if not distinct:
+            names = sorted(f"{_qual(c)} @ {c.file_path}:{c.start_line}" for c in defs)
+        lines.append(f"  {len(defs)} definitions named {bare} ({', '.join(names[:5])}"
+                     f"{', …' if len(names) > 5 else ''}): callers of all of them."
+                     + (' Narrow with symbol="Class.method".' if distinct else ""))
     return "\n".join(lines)
 
 
@@ -248,14 +284,18 @@ def _graph(args: dict) -> str:
         return "\n".join(_not_found(gq, s) for s in unknown)
     if op == "guard":
         # Guardian sobre las MISMAS cápsulas (boundary ya cosido por _repo_graph).
-        out = Guardian(caps).review(syms[0]).render()
+        out = _guardian(repo, caps).review(syms[0]).render()
     elif op == "who_calls":
         out = _who_calls(gq, syms[0])
     else:
         proof = gq.trace(*syms) if op == "trace" else getattr(gq, op)(syms[0])
         out = proof.render()
         if op == "trace" and not proof.found:
-            out += ("\n(No static call path. Hops through WebSockets, subprocesses, queues or "
+            ends = [s for s in syms if not gq.nodes_named(s)]
+            out += (f"\n({' and '.join(f'`{s}`' for s in ends)} has no definition in this repo "
+                    "(external or not indexed): trace needs both ends here. "
+                    f"For who calls it: graph op=who_calls symbol={ends[-1]})" if ends else
+                    "\n(No static call path. Hops through WebSockets, subprocesses, queues or "
                     "string-built dispatch are not followed, which can be why.)")
     return _relativize(out + "\n\n" + _NEXT[op], repo)
 
@@ -288,9 +328,10 @@ def _get_context(args: dict) -> str:
     _index(repo)
     _embed_bg(repo)
     result = engine.compute_context(repo, query, task_type, budget, self_sufficient=True)
-    if result.get("task_type") == "no_code":
+    if result.get("task_type") in ("no_code", "code_gen"):
         # Una llamada a get_context ES sobre código por definición; el clasificador
-        # marca no_code con queries cortas en inglés y devolvía contexto VACÍO.
+        # marca no_code con queries cortas en inglés y devolvía contexto VACÍO, y code_gen
+        # ("write…") solo da el árbol de directorios, que el agente ya ve con sus tools.
         result = engine.compute_context(repo, query, "code_query", budget, self_sufficient=True)
     if not result["capsules_total"]:
         return _empty_msg(repo)
@@ -322,16 +363,21 @@ def _get_context(args: dict) -> str:
     return _relativize(header + ctx + sources + footer, repo)
 
 
-@server.call_tool()
-async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
-    # Las excepciones las convierte el SDK en isError con el mensaje: ValueError legibles.
-    if name == "graph":
-        text = await asyncio.to_thread(_graph, arguments)
-    elif name == "get_context":
-        text = await asyncio.to_thread(_get_context, arguments)
-    else:
-        raise ValueError(f"Unknown tool: {name}")
-    return [types.TextContent(type="text", text=text)]
+async def call_tool(_ctx, params: types.CallToolRequestParams) -> types.CallToolResult:
+    # El SDK v2 ya no convierte las excepciones en is_error: un error de uso (ValueError
+    # legible) tiene que llegar al agente como resultado, no como error de protocolo.
+    handler = {"graph": _graph, "get_context": _get_context}.get(params.name)
+    try:
+        if handler is None:
+            raise ValueError(f"Unknown tool: {params.name}")
+        text = await asyncio.to_thread(handler, params.arguments or {})
+    except Exception as e:
+        return types.CallToolResult(content=[types.TextContent(type="text", text=str(e))], is_error=True)
+    return types.CallToolResult(content=[types.TextContent(type="text", text=text)])
+
+
+server = Server("leo-mcp", version=__version__, instructions=INSTRUCTIONS,
+                on_list_tools=list_tools, on_call_tool=call_tool)
 
 
 # Repos cuyo embedding (semántico) ya se lanzó en background, para no duplicarlo.
@@ -370,9 +416,10 @@ def _is_project(repo: str) -> bool:
 # Extensiones C que el servidor importa perezosamente. En Windows, el primer import de
 # una de ellas dentro de un worker se cuelga mientras el hilo lector de stdin tiene un
 # ReadFile síncrono pendiente sobre el pipe (medido 2026-09-15: 1ª get_context colgada
-# en la instalación base, stack en numpy/_core/multiarray create_module vía rank_bm25).
+# en la instalación base, stack en numpy/_core/multiarray create_module vía rank_bm25;
+# numpy ya no es dependencia base, pero la regla vale para el resto).
 # Se importan en el hilo principal ANTES de que el servidor empiece a leer stdin.
-_PRELOAD = ("numpy", "rank_bm25", "orjson", "tree_sitter", "tree_sitter_typescript", "tree_sitter_javascript")
+_PRELOAD = ("orjson", "tree_sitter", "tree_sitter_typescript", "tree_sitter_javascript")
 
 
 def _preload_native():
@@ -409,16 +456,18 @@ def _warmup(repo: str):
 
 async def main():
     setup_logging(log_dir=engine._CACHE_DIR / "logs")
-    # El canal MCP usa stdout. El indexer y otras libs hacen print() (en este y otros
-    # threads) y eso corrompería el protocolo: stdout REAL para JSON-RPC, sys.stdout → stderr.
-    protocol_stdout = anyio.wrap_file(TextIOWrapper(sys.stdout.buffer, encoding="utf-8"))
-    sys.stdout = sys.stderr
     if os.getenv("LEO_DEBUG_DUMP"):  # diagnóstico: volcar stacks periódicamente a stderr
         import faulthandler
         faulthandler.dump_traceback_later(60, repeat=True, file=sys.stderr)
     _preload_native()
-    _warmup(os.path.abspath(os.getenv("LEO_REPO") or "."))
-    async with stdio_server(stdout=protocol_stdout) as (read, write):
+    # El canal MCP usa stdout y el indexer y otras libs hacen print() desde otros threads.
+    # stdio_server (SDK v2) sirve el protocolo por un descriptor privado y apunta el fd 1
+    # a stderr mientras dura: el warmup arranca DENTRO, cuando sus print ya no llegan al canal.
+    async with stdio_server() as (read, write):
+        # ...pero sys.stdout tiene su propio buffer: con un pipe, lo impreso esperaba en él y se
+        # vaciaba al salir, con el fd 1 ya devuelto al canal. Tras el claim, print → stderr.
+        sys.stdout = sys.stderr
+        _warmup(os.path.abspath(os.getenv("LEO_REPO") or "."))
         await server.run(read, write, server.create_initialization_options())
 
 

@@ -61,5 +61,10 @@ def test_metodo_heredado_por_la_mro():
                 "class SubA2(A):\n    pass\n") == {"A.save"}
 
 
-def test_no_es_clase_del_repo_sigue_por_nombre():
-    assert _run("        x = dict()\n        x.save()\n") == {"A.save", "B.save", "SubA.save"}
+def test_constructor_builtin_es_tipo_exacto_fuera_del_repo():
+    # 13/11, decisión del usuario: `dict()` da siempre un dict; antes iba por nombre.
+    assert _run("        x = dict()\n        x.save()\n") == set()
+
+
+def test_constructor_desconocido_sigue_por_nombre():
+    assert _run("        x = make()\n        x.save()\n") == {"A.save", "B.save", "SubA.save"}

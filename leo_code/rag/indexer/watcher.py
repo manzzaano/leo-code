@@ -20,7 +20,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional
 
-from leo_code.core.parser import extract_from_file, build_call_graph, Capsule, detect_language, EXT_LANG
+from leo_code.core.parser import extract_from_file, Capsule, detect_language, EXT_LANG
 
 try:
     import orjson
@@ -58,7 +58,6 @@ class Indexer:
             # extract_from_file ya elige el parser: ast (Python), tree-sitter (TS/JS) o
             # regex genérica. No hay un modo "tree-sitter" que forzar desde fuera.
             capsules = extract_from_file(str(path), lang)
-            build_call_graph(capsules)
             return capsules, lang, len(capsules), None
         except Exception as e:
             return [], lang, 0, str(e)
@@ -227,16 +226,18 @@ class Indexer:
 
         return count
 
-    def save(self, path: str = "kc_index.json.gz", repo: str | None = None):
+    def save(self, path: str = "kc_index.json.gz", repo: str | None = None,
+             items: list[Capsule] | None = None):
         """Persiste el índice a disco: JSON Lines (una cápsula por línea) en gzip.
 
         En streaming, cápsula a cápsula: un único documento JSON obligaba a tener a la vez
         el dict, el texto y el gzip enteros (113 MB de JSON en django), y al cargarlo orjson
         reservaba ~12× la entrada (pico de 1,7 GB comprometidos, medido).
 
-        repo: guarda solo las cápsulas de ese repo (caché por repo). Escritura atómica:
-        el cliente MCP mata el server sin aviso y un gzip a medias no debe quedar."""
-        items = list(self._capsules.values())
+        repo: guarda solo las cápsulas de ese repo (caché por repo). items: instantánea ya
+        tomada, en vez de leer el índice. Escritura atómica: el cliente MCP mata el server
+        sin aviso y un gzip a medias no debe quedar."""
+        items = list(self._capsules.values()) if items is None else items
         if repo:
             repo_abs = os.path.abspath(repo)
             items = [c for c in items if _under(c.file_path, repo_abs)]
@@ -281,18 +282,11 @@ class Indexer:
                 n += 1
         print(f"[indexer] loaded: {path} ({n} symbols)")
 
-    def _rebuild_call_graph(self) -> None:
-        """Re-resuelve called_by global tras un sync (los edges son cross-file)."""
-        caps = list(self._capsules.values())
-        for c in caps:
-            c.called_by = []
-        build_call_graph(caps)
-
     def sync(self, repo_path: str, since_mtime: float,
              languages: Optional[list[str]] = None) -> dict:
         """Actualización incremental sobre un índice ya cargado: re-parsea solo
-        archivos cambiados (mtime > since_mtime) o nuevos, quita los borrados, y
-        re-resuelve el call-graph. Mucho más barato que build() cuando cambian pocos.
+        archivos cambiados (mtime > since_mtime) o nuevos y quita los borrados.
+        Mucho más barato que build() cuando cambian pocos.
         Devuelve {changed, new, deleted, reparsed_capsules, removed, capsules}.
         """
         if languages is None:
@@ -346,7 +340,6 @@ class Indexer:
                     pass
 
         if removed or reparsed:
-            self._rebuild_call_graph()
             # Solo el delta (capsulas nuevas/re-parseadas), no todo el repo — un
             # sync que toca 1 archivo no debe re-embeber las ~1400 capsulas del resto.
             if self.vector_store and touched_capsules:
@@ -415,7 +408,22 @@ class Indexer:
         try:
             obs = Observer()
             obs.schedule(Handler(), repo_abs, recursive=True)
-            obs.start()
+            # Se arranca desde un hilo daemon: watchdog 7 en Windows crea un hilo lector
+            # con threading.Thread a secas (winapi.py), que hereda el daemon del hilo que
+            # lo crea. Desde el principal, `leo-mcp index` no terminaba nunca.
+            fallo: list[BaseException] = []
+
+            def _start():
+                try:
+                    obs.start()
+                except BaseException as e:
+                    fallo.append(e)
+
+            starter = threading.Thread(target=_start, daemon=True)
+            starter.start()
+            starter.join()
+            if fallo:
+                raise fallo[0]
         except Exception:
             with self._dirty_lock:
                 self._observers[repo_abs] = None
@@ -439,7 +447,7 @@ class Indexer:
 
     def stop_watch(self, repo_path: str | None = None):
         """Para el/los observer(s). El proceso puede salir sin esto (los hilos de
-        watchdog son daemon); existe para los tests y para cerrar limpio."""
+        watchdog arrancan como daemon, ver watch()); existe para los tests y para cerrar limpio."""
         with self._dirty_lock:
             items = (list(self._observers.items()) if repo_path is None
                      else [(os.path.abspath(repo_path), self._observers.get(os.path.abspath(repo_path)))])

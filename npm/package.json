@@ -1,13 +1,14 @@
 {
   "name": "leo-mcp",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "description": "MCP server that gives your coding agent the real call graph of your repo (where / who_calls / impact / trace / guard, cited file:line) plus compressed AST context.",
   "bin": {
     "leo-mcp": "bin/leo-mcp.js"
   },
   "files": [
     "bin/leo-mcp.js",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=18"
@@ -26,6 +27,7 @@
     "ast"
   ],
   "author": "Ismael Manzano Leon",
+  "license": "MIT",
   "homepage": "https://github.com/manzzaano/leo-code#readme",
   "repository": {
     "type": "git",

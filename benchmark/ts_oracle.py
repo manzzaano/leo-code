@@ -47,7 +47,21 @@ def run(repo: str = "."):
     idx = Indexer()
     idx.build(repo, languages=["typescript", "javascript"], verbose=False)
 
-    code_types = {"function", "method", "class", "async_function"}
+    code_types = {"function", "method", "class", "async_function", "type_def", "component"}
+    # Símbolos: las aristas solo se comparan en los que leo ya tiene, y así un hueco del
+    # parser no se veía (#9). Por (archivo, nombre): un decorador desalinea la línea.
+    leo_syms = {(str(Path(c.file_path).resolve()), c.name.split(".")[-1])
+                for c in idx.get_capsules().values()}
+    seen_files = {f for f, _ in leo_syms}                 # lo que leo excluye a propósito no cuenta
+    # Sintaxis que tsc solo rechaza en el checker (`y?: T = 1`) y tree-sitter no sabe leer:
+    # cada parser se recupera a su manera, igual que con los parseDiagnostics de ts_oracle.js.
+    # Coste aceptado: también salta sintaxis válida que tree-sitter aún no conoce; se imprime.
+    from leo_code.core.parser_ts import _parser
+    broken = {f for f in {k[0] for k in omap} & seen_files
+              if _parser("tsx" if f.endswith("x") else "typescript")
+              .parse(Path(f).read_bytes()).root_node.has_error}
+    wanted = {k[:2] for k in omap if k[0] in seen_files and k[0] not in broken}
+    lost = sorted(wanted - leo_syms)
     tot_leo = tot_or = tot_int = 0
     matched = 0
     false_e, miss_e = [], []
@@ -55,7 +69,7 @@ def run(repo: str = "."):
         if c.type not in code_types or not (c.file_path or "").endswith((".ts", ".tsx")):
             continue
         key = (str(Path(c.file_path).resolve()), c.name.split(".")[-1], c.start_line)
-        if key not in omap:
+        if key not in omap or key[0] in broken:
             continue   # símbolo no comparable (arrow/.d.ts/desalineado) → fuera de alcance
         matched += 1
         leo, orc = set(c.calls or []), omap[key]
@@ -71,12 +85,15 @@ def run(repo: str = "."):
 
     precision = tot_int / tot_leo if tot_leo else 1.0
     recall = tot_int / tot_or if tot_or else 1.0
+    sym_recall = 1 - len(lost) / len(wanted)
     print(f"TS símbolos comparados: {matched:,}  ·  aristas leo: {tot_leo:,}  ·  tsc: {tot_or:,}")
+    print(f"Archivos saltados por sintaxis que tree-sitter no lee: {len(broken)}")
+    print(f"SÍMBOLOS perdidos: {len(lost)} ({sym_recall*100:.3f}%)", [f"{Path(f).name}:{n}" for f, n in lost[:12]])
     print(f"PRECISIÓN (sin falsas):   {precision*100:.3f}%  ({len(false_e)} falsas)")
     print(f"RECALL    (sin perdidas): {recall*100:.3f}%  ({len(miss_e)} perdidas)")
     for n, ln, e in (false_e + miss_e)[:12]:
         print(f"    disputa {n}:{ln} → {e}")
-    return precision, recall, matched
+    return precision, min(recall, sym_recall), matched
 
 
 if __name__ == "__main__":

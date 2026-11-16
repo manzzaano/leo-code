@@ -14,11 +14,15 @@ Self-check:  python -m leo_code.core.graphquery
 
 from __future__ import annotations
 
+import ast
 import builtins
+import re
 import sys
 from collections import defaultdict, deque
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+
+from leo_code.core.parser import call_form
 
 
 @dataclass(frozen=True)
@@ -29,10 +33,19 @@ class Cite:
     file: str
     line: int
     repo: str = ""
+    sig: str = ""  # solo where: la firma, para no necesitar otra llamada
+    via: str = ""  # solo impact: por quién llega (desde profundidad 2)
+    depth: int = 0
+    hop: str = ""  # solo trace: dónde se llama desde el salto anterior y si va por nombre
 
     def __str__(self) -> str:
         loc = f"{self.file}:{self.line}"
-        return f"{self.name} ({self.type}) @ {loc}" + (f" [{self.repo}]" if self.repo else "")
+        out = f"{self.name} ({self.type}) @ {loc}" + (f" [{self.repo}]" if self.repo else "")
+        if self.via:
+            out += f" ← via {self.via} · depth {self.depth}"
+        if self.hop:
+            out += f" ← {self.hop}"
+        return out + (f"\n      {self.sig}" if self.sig else "")
 
 
 @dataclass
@@ -42,6 +55,7 @@ class Proof:
     query: str
     cites: list[Cite] = field(default_factory=list)
     edges: list[tuple[str, str]] = field(default_factory=list)  # (origen, destino) por arista usada
+    note: str = ""  # una línea al pie (where: "imported in N files")
 
     @property
     def found(self) -> bool:
@@ -49,12 +63,15 @@ class Proof:
 
     def render(self) -> str:
         if not self.cites:
-            return f"[{self.kind}] no results for '{self.query}'."
+            miss = f"[{self.kind}] no results for '{self.query}'."
+            return f"{miss}\n  {self.note}" if self.note else miss
         head = f"[{self.kind}] {self.query} — {len(self.cites)} result(s), with proof:"
         lines = [head] + [f"  · {c}" for c in self.cites]
         if self.edges:
             lines.append("  edges: " + " → ".join(
                 dict.fromkeys([self.edges[0][0]] + [e[1] for e in self.edges])))
+        if self.note:
+            lines.append(f"  {self.note}")
         return "\n".join(lines)
 
 
@@ -75,6 +92,28 @@ def _xlang_targets(c) -> set:
     return {_bare(x.get("to", "")) for x in ((getattr(c, "properties", None) or {}).get("xlang_calls") or [])}
 
 
+_DEF_LINE = re.compile(r"\s*(export\s+)?(async\s+)?(def|function|class)\s")
+
+
+def rough_lines(c, bare: str) -> list[int]:
+    """Líneas con `bare(` o `<bare` (JSX) por regex: superconjunto de las llamadas reales
+    (y lo único que hay fuera de Python)."""
+    name = re.escape(bare)
+    # JSX: `<` sin identificador delante; con él es un genérico (`Promise<Service>`)
+    call = re.compile(rf"\b{name}\s*(?:<[^()\n]*>)?\s*\(|(?<![\w$.\])])<(?:[\w$]+\.)*{name}\b")
+    return [c.start_line + i for i, t in enumerate((c.content or "").splitlines())
+            if call.search(t) and not _DEF_LINE.match(t)]
+
+
+def _qual(c) -> str:
+    """`Clase.método` para métodos (el nombre a secas para el resto)."""
+    return (c.properties or {}).get("qualified") or c.name
+
+
+def _pos(c) -> tuple:
+    return (c.file_path or "", c.start_line or 0, c.name, c.id)
+
+
 def _bare(name: str) -> str:
     """Nombre base sin calificador de clase/módulo: 'A.method' → 'method'."""
     return name.split(".")[-1]
@@ -85,6 +124,12 @@ def _norm(path: str) -> str:
 
 
 _BUILTINS = frozenset(dir(builtins))
+_CLASS_TYPES = ("class", "dataclass", "exception")
+_CTORS = ("__new__", "__init__", "__post_init__")
+# Clases builtin cuyo constructor da una instancia exacta. Sin `type` (devuelve una clase
+# cualquiera, quizá del repo) ni `super`. ponytail: un `from x import *` que redefina
+# `dict` engaña a la regla; nombres de un import con * no están en la tabla de imports.
+_BUILTIN_TYPES = frozenset(n for n in _BUILTINS if isinstance(getattr(builtins, n), type)) - {"type", "super"}
 _NONE: dict = {}   # default de .get() compartido: `.get(k, {})` crearía un dict por llamada (GC, chequeo (e))
 # No son defs llamables. Por exclusión y no por lista: el clasificador reetiqueta defs
 # (middleware, model, endpoint…) y una lista cerrada las dejaba sin resolver.
@@ -164,6 +209,7 @@ class _PyScope:
         self._memo: dict[str, dict[str, list | None]] = {}   # archivo → llamada → destinos
         # jerarquía: bases resueltas con los imports (las de fuera del repo no entran)
         self._loose: list[tuple] = []      # (nombre de la base desconocida, clase que hereda)
+        self._ext: set[str] = set()        # clases con una base de fuera del repo (no builtin)
         self.bases = {k: self._class_keys(k, forms) for k, forms in self.classes.items()}
         subs = defaultdict(list)
         for k, bs in self.bases.items():
@@ -180,6 +226,8 @@ class _PyScope:
                     if b != k:
                         subs[b].append(k)
         self.subs = {k: tuple(v) for k, v in subs.items()}     # tuplas de str: el GC las suelta
+        # builtins con subclase en el repo: `x: str` podría ser una de ellas
+        self._sub_builtins = {n for fs in self.classes.values() for n, r in fs if not r and n in _BUILTIN_TYPES}
         self._mros: dict[str, tuple] = {}
         self._descs: dict[str, tuple] = {}
 
@@ -246,6 +294,8 @@ class _PyScope:
                 b = self.binds.get(here, _NONE).get(recv)
                 files = self._bind_module(b, here) if b else None
                 defs = self._in_module(files, name, 0) if files else files
+            if defs == [] and (recv or name not in _BUILTINS):
+                self._ext.add(cls)          # su __init__ de fuera puede llamar a métodos del repo
             keys = self._keys_of(defs)
             if defs is None or (defs and not keys):     # desconocida, o una def que no es clase
                 keys = [f"\0{cls}\0{i}"]
@@ -380,6 +430,7 @@ class _PyScope:
         local = {b[0]: b for b in lb} if lb else {}
         cls, me = props.get("class"), props.get("self_arg")
         lt = props.get("local_types") or _NONE
+        pt = props.get("param_types") or _NONE
         top = self.top.get(here, _NONE)
         binds = self.binds.get(here, _NONE)
         memo = self._memo.get(here)
@@ -404,11 +455,17 @@ class _PyScope:
                 if name not in _BUILTINS:
                     by_name.append(name)
                 continue
-            if recv in lt:                    # x = C(...); x.foo() → la MRO de C (paso 3)
-                key = f"{lt[recv]}\0{name}"
-                if key not in memo:
-                    memo[key] = self._typed(lt[recv], name, local, top, binds, here)
-                t = memo[key]
+            if recv in pt or recv in lt:      # def f(x: C) → C y subclases; x = C() → la MRO de C
+                param = recv in pt
+                typed = self._param_typed if param else self._typed
+                forms = pt[recv] if param else lt[recv]
+                if local:                     # import dentro de la función: C depende de ella
+                    t = typed(forms, name, local, top, binds, here)
+                else:
+                    key = f"{'^' if param else ''}{forms}\0{name}"
+                    if key not in memo:
+                        memo[key] = typed(forms, name, local, top, binds, here)
+                    t = memo[key]
                 if t is None:
                     by_name.append(name)
                 else:
@@ -446,17 +503,47 @@ class _PyScope:
         para cada C. None si alguna C no es una clase del repo o el método no se encuentra."""
         keys = []
         for c, m in ctors:
-            b = local.get(m or c) or binds.get(m or c)
-            if m:
-                defs = self._bound(b, c, m, here) if b else None
-            else:
-                defs = top[c] if c not in local and c in top else (
-                    self._bind_targets(b, here) if b else None)
-            ks = self._keys_of(defs)
+            if m == "{}" or self._is_builtin(c, m, local, top, binds):
+                continue   # literal o `set()`: builtin exacto, sus métodos están fuera del repo
+            ks = self._form_keys(c, m, local, top, binds, here)
             if not ks:
                 return None
             keys += ks
-        return self._explicit(keys, name)
+        return self._explicit(keys, name) if keys else []
+
+    def _param_typed(self, forms: list, name: str, local, top, binds, here: str):
+        """`x.name()` con `x` un parámetro anotado `x: C`: como `self.name()` en C (C y sus
+        subclases). None (por nombre) si C es Protocol (estructural: quien la cumple no
+        hereda de ella), `object`, no es clase del repo o no tiene `name`."""
+        [(c, m)] = forms
+        if self._is_builtin(c, m, local, top, binds):
+            # `x: str` fuera del repo, salvo que una clase del repo herede de `str` o de una subclase
+            # ponytail: no ve subclases a través de una base de fuera (`IntEnum` para `int`)
+            bt = getattr(builtins, c)
+            return None if c == "object" or any(issubclass(getattr(builtins, n), bt) for n in self._sub_builtins) else ()
+        out = {}
+        for k in self._form_keys(c, m, local, top, binds, here) or [None]:
+            if k is None or any(n == "Protocol" for a in self._mro(k) for n, _ in self.classes.get(a, ())):
+                return None
+            t = self._dispatch(k, name, False)
+            if t is None:
+                return None
+            out.update((d.id, d) for d in (t if type(t) is tuple else (t,)))
+        return tuple(out.values())
+
+    @staticmethod
+    def _is_builtin(c: str, m: str, local, top, binds) -> bool:
+        return not m and c in _BUILTIN_TYPES and c not in local and c not in top and c not in binds
+
+    def _form_keys(self, c: str, m: str, local, top, binds, here: str) -> list:
+        """Clases del repo a las que apunta el nombre `C` / `m.C` desde este archivo."""
+        b = local.get(m or c) or binds.get(m or c)
+        if m:
+            defs = self._bound(b, c, m, here) if b else None
+        else:
+            defs = top[c] if c not in local and c in top else (
+                self._bind_targets(b, here) if b else None)
+        return self._keys_of(defs)
 
     def _bound(self, b: list, name: str, recv: str, here: str) -> list | None:
         """Destinos de `name()` (recv '') o `recv.name()` cuando el nombre clave viene del import `b`."""
@@ -464,6 +551,21 @@ class _PyScope:
             return self._bind_targets(b, here)
         files = self._bind_module(b, here)
         return files if not files else self._in_module(files, name, 0)
+
+
+def _is_import(c) -> bool:
+    return (getattr(c, "signature", "") or "").lstrip().startswith(("from ", "import "))
+
+
+# Un tipo (interface/type/enum/namespace) es símbolo pero no nodo de llamadas: nadie lo «llama»
+# y sus usos (`x: Foo`) no son aristas, así que «0 dependientes» no significaría nada seguro.
+TYPE_NOTE = "type declaration: its uses in annotations are not modeled as dependents, search for them before changing it"
+
+
+def _is_aux_path(c) -> bool:
+    """Tests y benchmarks van detrás del código del producto."""
+    parts = (c.file_path or "").replace("\\", "/").split("/")
+    return any(p in ("tests", "test", "benchmark", "benchmarks") for p in parts)
 
 
 class GraphQuery:
@@ -504,6 +606,7 @@ class GraphQuery:
         # ARISTA y resolverlas ahí costaba un _resolve() (con sort) por arista — a escala
         # real (296k símbolos, nombres muy repetidos) eso disparó who_calls ×54 e impact
         # ×42 y tumbó el SLA del chequeo (d). Aquí es O(1) por arista.
+        self._resolved: dict[str, list] = {}   # memo de _resolve: el grafo no cambia tras construirse
         self._fams: dict[str, set] = defaultdict(set)
         for c in self.caps.values():
             if self._is_def(c):
@@ -529,13 +632,20 @@ class GraphQuery:
 
     def _resolve(self, name: str) -> list:
         """Cápsulas cuyo nombre (cualificado o base) coincide. Prioriza las
-        DEFINICIONES reales sobre imports/pseudo-cápsulas → la prueba cita la def."""
-        hits = self.by_name.get(name) or self.by_name.get(_bare(name)) or []
+        DEFINICIONES reales sobre imports/pseudo-cápsulas → la prueba cita la def.
+        Lista compartida: no modificarla."""
+        memo = self._resolved.get(name)
+        if memo is not None:
+            return memo
+        hits = self.by_name.get(name) or self.by_name.get(_bare(name))
+        if not hits:
+            return []                        # nombre externo: barato y son la mayoría
         seen, out = set(), []
         for c in hits:
             if c.id not in seen:
                 seen.add(c.id); out.append(c)
         out.sort(key=lambda c: 0 if self._is_def(c) else 1)
+        self._resolved[name] = out
         return out
 
     # La resolución es por NOMBRE: en un repo mixto `d.get()` de Python contaba como
@@ -574,7 +684,21 @@ class GraphQuery:
 
     # ---- queries deterministas ----
     def where(self, name: str) -> Proof:
-        return Proof("where", name, [self._cite(c) for c in self._resolve(name)])
+        """Definiciones con su clase y firma. Los imports solo si no hay definición indexada
+        (símbolo externo): antes `where Capsule` daba 16 imports y la dataclass salía 6ª,
+        porque _is_def no cuenta dataclass/constant (y no se toca: la resolución depende de él)."""
+        hits = self._resolve(name)
+        defs = [c for c in hits if not _is_import(c)]
+        # `Clase.método`: solo esa clase si existe (como defs_named en who_calls/impact)
+        defs = [c for c in defs if _qual(c) == name] or defs
+        cites =[replace(self._cite(c), name=(c.properties or {}).get("qualified") or c.name,
+                         sig=" ".join((c.signature or "").split())[:160])
+                 for c in (sorted(defs, key=_is_aux_path) if defs else hits)]
+        n_imp = len({c.file_path for c in hits if _is_import(c)}) if defs else 0
+        return Proof("where", name, cites, note=f"imported in {n_imp} files" if n_imp else "")
+
+    def type_note(self, name: str) -> str:
+        return TYPE_NOTE if any(c.type == "type_def" for c in self._resolve(name)) else ""
 
     def who_calls(self, name: str, limit: int = 50) -> Proof:
         callers = self._callers_of(name)
@@ -586,6 +710,47 @@ class GraphQuery:
                      [self._cite(c) for c in uniq[:limit]],
                      edges=[(c.name, name) for c in uniq[:limit]])
 
+    def hits_def(self, caller, form, d) -> bool:
+        """¿Puede la llamada `form` (nombre, receptor) de `caller` ir a la def `d`?
+        Sin resolver (None) → sí, por nombre: nunca se quita una arista que no se sabe."""
+        t = self._scope.targets(caller, *form)
+        return t is None or any(x.id == d.id for x in t)
+
+    def call_lines(self, c, bare: str, d=None) -> list[int]:
+        """Líneas donde `c` llama a `bare`. Python con ast: sin docstrings ni comentarios
+        (eran el 2,4% de líneas de más en django) y, con una def `d`, solo las llamadas que
+        pueden ir a ella. El resto de lenguajes, por regex."""
+        text = c.content or ""
+        if (c.file_path or "").endswith(".py"):
+            try:
+                tree = ast.parse(text)
+            except SyntaxError:
+                tree = None
+            if tree is not None:
+                out = set()
+                for n in ast.walk(tree):
+                    form = call_form(n.func) if isinstance(n, ast.Call) else None
+                    if form and form[0] == bare and (d is None or self.hits_def(c, form, d)):
+                        f = n.func   # línea del nombre llamado: `attr` en `obj\n.attr()`
+                        out.add(c.start_line - 1 + (f.end_lineno if isinstance(f, ast.Attribute) else f.lineno))
+                return sorted(out)
+        return rough_lines(c, bare)
+
+    def callers_of_def(self, d) -> list:
+        """Callers de UNA definición (no de todas sus homónimas): los que la resuelven a
+        ella y los que no se resuelven. Como incomingCalls de LSP, que parte de un ítem."""
+        name, out, fam = _bare(d.name), [], _family(d)
+        for c in {c.id: c for c in self._callers_of(d.name)}.values():
+            cf = _family(c)
+            # otro lenguaje que tiene su propio homónimo: solo vale la arista HTTP explícita
+            if fam and cf and cf != fam and name not in _xlang_targets(c):
+                continue
+            forms = [f for f in (c.properties or {}).get("call_forms") or () if f[0] == name]
+            # sin forma con ese nombre: arista de refgraph/boundary, se queda
+            if not forms or any(self.hits_def(c, f, d) for f in forms):
+                out.append(c)
+        return out
+
     def callees(self, name: str, limit: int = 50) -> Proof:
         targets = self._resolve(name)
         if not targets:
@@ -594,7 +759,7 @@ class GraphQuery:
         out, edges, seen = [], [], set()
         for _, ts in self._callees_of(c):
             for t in ts:
-                if t.id in seen:
+                if t.id in seen or t.type == "type_def":
                     continue
                 seen.add(t.id)
                 out.append(self._cite(t)); edges.append((c.name, t.name))
@@ -602,74 +767,130 @@ class GraphQuery:
                     break
         return Proof("callees", name, out, edges)
 
+    def defs_named(self, name: str) -> list:
+        """Definiciones de `name`; con `Clase.método`, solo las de esa clase si existen."""
+        defs = [c for c in self._resolve(name) if self._is_def(c)]
+        return [c for c in defs if _qual(c) == name] or defs
+
+    def nodes_named(self, name: str) -> list:
+        """Extremos de trace: las defs, o si no hay, lo que no sea un import (cápsulas sin
+        `content`, como en el chequeo (d), no cuentan como def para _is_def)."""
+        return self.defs_named(name) or [c for c in self._resolve(name) if not _is_import(c)]
+
     def impact(self, name: str, limit: int = 200) -> Proof:
-        """Cierre transitivo de quién se rompe si cambias `name` (callers de callers…)."""
-        roots = self._resolve(name)
-        start = roots[0].name if roots else name
-        seen, q, order, edges = {_bare(start)}, deque([start]), [], []
-        while q:
-            cur = q.popleft()
-            for caller in self._callers_of(cur):
-                key = _bare(caller.name)
-                if key not in seen:
-                    seen.add(key)
-                    order.append(caller); edges.append((caller.name, cur))
-                    q.append(caller.name)
-            if len(order) >= limit:
-                break
-        return Proof("impact", name, [self._cite(c) for c in order], edges)
+        """Cierre transitivo de quién se rompe si cambias `name` (callers de callers…).
+
+        Nodos por definición (id), no por nombre: antes dos dependientes `run` distintos
+        contaban como uno y cuál salía dependía del orden (27/10: faltaban dependientes en
+        150/300 nombres de leo-code). Se sube por la resolución (callers_of_def); lo que no
+        se resuelve sigue por nombre, así que no se quita ninguna arista incierta."""
+        roots = sorted(self.defs_named(name), key=_pos)
+        seen = {c.id for c in roots}
+        q = deque((c, 0) for c in roots) if roots else deque([(None, 0)])
+        order, cites, more = [], [], False
+        while q and not more:
+            cur, depth = q.popleft()
+            if cur is None:                   # símbolo sin definición indexada
+                nxt = self._callers_of(name)
+            else:
+                nxt = self.callers_of_def(cur) if self._is_def(cur) else self._callers_of(cur.name)
+            for c in sorted({c.id: c for c in nxt}.values(), key=_pos):
+                if c.id in seen:
+                    continue
+                if len(order) >= limit:
+                    more = True
+                    break
+                seen.add(c.id); order.append(c); q.append((c, depth + 1))
+                cites.append(replace(self._cite(c), via=_qual(cur) if depth else "", depth=depth + 1))
+        notes = [f"stopped at {limit}; more dependents exist"] if more else []
+        n_aux = sum(map(_is_aux_path, order))
+        if n_aux:
+            notes.append(f"{n_aux} of them in tests/benchmarks")
+        if self.type_note(name):
+            notes.append(TYPE_NOTE)
+        return Proof("impact", name, cites, note=" · ".join(notes))
+
+    def _hops(self, c) -> list[tuple]:
+        """(def destino, exacta, nº de defs posibles) por llamada de `c`: las resueltas van a
+        su def; las demás, a todas las defs con ese nombre (no se quita una arista incierta)."""
+        calls = getattr(c, "calls", None) or []
+        forms = (c.properties or {}).get("call_forms")
+        by_name, resolved = (calls, ()) if forms is None else self._split(c, forms, calls)
+        out = [(d, True, 1) for d in resolved]
+        for n in dict.fromkeys(by_name):
+            if self._edge_ok(c, n):
+                ts = [t for t in self._resolve(n) if not _is_import(t) and t.type != "type_def"]
+                out += [(t, False, len(ts)) for t in ts]
+        return out
+
+    def ctor_hops(self, c) -> list[tuple] | None:
+        """Lo que ejecuta construir la clase `c`: su `__new__`/`__init__`/`__post_init__`, también
+        heredados. La cápsula de clase agrega las llamadas de todos sus métodos y `A()` no
+        ejecuta `A.get`. None si no se sabe (no es clase Python, o una base de fuera puede
+        traer el `__init__` y llamar a cualquier método): entonces vale `_hops`."""
+        k, sc = f"{_norm(c.file_path)}\0{c.name}", self._scope
+        if c.type not in _CLASS_TYPES or k not in sc.classes \
+                or any(x in sc._ext for x in sc._mro(k)):
+            return None
+        init = sc._lookup(k, "__init__")
+        if init is None:
+            return None
+        ds = [*init, *(sc._lookup(k, "__new__") or ()), *(sc._lookup(k, "__post_init__") or ())]
+        return [(d, True, 1) for d in ds]
 
     def trace(self, src: str, dst: str, max_depth: int = 12) -> Proof:
         """Camino de llamadas más corto src → dst (BFS), con cada salto citado.
 
         Es el "¿cómo fluye de A a B?": devuelve la cadena de funciones que conecta
         ambos extremos. Funciona cross-repo y cross-lenguaje si las aristas existen.
+        Por definición (id), no por nombre: antes, tras cada salto se seguían los callees de
+        todas las homónimas y se citaba la primera def del nombre (27/10: en django solo 4
+        de 203 caminos citaban defs coherentes, y 112/200 cambiaban al reordenar el índice).
         """
-        src_caps = self._resolve(src)
-        if not src_caps:
-            return Proof("trace", f"{src} → {dst}")
-        dst_bare = _bare(dst)
-        # adyacencia: nombre -> set(callees por nombre)
-        start_names = {c.name for c in src_caps} | {_bare(c.name) for c in src_caps}
-        # BFS sobre nombres siguiendo `calls`
-        prev: dict[str, str | None] = {n: None for n in start_names}
-        q = deque(start_names)
-        hit = None
-        depth = {n: 0 for n in start_names}
-        while q:
-            cur = q.popleft()
-            if depth[cur] > max_depth:
+        query = f"{src} → {dst}"
+        srcs = sorted(self.nodes_named(src), key=_pos)
+        dst_defs = self.nodes_named(dst)
+        dsts = {c.id for c in dst_defs}
+        prev: dict = {c.id: None for c in srcs}
+        q, hit = deque((c, 0) for c in srcs), None
+        while q and hit is None:
+            c, depth = q.popleft()
+            # una clase agrega las llamadas de todos sus métodos: como salto intermedio
+            # inventaría caminos (construir `A()` no ejecuta `A.get`); se sigue por lo que
+            # ejecuta construirla, y si no se sabe, solo vale de origen
+            hops = self.ctor_hops(c) if depth else None
+            if depth >= max_depth or (hops is None and depth and c.type in _CLASS_TYPES):
                 continue
-            if _bare(cur) == dst_bare and cur not in start_names:
-                hit = cur; break
-            for c in self._resolve(cur):
-                for callee, _ in self._callees_of(c):
-                    if not self._edge_ok(c, callee):
-                        continue
-                    if _bare(callee) == dst_bare:
-                        prev[callee] = cur; hit = callee; q.clear(); break
-                    if callee not in prev:
-                        prev[callee] = cur; depth[callee] = depth[cur] + 1
-                        q.append(callee)
-                if hit:
-                    break
-            if hit:
-                break
-        if not hit:
-            return Proof("trace", f"{src} → {dst}")
-        # reconstruir camino
-        path, cur = [], hit
-        while cur is not None:
-            path.append(cur); cur = prev.get(cur)
-        path.reverse()
-        cites, edges = [], []
-        for i, n in enumerate(path):
-            r = self._resolve(n)
-            if r:
-                cites.append(self._cite(r[0]))
-            if i:
-                edges.append((path[i - 1], n))
-        return Proof("trace", f"{src} → {dst}", cites, edges)
+            for t, exact, n in sorted(self._hops(c) if hops is None else hops,
+                                      key=lambda h: (_pos(h[0]), not h[1])):
+                if t.id not in prev:
+                    prev[t.id] = (c, exact, n)
+                    if t.id in dsts:
+                        hit = t
+                        break
+                    q.append((t, depth + 1))
+        if hit is None:
+            return Proof("trace", query)
+        path, hops = [hit], []
+        while prev[path[-1].id] is not None:
+            c, exact, n = prev[path[-1].id]
+            hops.append((exact, n)); path.append(c)
+        path.reverse(); hops.reverse()
+        cites = [replace(self._cite(path[0]), name=_qual(path[0]))]
+        for a, b, (exact, n) in zip(path, path[1:], hops):
+            lines = self.call_lines(a, _bare(b.name), b)
+            http = _bare(b.name) in _xlang_targets(a)
+            hop = ("called at " + ", ".join(f":{ln}" for ln in lines) if lines
+                   else "via HTTP" if http
+                   else "on construction" if a.type in _CLASS_TYPES and b.name in _CTORS else "")
+            if not exact and not http:   # sin resolver: puede ir a otra def o fuera del repo
+                hop = f"{hop} ≈ by name{f', {n} candidates' if n > 1 else ''}".strip()
+            cites.append(replace(self._cite(b), name=_qual(b), hop=hop))
+        notes = [f"`{x}` matches {len(defs)} definitions (this path uses {c.file}:{c.line}); "
+                 "narrow with Class.method"
+                 for x, defs, c in ((src, srcs, cites[0]), (dst, dst_defs, cites[-1])) if len(defs) > 1]
+        edges = [(_qual(a), _qual(b)) for a, b in zip(path, path[1:])]
+        return Proof("trace", query, cites, edges, note=" · ".join(notes))
 
 
 # ----------------------------------------------------------------------------

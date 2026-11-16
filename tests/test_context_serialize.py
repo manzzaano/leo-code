@@ -21,7 +21,7 @@ def test_content_over_8000_chars_gets_truncated_with_marker():
     body = "x" * 9000
     node = {"id": "n1", "name": "foo", "type": "function", "properties": {"content": body}}
     out = serialize_context([node])
-    assert "[truncado]" in out
+    assert "[truncated]" in out
     assert "x" * 8000 in out
     assert "x" * 8001 not in out
 

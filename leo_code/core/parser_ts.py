@@ -8,11 +8,12 @@ compilador TS daba precisión 74% / recall 60%.
 Aquí los límites de cada símbolo (function/method/class) y sus llamadas vienen del
 árbol de sintaxis de tree-sitter, con la MISMA regla de callee que el oráculo:
 CallExpression cuyo callee es `identifier` (foo()) o `member_expression` (obj.foo())
-→ nombre base. Sin cap, sin truncado, sin denylist.
+→ nombre base, igual en `new Foo()` y en `<Foo/>`. Sin cap, sin truncado, sin denylist.
 """
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from leo_code.core.parser import Capsule
@@ -50,8 +51,8 @@ def _callee_name(call_node) -> str | None:
     if fn is None:
         return None
     # Quirk de tree-sitter: en `!!fn<T>(x)` el `function` queda como unary_expression
-    # envolviendo al callee. tsc resuelve a la llamada interna; desenvolvemos el unario.
-    while fn is not None and fn.type == "unary_expression":
+    # envolviendo al callee. tsc resuelve a la llamada interna; desenvolvemos el unario. Igual con `await fn<T>(x)`.
+    while fn is not None and fn.type in ("unary_expression", "await_expression"):
         fn = fn.children[-1] if fn.children else None
     if fn is None:
         return None
@@ -64,6 +65,34 @@ def _callee_name(call_node) -> str | None:
     return None
 
 
+def _new_name(node) -> str | None:
+    """`new Foo()` / `new ns.Foo()` → Foo. Sin esto ninguna clase TS tenía dependientes
+    (medido: 2428/2451 en nest): en TS se instancia con `new`, no con una llamada."""
+    k = node.child_by_field_name("constructor")
+    if k is None:
+        return None
+    if k.type == "identifier":
+        return k.text.decode("utf-8", "replace")
+    if k.type == "member_expression":
+        prop = k.child_by_field_name("property")
+        return prop.text.decode("utf-8", "replace") if prop is not None else None
+    return None
+
+
+def _jsx_name(node) -> str | None:
+    """`<Card/>` / `<ui.Modal>` → componente. En minúscula es etiqueta HTML (`<div>`,
+    `<motion.div>`), no un símbolo. Medido: 288 componentes de excalidraw sin callers."""
+    k = node.child_by_field_name("name")
+    if k is None or k.type not in ("identifier", "member_expression", "nested_identifier"):
+        return None
+    nm = k.text.decode("utf-8", "replace").rsplit(".", 1)[-1]
+    return nm if nm[:1].isupper() else None
+
+
+_CALL_NODES = {"call_expression": _callee_name, "new_expression": _new_name,
+               "jsx_opening_element": _jsx_name, "jsx_self_closing_element": _jsx_name}
+
+
 def _calls_in(node) -> list[str]:
     """Todos los nombres llamados dentro del subárbol (incluye anidados, como el oráculo)."""
     out: list[str] = []
@@ -71,8 +100,9 @@ def _calls_in(node) -> list[str]:
     stack = [node]
     while stack:
         n = stack.pop()
-        if n.type == "call_expression":
-            nm = _callee_name(n)
+        namer = _CALL_NODES.get(n.type)
+        if namer:
+            nm = namer(n)
             if nm and nm not in seen:
                 seen.add(nm); out.append(nm)
         stack.extend(n.children)
@@ -87,7 +117,13 @@ _DEF_NODES = {
     "method_definition": "method",
     "class_declaration": "class",
     "abstract_class_declaration": "class",
+    "interface_declaration": "interface",
+    "type_alias_declaration": "type",
+    "enum_declaration": "enum",
+    "internal_module": "namespace",
+    "module": "namespace",
 }
+_TYPE_KINDS = {"interface", "type", "enum", "namespace"}
 
 # TS/JS idiomático declara funciones como variables u objetos de funciones, no con
 # `function`: `const Page = () => …`, `const load = useCallback(() => …)`,
@@ -96,7 +132,7 @@ _DEF_NODES = {
 # MISMA regla en el oráculo tsc (benchmark/ts_oracle.js): VariableDeclaration /
 # PropertyAssignment cuyo initializer es arrow/function, o una llamada que envuelve una
 # (patrón useCallback/useMemo/memo).
-_FN_VALUES = {"arrow_function", "function_expression"}
+_FN_VALUES = {"arrow_function", "function_expression", "generator_function"}
 # Envoltorios que DEVUELVEN la función (siguen siendo una función con nombre). Lista
 # blanca a propósito: `const idx = xs.findIndex(t => …)` o `useMemo(() => …)` devuelven
 # un VALOR, no una función, y colarlos inventaba símbolos (visto en NEXUS: `idx`, `widths`).
@@ -121,6 +157,18 @@ def _fn_value(node):
     return None
 
 
+# `class C\u0032` se llama C2 para tsc; un identificador no admite otras barras
+_BS_U = chr(92) + "u"
+_ESCAPE = re.compile(r"\\u(?:\{([0-9a-fA-F]+)\}|([0-9a-fA-F]{4}))")
+
+
+def _identifiers(node) -> list[str]:
+    """Identificadores de un `nested_identifier`, en orden."""
+    if node.type in ("identifier", "property_identifier"):
+        return [node.text.decode("utf-8", "replace")]
+    return [s for ch in node.children for s in _identifiers(ch)]
+
+
 def extract_from_tree_sitter(content: str, file_path: str, language: str) -> list[Capsule]:
     grammar = "javascript" if language == "javascript" else (
         "tsx" if str(file_path).endswith(".tsx") else "typescript")
@@ -128,21 +176,21 @@ def extract_from_tree_sitter(content: str, file_path: str, language: str) -> lis
     lines = content.split("\n")
     caps: list[Capsule] = []
 
-    def name_of(node):
-        nm = node.child_by_field_name("name")
-        return nm.text.decode("utf-8", "replace") if nm is not None else None
-
     def emit(name: str, kind: str, node) -> None:
+        if _BS_U in name and not name.startswith(("'", '"', "[")):
+            name = _ESCAPE.sub(lambda m: chr(int(m.group(1) or m.group(2), 16)), name)
         start = node.start_point[0] + 1
         end = node.end_point[0] + 1
-        ctype = "class" if kind == "class" else ("method" if kind == "method" else "function")
+        is_type = kind in _TYPE_KINDS
+        ctype = "type_def" if is_type else kind
         body = "\n".join(lines[start - 1:end])
         caps.append(Capsule(
             id=f"{file_path}:{start}:{name}",
             type=ctype, name=name, file_path=file_path,
             start_line=start, end_line=end,
             language=language, signature=f"{kind} {name}",
-            content=body[:3000], calls=_calls_in(node),
+            # un tipo no tiene aristas: `namespace` agregaría las de los símbolos que contiene
+            content=body[:3000], calls=[] if is_type else _calls_in(node),
             properties={"lineas": end - start + 1},
         ))
 
@@ -161,21 +209,31 @@ def extract_from_tree_sitter(content: str, file_path: str, language: str) -> lis
             if (key is not None and key.type in ("property_identifier", "identifier")
                     and _fn_value(n.child_by_field_name("value")) is not None):
                 emit(key.text.decode("utf-8", "replace"), "function", n)
+        elif n.type in ("public_field_definition", "field_definition"):
+            # `class C { onClick = () => … }`: en TS el nombre es `name`, en JS `property`
+            key = n.child_by_field_name("name") or n.child_by_field_name("property")
+            if (key is not None and key.type in ("property_identifier", "private_property_identifier")
+                    and _fn_value(n.child_by_field_name("value")) is not None):
+                emit(key.text.decode("utf-8", "replace"), "method", n)
+        elif n.type == "assignment_expression" and _fn_value(n.child_by_field_name("right")) is not None:
+            # `a.b = function(){}`, `Foo.prototype.m = () => …`, `exports.e = …`
+            left = n.child_by_field_name("left")
+            prop = left.child_by_field_name("property") if left.type == "member_expression" else None
+            nm = (prop if prop is not None else left).text.decode("utf-8", "replace")
+            if (left.type == "identifier" or prop is not None) and nm != "exports":
+                emit(nm, "function", n)
         kind = _DEF_NODES.get(n.type)
         if kind:
-            name = name_of(n)
-            if name:
-                start = n.start_point[0] + 1
-                end = n.end_point[0] + 1
-                ctype = "class" if kind == "class" else ("method" if kind == "method" else "function")
-                body = "\n".join(lines[start - 1:end])
-                caps.append(Capsule(
-                    id=f"{file_path}:{start}:{name}",
-                    type=ctype, name=name, file_path=file_path,
-                    start_line=start, end_line=end,
-                    language=language, signature=f"{kind} {name}",
-                    content=body[:3000], calls=_calls_in(n),
-                    properties={"lineas": end - start + 1},
-                ))
+            name_node = n.child_by_field_name("name")
+            # `declare module "pkg"` nombra un paquete ajeno, no un símbolo
+            if name_node is None or (kind == "namespace" and name_node.type == "string"):
+                pass
+            elif name_node.type == "nested_identifier":
+                # `namespace A.B.C` declara A, B y C (como tsc); los segmentos son
+                # identifier aunque haya comentarios entre ellos
+                for seg in _identifiers(name_node):
+                    emit(seg, kind, n)
+            else:
+                emit(name_node.text.decode("utf-8", "replace"), kind, n)
         stack.extend(n.children)
     return caps

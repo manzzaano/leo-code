@@ -1,7 +1,8 @@
 // Oráculo TS INDEPENDIENTE: re-deriva el grafo de llamadas con el COMPILADOR TypeScript
 // (Microsoft tsc, parser distinto al tree-sitter de leo). Por símbolo function/method/class
-// recoge los callees: CallExpression con callee Identifier (foo()) o PropertyAccess
-// (obj.foo()). Tagged templates y NewExpression NO cuentan (no son CallExpression).
+// recoge los callees: CallExpression y NewExpression con callee Identifier (foo()) o
+// PropertyAccess (obj.foo()), y elementos JSX en mayúscula. Tagged templates NO cuentan.
+// Los tipos (interface/type/enum/namespace) son símbolos sin callees.
 // Salida: JSON {archivo: [[name, line, [calls...]], ...]} por stdout.
 //
 // Uso:  node benchmark/ts_oracle.js <repo_dir>
@@ -21,10 +22,14 @@ function walkFiles(dir, out) {
 function callsIn(node) {
   const out = new Set();
   (function rec(n) {
-    if (ts.isCallExpression(n)) {
+    if (ts.isCallExpression(n) || ts.isNewExpression(n)) {
       const c = n.expression;
       if (ts.isIdentifier(c)) out.add(c.text);
       else if (ts.isPropertyAccessExpression(c)) out.add(c.name.text);
+    } else if (ts.isJsxOpeningElement(n) || ts.isJsxSelfClosingElement(n)) {
+      const t = n.tagName;
+      const nm = ts.isIdentifier(t) ? t.text : (ts.isPropertyAccessExpression(t) ? t.name.text : "");
+      if (/^[A-Z]/.test(nm)) out.add(nm);
     }
     ts.forEachChild(n, rec);
   })(node);
@@ -57,16 +62,41 @@ for (const f of files) {
   let sf;
   try { sf = ts.createSourceFile(f, fs.readFileSync(f, "utf8"), ts.ScriptTarget.Latest, true); }
   catch { continue; }
+  // Sintaxis inválida (tests de recuperación de errores del compilador): cada parser se
+  // recupera a su manera, no hay verdad que comparar.
+  if (sf.parseDiagnostics && sf.parseDiagnostics.length) continue;
   const syms = [];
   (function rec(n) {
     let name = null;
-    if (ts.isFunctionDeclaration(n) && n.name) name = n.name.text;
-    else if (ts.isMethodDeclaration(n) && n.name) name = n.name.getText(sf);
+    // Con cuerpo: abstract y overloads son firmas, y leo aún no las indexa.
+    if (ts.isFunctionDeclaration(n) && n.name && n.body) name = n.name.text;
+    // `.text` resuelve los escapes unicode del nombre (como parser_ts.py); los computados no tienen `.text`
+    else if (ts.isMethodDeclaration(n) && n.name && n.body)
+      name = (ts.isIdentifier(n.name) || ts.isPrivateIdentifier(n.name)) ? n.name.text : n.name.getText(sf);
     else if (ts.isClassDeclaration(n) && n.name) name = n.name.text;
     // Funciones declaradas como variable u objeto de funciones (const f = () => …,
     // const f = useCallback(() => …), { jobs: () => … }): misma regla en parser_ts.py.
     else if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && fnValue(n.initializer)) name = n.name.text;
-    else if (ts.isPropertyAssignment(n) && fnValue(n.initializer)) name = n.name.getText(sf);
+    // Clave con nombre: `[K]: …` y `"a-b": …` no son símbolos, tampoco en parser_ts.py.
+    else if (ts.isPropertyAssignment(n) && ts.isIdentifier(n.name) && fnValue(n.initializer)) name = n.name.text;
+    // Campos de clase y asignaciones con función: misma regla en parser_ts.py.
+    else if (ts.isPropertyDeclaration(n) && fnValue(n.initializer)
+             && (ts.isIdentifier(n.name) || ts.isPrivateIdentifier(n.name))) name = n.name.text;
+    else if (ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.EqualsToken
+             && fnValue(n.right)) {
+      const l = n.left;
+      const nm = ts.isIdentifier(l) ? l.text : (ts.isPropertyAccessExpression(l) ? l.name.text : null);
+      if (nm && nm !== "exports") name = nm;
+    }
+    let typeName = null;
+    if (ts.isInterfaceDeclaration(n) || ts.isTypeAliasDeclaration(n) || ts.isEnumDeclaration(n)) typeName = n.name.text;
+    else if (ts.isModuleDeclaration(n) && !ts.isStringLiteral(n.name)
+             && !(n.flags & ts.NodeFlags.GlobalAugmentation))
+      typeName = ts.isIdentifier(n.name) ? n.name.text : n.name.getText(sf);
+    if (typeName) {
+      const line = sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
+      syms.push([typeName, line, []]);
+    }
     if (name) {
       const line = sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
       syms.push([name, line, callsIn(n)]);

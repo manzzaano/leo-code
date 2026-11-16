@@ -260,3 +260,24 @@ def test_doctor_desde_la_cache_de_uv_no_manda_a_un_init_que_no_lo_instalara(tmp_
     cli.main(["doctor", str(tmp_path)])
     fila = next(l for l in capsys.readouterr().out.splitlines() if "guard hook" in l)
     assert "uv tool install leo-mcp" in fila
+
+
+def test_avisa_aunque_el_repo_viva_bajo_una_carpeta_test(tmp_path, monkeypatch):
+    # Revisión E, H6: la ruta absoluta contiene `/test/` y el hook lo tomaba por un test.
+    root = tmp_path / "test" / "app"
+    _write(root / "core.py", "def get_session():\n    return 1\n\n\ndef lonely_writer():\n"
+                             "    return get_session()\n")
+    monkeypatch.setattr(engine, "_CACHE_DIR", tmp_path / "cache")
+    monkeypatch.setattr(engine, "_indexer", None)
+    monkeypatch.setattr(engine, "_structural_at", {})
+    monkeypatch.setattr(engine, "_generation", {})
+    monkeypatch.setattr(engine, "_synced_at", {})
+    monkeypatch.setattr(engine, "_save_timers", {})
+    monkeypatch.setattr(engine, "_SAVE_DEBOUNCE_S", 0.0)
+    monkeypatch.setattr(engine, "_WATCH", False)
+    engine.ensure_structural(str(root))
+    try:
+        out = _run_in_process(_payload("Edit", root / "core.py", root, old="    return 1"))
+    finally:
+        engine._get_indexer().stop_watch()
+    assert out is not None and "lonely_writer" in out["hookSpecificOutput"]["additionalContext"]

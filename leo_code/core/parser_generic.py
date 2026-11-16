@@ -203,7 +203,7 @@ def _build_capsule(match: re.Match, ptype: str, language: str,
     end_lineno = _find_block_end(lines, lineno, language)
     block_content = "\n".join(lines[lineno - 1:end_lineno])
     if len(block_content) > 3000:
-        block_content = block_content[:3000] + "\n# ... [truncado]"
+        block_content = block_content[:3000] + "\n# ... [truncated]"
 
     calls = _find_calls_in_block(block_content, language)
 
@@ -379,7 +379,7 @@ def _extract_heuristic(content: str, file_path: str, language: str) -> list[Caps
 
         block = "\n".join(lines[i - 1:end])
         if len(block) > 3000:
-            block = block[:3000] + "\n# ... [truncado]"
+            block = block[:3000] + "\n# ... [truncated]"
 
         capsules.append(Capsule(
             id=_make_id(file_path, i, sig),

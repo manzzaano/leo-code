@@ -211,12 +211,13 @@ def _peak_mb():
 
 
 def _mem_child(repo, cache):
-    """Lo que hace leo-mcp con un repo: estructura + grafo + varias get_context."""
+    """Lo que hace leo-mcp con un repo: estructura + grafo + guard + varias get_context."""
     os.environ.update(LEO_CACHE_DIR=cache, LEO_WATCH="0", LEO_SEMANTIC="0")
     from leo_code import engine
     from leo_code.server import mcp_server
     engine.ensure_structural(repo)
-    mcp_server._repo_graph(repo)
+    caps, _ = mcp_server._repo_graph(repo)
+    mcp_server._guardian(repo, caps).test_closure()
     for q in _MEM_QUERIES:
         engine.compute_context(repo, q)
     engine.flush_index()

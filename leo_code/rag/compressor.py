@@ -186,7 +186,7 @@ def _build_nodes_from_config(
         if config.include_body and c.content:
             body = c.content
             if len(body) > config.body_chars:
-                body = body[:config.body_chars] + "\n# ... [truncado]"
+                body = body[:config.body_chars] + "\n# ... [truncated]"
             props["content"] = body
 
         if config.include_calls and c.calls:
@@ -272,7 +272,7 @@ def _build_nodes_from_config(
             if target_node and "content" not in target_node["properties"]:
                 body = target.content[:1200]
                 if len(target.content) > 1200:
-                    body += "\n# ... [truncado]"
+                    body += "\n# ... [truncated]"
                 target_node["properties"]["content"] = body
 
     context = serialize_context(nodes)
@@ -357,7 +357,7 @@ def _compress_query(top_capsules: list[Capsule], budget_tokens: int) -> str:
             room = char_budget - total_chars - 80  # margen para fences + marcador
             if room > 400 and c.type not in ("document", "file_header"):
                 head = c.content[:room]
-                body_text = f"[{c.name}|{c.type}] {c.file_path}\n```\n{head}\n# ... [truncado]\n```"
+                body_text = f"[{c.name}|{c.type}] {c.file_path}\n```\n{head}\n# ... [truncated]\n```"
                 parts.append(body_text)
                 total_chars += len(body_text)
                 continue
@@ -399,7 +399,7 @@ def _compress_query(top_capsules: list[Capsule], budget_tokens: int) -> str:
     edges = []
     for c in top_capsules:
         for call in c.calls[:5]:
-            edges.append(f"[{c.name}]-[LLAMA]-[{call}]")
+            edges.append(f"[{c.name}]-[CALLS]-[{call}]")
 
     if edges:
         context += "\n---\n" + "\n".join(edges[:5])
@@ -492,7 +492,7 @@ def _compress_optimize(top_capsules: list[Capsule], all_capsules: list[Capsule])
         seen.add(c.name)
         body = c.content or ""
         if len(body) > 2000:
-            body = body[:2000] + "\n# ... [truncado]"
+            body = body[:2000] + "\n# ... [truncated]"
         props = {
             "signature": c.signature,
             "file_path": c.file_path,

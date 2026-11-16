@@ -34,6 +34,7 @@ def fresh_engine(tmp_path, monkeypatch):
     # tiene sus propios tests en test_deferred_save.py.
     monkeypatch.setattr(engine, "_SAVE_DEBOUNCE_S", 0.0)
     monkeypatch.setattr(mcp_server, "_gq_cache", {})
+    monkeypatch.setattr(mcp_server, "_guard_cache", {})
     monkeypatch.setattr(engine, "SEMANTIC", False)
     return tmp_path
 
@@ -145,9 +146,79 @@ def test_who_calls_cites_call_lines_not_just_the_caller_definition(fresh_engine,
                   "    return get_session()\n").parent  # 9
     out = mcp_server._graph({"op": "who_calls", "symbol": "get_session", "repo_path": str(repo)})
     assert "3 call site(s)" in out
-    assert "run (method) @ agent.py:4 → calls at :5, :6" in out
+    assert "Agent.run (method) @ agent.py:4 → calls at :5, :6" in out
     assert "other (function) @ agent.py:8 → calls at :9" in out
     assert "Agent (class)" not in out   # sus llamadas ya las cubre su método
+
+
+_TWO_SAVES = ("class A:\n"                 # 1
+              "    def save(self):\n"      # 2
+              "        return 1\n"         # 3
+              "class B:\n"                 # 4
+              "    def save(self):\n"      # 5
+              "        return 2\n"         # 6
+              "def use_a():\n"             # 7
+              "    a = A()\n"              # 8
+              "    a.save()\n"             # 9
+              "def use_b():\n"             # 10
+              "    b = B()\n"              # 11
+              "    b.save()\n"             # 12
+              "def use_any(x):\n"          # 13
+              "    x.save()\n"             # 14
+              "def both():\n"              # 15
+              "    a = A()\n"              # 16
+              "    b = B()\n"              # 17
+              "    a.save()\n"             # 18
+              "    b.save()\n")            # 19
+
+
+def test_who_calls_class_method_lists_only_callers_of_that_definition(fresh_engine, tmp_path):
+    repo = _write(tmp_path / "svc" / "m.py", _TWO_SAVES).parent
+    out = mcp_server._graph({"op": "who_calls", "symbol": "A.save", "repo_path": str(repo)})
+    assert "use_a (function) @ m.py:7 → calls at :9" in out
+    assert "use_any (function) @ m.py:13 → calls at :14" in out   # sin resolver: por nombre
+    assert "both (function) @ m.py:15 → calls at :18\n" in out    # no la línea de b.save()
+    assert "use_b" not in out
+
+
+def test_who_calls_bare_name_with_homonyms_says_how_to_narrow(fresh_engine, tmp_path):
+    repo = _write(tmp_path / "svc" / "m.py", _TWO_SAVES).parent
+    out = mcp_server._graph({"op": "who_calls", "symbol": "save", "repo_path": str(repo)})
+    assert "use_b (function)" in out and "use_a (function)" in out
+    assert "2 definitions named save (A.save, B.save)" in out
+
+
+def test_who_calls_homonym_functions_name_their_files(fresh_engine, tmp_path):
+    _write(tmp_path / "svc" / "a.py", "def main():\n    return 1\ndef run():\n    main()\n")
+    repo = _write(tmp_path / "svc" / "b.py", "def main():\n    return 2\n").parent
+    out = mcp_server._graph({"op": "who_calls", "symbol": "main", "repo_path": str(repo)})
+    assert "2 definitions named main (main @ a.py:1, main @ b.py:1)" in out
+    assert "Class.method" not in out   # funciones de módulo: no hay clase con la que acotar
+
+
+def test_who_calls_puts_product_first_and_says_when_it_cuts(fresh_engine, tmp_path):
+    _write(tmp_path / "svc" / "core.py", "def helper():\n    return 1\n"
+                                         "def zz_main():\n    return helper()\n")
+    _write(tmp_path / "svc" / "tests" / "test_h.py",
+           "".join(f"def test_{i:02}():\n    helper()\n" for i in range(55)))
+    out = mcp_server._graph({"op": "who_calls", "symbol": "helper", "repo_path": str(tmp_path / "svc")})
+    lines = out.splitlines()
+    assert lines[1].startswith("  · zz_main (function) @ core.py:3")
+    assert "showing 50 of 56 callers (55 in tests/benchmarks)" in out
+
+
+def test_who_calls_ignores_names_in_docstrings_and_comments(fresh_engine, tmp_path):
+    repo = _write(tmp_path / "svc" / "m.py",
+                  "def helper(x):\n"                      # 1
+                  "    return x\n"                        # 2
+                  "class Svc:\n"                          # 3
+                  '    """Use helper(x) to do things."""\n'  # 4
+                  "    def run(self):\n"                  # 5
+                  "        # helper(2) is cheap\n"        # 6
+                  "        return helper(1)\n").parent    # 7
+    out = mcp_server._graph({"op": "who_calls", "symbol": "helper", "repo_path": str(repo)})
+    assert "1 call site(s) in 1 caller(s)" in out
+    assert "Svc.run (method) @ m.py:5 → calls at :7\n" in out
 
 
 def test_index_persists_and_resyncs(fresh_engine, fullstack, monkeypatch):
@@ -234,6 +305,28 @@ def test_get_context_says_so_when_nothing_matches(fresh_engine, tmp_path):
     assert "Answer from this" not in out
 
 
+
+def test_get_context_answers_with_code_when_query_reads_as_code_gen(fresh_engine, tmp_path):
+    # "write" clasifica code_gen, cuya estrategia es solo el árbol de directorios (y apunta
+    # a search_code, tool del agente antiguo): por MCP get_context devuelve código siempre.
+    repo = _write(tmp_path / "shop" / "app.py",
+                  "def write_invoice(order):\n    return format_total(order)\n").parent
+    out = mcp_server._get_context({"query": "how does write_invoice write the invoice", "repo_path": str(repo)})
+    assert "def write_invoice" in out
+    assert "search_code" not in out and "Estructura del repositorio" not in out
+
+
+def test_get_context_labels_are_english(fresh_engine, tmp_path):
+    # El agente recibía "Tipo Retorno", "Parametros", "[LLAMA]" y "[truncado]".
+    body = "\n".join(f"    x{i} = helper({i})" for i in range(400))
+    repo = _write(tmp_path / "shop" / "app.py",
+                  "def helper(n: int) -> int:\n    return n\n\n\n"
+                  f"def compute_total(items: list) -> int:\n{body}\n    return 0\n").parent
+    out = mcp_server._get_context({"query": "compute_total", "repo_path": str(repo)})
+    assert "compute_total" in out
+    for spanish in ("Tipo Retorno", "Parametros", "[LLAMA]", "[truncado]", "Lineas"):
+        assert spanish not in out, spanish
+
 def test_codex_snippet_is_valid_toml(capsys, tmp_path):
     # Codex no está instalado aquí: al menos el TOML que imprimimos debe parsear.
     import tomllib
@@ -264,3 +357,34 @@ def test_importing_engine_does_not_write_into_cwd(tmp_path):
     subprocess.run([sys.executable, "-c", "import leo_code.server.mcp_server"],
                    cwd=tmp_path, env=env, check=True, capture_output=True)
     assert list(tmp_path.iterdir()) == []
+
+
+def test_trace_to_an_external_symbol_says_it_is_not_in_the_repo(fresh_engine, tmp_path):
+    repo = _write(tmp_path / "svc" / "m.py",
+                  "def fetch_all(client):\n    return client.fetch_page('x')\n").parent
+    out = mcp_server._graph({"op": "trace", "src": "fetch_all", "dst": "fetch_page", "repo_path": str(repo)})
+    assert "`fetch_page` has no definition in this repo" in out
+    assert "No static call path" not in out
+
+
+def test_guard_reuses_guardian_until_index_changes(fresh_engine, fullstack, monkeypatch):
+    # Guardian(caps) se construía en CADA llamada: django 11-18 s por guard.
+    built = []
+    real = mcp_server.Guardian
+    monkeypatch.setattr(mcp_server, "Guardian", lambda caps, *a: built.append(1) or real(caps, *a))
+    args = {"op": "guard", "symbol": "get_session", "repo_path": str(fullstack)}
+    first = mcp_server._graph(args)
+    assert mcp_server._graph(args) == first and len(built) == 1
+    engine._generation[str(fullstack)] = engine.generation(str(fullstack)) + 1
+    mcp_server._graph(args)
+    assert len(built) == 2
+
+
+def test_guardian_viejo_se_suelta_antes_de_construir_el_nuevo(monkeypatch):
+    # Dos Guardian vivos a la vez eran el pico de RAM tras una edición (512 MB en django)
+    from leo_code.server import mcp_server as M
+    monkeypatch.setattr(M, "_guard_cache", {"r": ({}, object())})
+    vivos = []
+    monkeypatch.setattr(M, "Guardian", lambda caps, *a: vivos.append("r" in M._guard_cache) or object())
+    M._guardian("r", {"nuevo": 1})
+    assert vivos == [False]

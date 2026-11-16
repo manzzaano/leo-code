@@ -47,6 +47,7 @@ _indexed_repos: set[str] = set()
 # veces se la llama desde dentro de ensure_structural, que ya lo tiene cogido (flush
 # síncrono). Con un Lock simple eso era un deadlock del propio hilo.
 _index_lock = threading.RLock()
+_save_lock = threading.Lock()       # escrituras del índice en serie (ver _write_index)
 _index_executor = ThreadPoolExecutor(max_workers=1)
 _bm25_stores: dict[str, object] = {}
 
@@ -128,6 +129,34 @@ class _NoVectorStore:
 _NO_VECTOR_STORE = _NoVectorStore()
 
 
+class _SafeVectorStore:
+    """La semántica es un extra: si qdrant falla (p. ej. una colección escrita por otra
+    versión del cliente) se avisa una vez por stderr y el repo sigue sin ella, con
+    exacto + BM25. Antes el error de qdrant tumbaba get_context entero."""
+
+    def __init__(self, vs):
+        self._vs = vs
+
+    def _call(self, name, *a, **k):
+        try:
+            return getattr(self._vs, name)(*a, **k)
+        except Exception as e:
+            if self._vs is not _NO_VECTOR_STORE:
+                print(f"[leo-mcp] semantic recall off for this repo: {type(e).__name__}: "
+                      f"{str(e)[:200]}", file=sys.stderr)
+                self._vs = _NO_VECTOR_STORE
+            return getattr(_NO_VECTOR_STORE, name)(*a, **k)
+
+    def add(self, capsules):
+        return self._call("add", capsules)
+
+    def search(self, query, top_k=50):
+        return self._call("search", query, top_k=top_k)
+
+    def count(self):
+        return self._call("count")
+
+
 def _get_vector_store(repo_path: str):
     if not SEMANTIC:
         return _NO_VECTOR_STORE
@@ -142,7 +171,7 @@ def _get_vector_store(repo_path: str):
                 # en disco entre reinicios → los embeddings se reusan en vez de re-embeber
                 # las ~1400 cápsulas en cada arranque del server/MCP.
                 stable = hashlib.md5(repo_path.encode("utf-8")).hexdigest()[:8]
-                _vector_stores[repo_path] = VectorStore(
+                _vector_stores[repo_path] = _SafeVectorStore(VectorStore(
                     collection_name=f"leo_mcp_{stable}",
                     path=os.environ.get("LEO_QDRANT_PATH") or str(_CACHE_DIR / "qdrant"),
                     # El hash estable YA identifica el repo; el aislamiento entre
@@ -150,7 +179,7 @@ def _get_vector_store(repo_path: str):
                     # no un sufijo de PID en el nombre de coleccion — con PID cada
                     # reinicio/subproceso pierde los embeddings ya calculados.
                     use_process_id=False,
-                )
+                ))
     return _vector_stores[repo_path]
 
 
@@ -207,7 +236,7 @@ def _warn_if_huge(repo: str, n: int) -> None:
 # Sube cuando cambia lo que el parser extrae (nuevas cápsulas, nuevas aristas): el índice
 # en disco se re-parsea solo por mtime, así que sin esto una caché vieja seguiría sirviendo
 # símbolos del parser anterior para siempre (p.ej. sin arrow functions ni atributos de clase).
-_INDEX_FORMAT = 6
+_INDEX_FORMAT = 11
 
 
 def repo_index_path(repo: str) -> Path:
@@ -222,8 +251,12 @@ def generation(repo: str) -> int:
 
 
 def _write_index(repo: str, path: Path, timer: bool = False) -> None:
-    """Escribe el índice de `repo` en `path`. Coge _index_lock: `save()` itera las
-    cápsulas y un sync concurrente las mutaría.
+    """Escribe el índice de `repo` en `path`. _index_lock solo para tomar la instantánea:
+    `sync` sustituye cápsulas, no las modifica, así que serializarla fuera es seguro, y en
+    django retener el lock durante la escritura (~2,4 s) bloqueaba la llamada siguiente.
+    _save_lock mantiene el orden: una instantánea vieja no pisa a una nueva, y comparten
+    el `.tmp<pid>`. Se toma sin esperar: ensure_structural puede llegar aquí con
+    _index_lock cogido y esperar teniéndolo interbloqueaba con un temporizador.
 
     La ruta se fija al AGENDAR, no aquí: entre el cambio y la escritura diferida la
     caché puede haber cambiado de sitio (tests que la mueven, LEO_CACHE_DIR), y un
@@ -231,19 +264,25 @@ def _write_index(repo: str, path: Path, timer: bool = False) -> None:
 
     timer=True: la llama el temporizador, que solo escribe si sigue siendo el agendado
     (un flush pudo adelantarse y escribirlo ya, o un cambio posterior reagendarlo)."""
-    with _index_lock:
-        if timer and (_save_timers.get(repo) or (None,))[0] is not threading.current_thread():
-            return
-        _save_timers.pop(repo, None)
-        idx = _get_indexer()
-        prefix = repo + os.sep
-        if not any(_in_repo(c.file_path, repo, prefix) for c in idx.get_capsules().values()):
-            return   # nada de este repo que cachear (repo vacío, o ya purgado)
-        try:
+    while True:
+        with _index_lock:
+            if timer and (_save_timers.get(repo) or (None,))[0] is not threading.current_thread():
+                return
+            if _save_lock.acquire(blocking=False):
+                _save_timers.pop(repo, None)
+                idx = _get_indexer()
+                prefix = repo + os.sep
+                items = [c for c in idx.get_capsules().values() if _in_repo(c.file_path, repo, prefix)]
+                break
+        time.sleep(0.01)
+    try:
+        if items:   # si no, nada de este repo que cachear (repo vacío, o ya purgado)
             path.parent.mkdir(parents=True, exist_ok=True)
-            idx.save(str(path), repo=repo)
-        except Exception as e:   # el índice en disco es una CACHÉ: fallar al escribirla
-            print(f"[leo-mcp] could not write the index cache: {e}", file=sys.stderr)
+            idx.save(str(path), items=items)
+    except Exception as e:   # el índice en disco es una CACHÉ: fallar al escribirla
+        print(f"[leo-mcp] could not write the index cache: {e}", file=sys.stderr)
+    finally:
+        _save_lock.release()
 
 
 def _schedule_save(repo: str) -> None:
@@ -279,7 +318,7 @@ def flush_index(repo: str | None = None) -> None:
             _write_index(r, pending[1])
     # una escritura diferida que ya empezó tiene el lock: esperarla. Si no, el proceso sale
     # con el hilo daemon a medias y el índice no llega a disco (medido en django)
-    with _index_lock:
+    with _save_lock:
         pass
 
 
@@ -465,6 +504,19 @@ def _name_parts(name: str) -> set[str]:
     return out
 
 
+# Sin cuerpo que mostrar: imports, cabeceras de archivo y campos de dataclass.
+_NO_BODY = frozenset({"module", "file_header", "attribute"})
+
+
+def _demoted(c, query_parts: set[str]) -> int:
+    """1 = al final del contexto: tests (salvo que la pregunta hable de tests) y símbolos
+    sin cuerpo. Medido en nl_retrieval_bench: abrían 4 de cada 10 respuestas."""
+    if c.type in _NO_BODY:
+        return 1
+    is_test = c.type == "test" or "tests" in Path(c.file_path or "").parts
+    return int(is_test and "test" not in query_parts)
+
+
 def _get_bm25(repo: str, caps: dict) -> object:
     # Clave = generación del índice estructural: tras un resync (el agente editó código)
     # BM25 se reconstruye; antes se quedaba con los símbolos del arranque.
@@ -493,11 +545,14 @@ def compute_context(repo: str, query: str, task_type_in: str = "auto",
     idx = _get_indexer()
     all_caps = idx.get_capsules()
     repo_prefix = repo + os.sep
-    caps = {
-        k: v for k, v in all_caps.items()
-        if os.path.abspath(v.file_path).startswith(repo_prefix) or
-           os.path.abspath(v.file_path) == repo
-    }
+    # ruta DENTRO del repo, para casar palabras de la pregunta: con la absoluta, «data»
+    # casaba con todo lo que viva bajo C:/Users/…/AppData (y «code» con todo leo-code)
+    rel: dict[str, str] = {}
+    for k, v in all_caps.items():
+        p = os.path.abspath(v.file_path)
+        if p.startswith(repo_prefix) or p == repo:
+            rel[k] = p[len(repo_prefix):].lower().replace("\\", "/")
+    caps = {k: all_caps[k] for k in rel}
     vs = _get_vector_store(repo)
 
     from leo_code.rag.classifier import classify_task, TOKEN_BUDGET
@@ -531,7 +586,10 @@ def compute_context(repo: str, query: str, task_type_in: str = "auto",
         return {"context": context, "tokens": len(context) // 2, "task_type": task_type, "capsules_total": len(caps)}
 
     # Hybrid: exact match (one rep per file for path, name match) + semantic
-    query_words = set(re.findall(r"\w{4,}", query.lower()))
+    from leo_code.rag.bm25 import _STOP, code_tokens
+    # Sin palabras de pregunta: "where" casaba con GraphQuery.where y "does"/"what" con todo.
+    query_words = set(re.findall(r"\w{4,}", query.lower())) - _STOP
+    query_parts = set(code_tokens(query))
     # Siglas y palabras cortas ("CV", "db", "ws"): el corte en 4 las tiraba y "How does CV
     # tailoring work?" no casaba con cv_morpher.py (medido en NEXUS: el contexto lo lideraba
     # pdf_factory, código muerto). Solo cuentan como PARTE completa de un nombre/stem, nunca
@@ -561,25 +619,31 @@ def compute_context(repo: str, query: str, task_type_in: str = "auto",
     specific_file_paths: set[str] = set()
     for c in caps.values():
         stem = Path(c.file_path).stem.lower()
+        if stem.startswith("__"):
+            continue  # "init" no nombra los __init__.py (sin esto, la query de `leo-mcp init` traía 5)
         parts = set(re.split(r"[_\-.]", stem))
         if any(w == stem or w == stem.replace("_", "") for w in query_words) or (short_words & parts):
             specific_file_paths.add(c.file_path)
 
-    path_seen: set[str] = set()
     specific_match: list = []  # ALL capsules from explicitly-named files (highest priority)
-    path_match: list = []      # one capsule per other path-matched file
-    name_match: list = []
-    for c in caps.values():
-        fp = (c.file_path or "").lower().replace("\\", "/")
+    loose_match: list = []     # ruta o nombre que casa con alguna palabra: candidatos, no líderes
+    for k, c in caps.items():
+        fp = rel[k]
         nm = c.name.lower()
         if c.file_path in specific_file_paths:
             specific_match.append(c)
-        elif any(w in fp for w in query_words):
-            if c.file_path not in path_seen:
-                path_match.append(c)
-                path_seen.add(c.file_path)
-        elif any(w in nm for w in query_words) or (short_words & _name_parts(c.name)):
-            name_match.append(c)
+        elif any(w in fp or w in nm for w in query_words) or (short_words & _name_parts(c.name)):
+            loose_match.append(c)
+    # Antes iban DELANTE de la fusión: la 1ª cápsula de cada archivo con la palabra en la
+    # ruta (en guard_hook.py, el `from __future__ import annotations`) y cualquier nombre
+    # con la palabra dentro ("calls" → include_calls). Ahora solo lidera el símbolo nombrado
+    # tal cual; el resto entra en la fusión ordenado por palabras compartidas con la query.
+    named = [c for c in loose_match
+             if c.name.split(".")[-1].lower() in query_words and not _demoted(c, query_parts)]
+    # el corte a 5 de abajo: `CanActivate` (interface) no debe perder frente a N `canActivate`
+    named.sort(key=lambda c: c.name.split(".")[-1] not in query)
+    loose_match.sort(key=lambda c: (_demoted(c, query_parts),
+                                    -len(query_parts & set(code_tokens(f"{c.name} {Path(c.file_path).stem}")))))
     specific_match.sort(
         key=lambda c: (
             -_dir_priority(c),
@@ -588,14 +652,19 @@ def compute_context(repo: str, query: str, task_type_in: str = "auto",
             # preguntado desaparece del contexto (recall = precisión perdida).
             0 if c.name.split(".")[-1].lower() in query_words else 1,
             -sum(1 for w in query_words if w in (c.file_path or "").lower().replace("\\", "/")),
+            # Dentro del archivo nombrado: tests/imports al final y, delante, lo que comparte
+            # palabras con la pregunta ("watcher reindex changed" → sync/watch, no los imports).
+            _demoted(c, query_parts),
+            -len(query_parts & set(code_tokens(c.name))),
             # Prefer actual defs (no dots, type is function/class) over imports and modules
             0 if (c.type in ("function", "class") and "." not in c.name) else 1,
             -sum(1 for w in query_words if w in c.name.lower()),
         ),
     )
     # specific_match first → guarantees target file content leads the context
-    exact = specific_match[:20] + path_match[:5] + name_match[:3]
+    exact = specific_match[:20] + named[:5]   # named sale de loose_match: nunca está en specific_match
     exact_ids = {c.id for c in exact}
+    loose_match = [c for c in loose_match if c.id not in exact_ids][:15]
 
     # Fast start: cargar el encoder cuesta ~9s por proceso. Con el encoder frío,
     # esta query sirve solo con las patas estructurales (exact + BM25 + scorer,
@@ -625,6 +694,7 @@ def compute_context(repo: str, query: str, task_type_in: str = "auto",
         from leo_code.rag.scorer import score_capsules
         pool_ids = list(dict.fromkeys(
             [c.id for c in exact]
+            + [c.id for c in loose_match]
             + [c.id for c in semantic]
             + [bm.capsule_id for bm in bm25_results if bm.capsule_id in caps]
         ))
@@ -639,6 +709,8 @@ def compute_context(repo: str, query: str, task_type_in: str = "auto",
     fused_scores: dict[str, float] = {}
     for rank, c in enumerate(exact):
         fused_scores[c.id] = fused_scores.get(c.id, 0) + 1 / (60 + rank + 1)
+    for rank, c in enumerate(loose_match):
+        fused_scores[c.id] = fused_scores.get(c.id, 0) + 1 / (60 + rank + 1)
     for rank, c in enumerate(semantic):
         fused_scores[c.id] = fused_scores.get(c.id, 0) + 1 / (60 + rank + 1)
     for rank, bm in enumerate(bm25_results):
@@ -650,6 +722,7 @@ def compute_context(repo: str, query: str, task_type_in: str = "auto",
     cap = 30 if task_type == "search" else (25 if specific_file_paths else 15)
     fused_ids = sorted(fused_scores, key=fused_scores.get, reverse=True)
     top_caps = [caps[rid] for rid in fused_ids if rid in caps and rid not in exact_ids]
+    top_caps.sort(key=lambda c: _demoted(c, query_parts))  # estable: conserva el orden RRF
     top_caps = exact + top_caps
     top_caps = top_caps[:cap]
 

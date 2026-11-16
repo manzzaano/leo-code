@@ -59,10 +59,10 @@ def _select_candidates(caps: list, target_file: str, target_sym: str) -> tuple[l
     # El símbolo objetivo primero; luego el resto del archivo.
     file_caps.sort(key=lambda c: (c.name != target_sym, c.start_line))
 
-    # Expansión de grafo a 1 salto: callees + callers del objetivo.
+    # Expansión de grafo a 1 salto: callees del objetivo.
     neighbor_names: set[str] = set()
     for c in file_caps:
-        neighbor_names |= set(c.calls or []) | set(c.called_by or [])
+        neighbor_names |= set(c.calls or [])
     file_paths = {c.file_path for c in file_caps}
     neighbors = [c for c in caps
                  if c.name in neighbor_names and c.file_path not in file_paths]

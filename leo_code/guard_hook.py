@@ -41,17 +41,12 @@ _TEST_MARKERS = ("/tests/", "/test/", "/__tests__/", "/spec/")
 
 def _is_test_path(path: Path) -> bool:
     """Editar un test no rompe a nadie: es el caso más común y el más inútil de avisar."""
-    posix = path.as_posix().lower()
+    posix = "/" + path.as_posix().lower()   # "/" delante: `tests/x.py` relativo también
     name = path.name.lower()
     return (any(m in posix for m in _TEST_MARKERS)
-            or name.startswith("test_") or name.startswith("test.")
+            or name.startswith("test_") or name.startswith("test.") or name == "tests.py"
             or any(name.endswith(s) for s in ("_test.py", ".test.ts", ".test.tsx", ".test.js",
                                               ".spec.ts", ".spec.tsx", ".spec.js")))
-
-
-def _is_test_cite(cite) -> bool:
-    return (cite.type == "test" or (cite.name or "").lower().startswith("test_")
-            or _is_test_path(Path(cite.file or "")))
 
 
 def _line_of(path: Path, needle: str) -> int | None:
@@ -104,21 +99,17 @@ def _load_caps(repo: str) -> list:
     return engine._repo_caps(idx, repo)
 
 
-def _report(caps: list, symbols: list) -> tuple[str, str] | None:
+def _report(caps: list, symbols: list, repo: str | None = None) -> tuple[str, str] | None:
     """(contexto para el agente, línea para el humano), o None si no hay nada que avisar."""
     from leo_code.core.boundary import link_http_edges
     from leo_code.core.guardian import Guardian
 
     by_id = {c.id: c for c in caps}
     link_http_edges(by_id)   # un fetch del frontend también es un dependiente
-    guard = Guardian(by_id)
+    guard = Guardian(by_id, repo)
     for cap in symbols:
         report = guard.review(cap.name)
-        # Un test que depende del símbolo es cobertura, no riesgo — y nada cubre a un test,
-        # así que sin este filtro TODOS salían marcados como "sin test". En un repo bien
-        # cubierto eso es un aviso en cada edición apuntando a archivos de test: el ruido
-        # que hace que el hook se apague el primer día.
-        risky = [a for a in report.uncovered if not _is_test_cite(a.cite)]
+        risky = report.uncovered   # ya sin tests: un test dependiente es cobertura
         if not risky:
             continue
         shown = risky[:_MAX_SYMBOLS_REPORTED]
@@ -147,8 +138,8 @@ def run(payload: dict, started: float) -> dict | None:
     if not raw_path:
         return None
     path = Path(str(raw_path))
-    if not path.is_file() or _is_test_path(path):
-        return None   # archivo nuevo (Write) o test: nada que romper
+    if not path.is_file():
+        return None   # archivo nuevo (Write): nada que romper
 
     from leo_code.rag.indexer import Indexer
     if path.suffix.lower() not in Indexer.CODE_EXTENSIONS:
@@ -156,9 +147,11 @@ def run(payload: dict, started: float) -> dict | None:
 
     repo = os.path.abspath(os.getenv("LEO_REPO") or payload.get("cwd") or ".")
     try:
-        path.relative_to(repo)
+        rel = path.relative_to(repo)
     except ValueError:
         return None   # fuera del repo indexado
+    if _is_test_path(rel):
+        return None   # un test: nada que romper (ruta en el repo: el repo puede vivir bajo `test/`)
 
     if time.monotonic() - started > _DEADLINE_S:
         return None
@@ -172,7 +165,7 @@ def run(payload: dict, started: float) -> dict | None:
     if not symbols or time.monotonic() - started > _DEADLINE_S:
         return None
 
-    found = _report(caps, symbols)
+    found = _report(caps, symbols, repo)
     if found is None:
         return None
     context, human = found

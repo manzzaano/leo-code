@@ -4,7 +4,9 @@ Soporta Python vía ast.parse() y tree-sitter para multi-lenguaje.
 """
 
 import ast
+import bisect
 import hashlib
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from collections.abc import Callable
@@ -32,6 +34,24 @@ class Capsule:
 def _make_id(file_path: str, start_line: int, signature: str) -> str:
     raw = f"{file_path}::{start_line}::{signature}"
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+
+_LINE = re.compile(r"[^\r\n]*(?:\r\n|\r|\n)|[^\r\n]+\Z")
+
+
+def _source_lines(content: str) -> list[str]:
+    """Líneas con su final, partidas como `ast` (no parte en \\f, a diferencia de splitlines)."""
+    return _LINE.findall(content)
+
+
+def _segment(lines: list[str], node) -> str:
+    """`ast.get_source_segment` sin re-partir el archivo en cada llamada: eso era el 38% del
+    parseo de django (37,5 → 15,1 s, salida idéntica). Las columnas de `ast` son bytes UTF-8."""
+    first, last = node.lineno - 1, node.end_lineno - 1
+    if first == last:
+        return lines[first].encode()[node.col_offset:node.end_col_offset].decode()
+    return "".join([lines[first].encode()[node.col_offset:].decode(), *lines[first + 1:last],
+                    lines[last].encode()[:node.end_col_offset].decode()])
 
 
 def _node_calls(node) -> list[str]:
@@ -122,23 +142,89 @@ def _resolution_props(node) -> dict:
         types = _local_types(node)
         if types:
             props["local_types"] = types
+        types = _param_types(node)
+        if types:
+            props["param_types"] = types
     return props
 
 
+def _ann_form(a) -> tuple[str, str] | None:
+    """Clase de una anotación, con la forma de `call_form`: `Foo`, `m.Foo`, `"Foo"`,
+    `Foo | None`, `Optional[Foo]`. Lo demás (uniones, genéricos) no se sigue."""
+    if isinstance(a, ast.Constant) and isinstance(a.value, str):
+        try:
+            a = ast.parse(a.value, mode="eval").body
+        except SyntaxError:
+            return None
+    if isinstance(a, ast.BinOp) and isinstance(a.op, ast.BitOr):
+        sides = [s for s in (a.left, a.right) if not (isinstance(s, ast.Constant) and s.value is None)]
+        return _ann_form(sides[0]) if len(sides) == 1 else None
+    if isinstance(a, ast.Subscript) and call_form(a.value) in (("Optional", ""), ("Optional", "typing")):
+        return _ann_form(a.slice)
+    if isinstance(a, ast.Name) or (isinstance(a, ast.Attribute) and isinstance(a.value, ast.Name)):
+        return call_form(a)
+    return None
+
+
+def _param_types(fn) -> dict:
+    """Parámetros anotados de `fn` que nada vuelve a ligar: nombre → [forma de su clase].
+    GraphQuery los despacha como `self.m()` (la clase y sus subclases). Otra ligadura del
+    nombre en `fn` o en sus funciones/lambdas anidadas (sus llamadas suben a `fn`) lo descarta."""
+    a = fn.args
+    own = set(a.posonlyargs + a.args + a.kwonlyargs)
+    types = {p.arg: f for p in own if p.annotation is not None and (f := _ann_form(p.annotation))}
+    for n in ast.walk(fn):
+        if not types:
+            break
+        if isinstance(n, ast.Name) and isinstance(n.ctx, (ast.Store, ast.Del)):
+            types.pop(n.id, None)
+        elif isinstance(n, ast.arg) and n not in own:
+            types.pop(n.arg, None)
+        elif isinstance(n, (ast.Global, ast.Nonlocal)):
+            for x in n.names:
+                types.pop(x, None)
+        elif isinstance(n, ast.alias):
+            types.pop((n.asname or n.name).split(".")[0], None)
+        elif isinstance(n, (ast.ExceptHandler, ast.MatchAs, ast.MatchStar)) and n.name:
+            types.pop(n.name, None)
+        elif isinstance(n, ast.MatchMapping) and n.rest:
+            types.pop(n.rest, None)
+        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and n is not fn:
+            types.pop(n.name, None)
+    return {k: [list(f)] for k, f in types.items()}
+
+
+# Literales y comprensiones: su tipo es exacto (nunca una subclase), como `set()`.
+_LITERAL_TYPES = {ast.Dict: "dict", ast.DictComp: "dict", ast.Set: "set", ast.SetComp: "set",
+                  ast.List: "list", ast.ListComp: "list", ast.Tuple: "tuple", ast.JoinedStr: "str"}
+
+
+def _literal_form(v) -> tuple[str, str] | None:
+    t = _LITERAL_TYPES.get(type(v))
+    if t is None and isinstance(v, ast.Constant) and type(v.value) in (str, bytes):
+        t = type(v.value).__name__
+    return (t, "{}") if t else None   # receptor "{}": marca de literal, no es un nombre
+
+
 def _local_types(fn) -> dict:
-    """Variables de `fn` cuyas asignaciones son TODAS `x = C(...)` / `x = m.C(...)`:
+    """Variables de `fn` cuyas asignaciones son TODAS `x = C(...)` / `x = m.C(...)` (también
+    `x: T = C(...)`) o un literal/comprensión (tipo builtin):
     nombre → formas de `call_form` de cada C (paso 3). Es el tipo como unión de lo asignado
     (pyright; el grafo de asignaciones de PyCG), sin flujo. Cualquier otra forma de ligar
     el nombre (parámetro, bucle, `with`, `except`, import, `global`…) lo descarta, también
     dentro de funciones anidadas: la unión puede salir mayor, nunca menor."""
     ctor, other, seen = {}, set(), set()
     for n in ast.walk(fn):
-        if isinstance(n, ast.Assign):
-            f = call_form(n.value.func) if isinstance(n.value, ast.Call) else None
-            t = n.targets[0]
-            if len(n.targets) == 1 and isinstance(t, ast.Name) and f and f[1] not in (".", "super()"):
+        if isinstance(n, (ast.Assign, ast.AnnAssign)):
+            v = n.value
+            f = (call_form(v.func) if isinstance(v, ast.Call) else _literal_form(v)) if v else None
+            ts = n.targets if isinstance(n, ast.Assign) else [n.target]
+            t = ts[0]
+            if len(ts) == 1 and isinstance(t, ast.Name) and f and f[1] not in (".", "super()"):
                 ctor.setdefault(t.id, {})[f] = None
                 seen.add(t)
+            elif v is None and isinstance(t, ast.Name):
+                seen.add(t)   # `x: T` sin valor solo declara: no liga
         elif isinstance(n, ast.Name) and isinstance(n.ctx, (ast.Store, ast.Del)) and n not in seen:
             other.add(n.id)
         elif isinstance(n, ast.arg):
@@ -157,6 +243,46 @@ def _local_types(fn) -> dict:
     return {k: [list(f) for f in v] for k, v in ctor.items() if k not in other}
 
 
+def _store_refs(tree, capsules: list[Capsule]) -> None:
+    """Guarda los nombres que menciona cada cápsula y no están en `calls`, para las aristas de
+    referencia (refgraph): antes re-parseaba cada cápsula tras cada edición, 7-11 s en django.
+    Un recorrido por archivo; texto y no lista porque son 274k nombres en memoria.
+    Sin `refs`: lo que el parser no da entero o no es código propio (entrypoint recortado)."""
+    # ponytail: reparto por línea; en `a = 1; b = c` la cápsula de `a` también ve `c`
+    occ = sorted((n.lineno, n.id if isinstance(n, ast.Name) else n.attr)
+                 for n in ast.walk(tree) if isinstance(n, (ast.Name, ast.Attribute)))
+    starts = [line for line, _ in occ]
+    for c in capsules:
+        if c.type == "entrypoint" or c.signature.startswith(("from ", "import ")):
+            continue
+        hits = occ[bisect.bisect_left(starts, c.start_line):bisect.bisect_right(starts, c.end_line)]
+        c.properties["refs"] = " ".join(sorted({nm for _, nm in hits}.difference(c.calls)))
+
+
+_BRANCHES = (ast.If, ast.Try, ast.TryStar, ast.ExceptHandler, ast.With, ast.AsyncWith,
+             ast.For, ast.AsyncFor, ast.While, ast.Match, ast.match_case)
+_DEFS = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+
+
+def _branch_defs(node):
+    """Defs bajo if/try/with/for/while/match de `node`, sin entrar en otras defs. Las funciones anidadas se
+    quedan fuera a propósito: sus llamadas ya suben a la función que las contiene."""
+    for ch in ast.iter_child_nodes(node):
+        if isinstance(ch, _DEFS):
+            yield ch
+        elif isinstance(ch, _BRANCHES):
+            yield from _branch_defs(ch)
+
+
+def _scope_nodes(node):
+    """Hijos directos de un módulo o clase, más las defs condicionales (`try: … except
+    ImportError: def f()`): medido en django, 75 defs que perdían símbolo y llamadas."""
+    for ch in ast.iter_child_nodes(node):
+        yield ch
+        if isinstance(ch, _BRANCHES):
+            yield from _branch_defs(ch)
+
+
 def extract_from_python(content: str, file_path: str) -> list[Capsule]:
     """Extrae cápsulas del AST de un archivo Python. 0 dependencias externas."""
     capsules = []
@@ -166,8 +292,9 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
         return capsules
 
     module_name = Path(file_path).name
+    src_lines = _source_lines(content)
 
-    for node in ast.iter_child_nodes(tree):
+    for node in _scope_nodes(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 capsules.append(Capsule(
@@ -215,7 +342,7 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
             calls = _node_calls(node)
 
             if not doc and lines <= 15:
-                doc = (ast.get_source_segment(content, node) or "")[:300]
+                doc = (_segment(src_lines, node) or "")[:300]
 
             # Decorators
             decorators = [
@@ -247,14 +374,14 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
                 type=ftype, name=node.name, file_path=file_path,
                 start_line=node.lineno, end_line=node.end_lineno or node.lineno,
                 language="python", signature=sig,
-                content=ast.get_source_segment(content, node) or ast.unparse(node),
+                content=_segment(src_lines, node) or ast.unparse(node),
                 docstring=doc, calls=calls,
                 properties=props,
             ))
 
         elif isinstance(node, ast.ClassDef):
             bases = [ast.unparse(b) for b in node.bases]
-            methods = [n.name for n in ast.iter_child_nodes(node)
+            methods = [n.name for n in _scope_nodes(node)
                        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
             doc = ast.get_docstring(node)
             lines = (node.end_lineno or node.lineno) - node.lineno + 1
@@ -298,7 +425,7 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
                 type=ctype, name=node.name, file_path=file_path,
                 start_line=node.lineno, end_line=node.end_lineno or node.lineno,
                 language="python", signature=sig,
-                content=ast.get_source_segment(content, node) or ast.unparse(node),
+                content=_segment(src_lines, node) or ast.unparse(node),
                 docstring=doc, calls=calls,
                 properties=props,
             ))
@@ -313,7 +440,7 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
                 for t in (a.targets if isinstance(a, ast.Assign) else [a.target]):
                     if not isinstance(t, ast.Name):
                         continue
-                    raw = ast.get_source_segment(content, a) or ast.unparse(a)
+                    raw = _segment(src_lines, a) or ast.unparse(a)
                     capsules.append(Capsule(
                         id=_make_id(file_path, a.lineno, f"attribute {node.name}.{t.id}"),
                         type="attribute", name=t.id, file_path=file_path,
@@ -325,7 +452,7 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
                     ))
 
             # Emitir cada método como cápsula buscable (antes solo vivían en props["metodos"]).
-            for m in node.body:
+            for m in _scope_nodes(node):
                 if not isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     continue
                 m_args = [a.arg for a in m.args.args]
@@ -344,7 +471,7 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
                     type="method", name=m.name, file_path=file_path,
                     start_line=m.lineno, end_line=m.end_lineno or m.lineno,
                     language="python", signature=m_sig,
-                    content=ast.get_source_segment(content, m) or ast.unparse(m),
+                    content=_segment(src_lines, m) or ast.unparse(m),
                     docstring=ast.get_docstring(m), calls=m_calls,
                     properties=m_props,
                 ))
@@ -354,7 +481,7 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
             for t in targets:
                 if isinstance(t, ast.Name):
                     ctype = "constant" if t.id.isupper() else "variable"
-                    raw = ast.get_source_segment(content, node) or ast.unparse(node)
+                    raw = _segment(src_lines, node) or ast.unparse(node)
                     sig = raw if len(raw) <= 120 else f"{t.id} = ..."
                     capsules.append(Capsule(
                         id=_make_id(file_path, node.lineno, f"{ctype} {t.id}"),
@@ -369,7 +496,7 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
             # __name__ == "__main__" entrypoint
             test_str = ast.unparse(node.test) if node.test else ""
             if "__name__" in test_str and "__main__" in test_str:
-                entry_content = ast.get_source_segment(content, node) or ast.unparse(node)
+                entry_content = _segment(src_lines, node) or ast.unparse(node)
                 capsules.append(Capsule(
                     id=_make_id(file_path, node.lineno, "entrypoint"),
                     type="entrypoint", name=f"{module_name}.__main__", file_path=file_path,
@@ -382,7 +509,9 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
                     },
                 ))
 
-    header = _extract_file_header(content, file_path)
+    _store_refs(tree, capsules)
+
+    header = _with_module_stmts(_extract_file_header(content, file_path), tree, content, file_path)
     if header is not None:
         capsules.append(header)
 
@@ -699,6 +828,29 @@ def detect_frameworks(capsules: list[Capsule]) -> list[Capsule]:
         if step is not None:
             step(c)
     return capsules
+
+
+def _with_module_stmts(header: Optional[Capsule], tree, content: str, file_path: str) -> Optional[Capsule]:
+    """Sentencias sueltas de módulo tras la cabecera (`atexit.register(f)`, `app.add_url_rule(…)`,
+    `HANDLERS.append(f)`): van al contenido de la cabecera, así refgraph la hace dependiente
+    de lo que nombran. Sin esto `f` no tenía dependientes; atribuirlas a todas las funciones
+    del archivo era casi todo el repo (28/10). Sin cabecera, se crea con esas sentencias."""
+    end = header.end_line if header is not None else 0
+    stmts = [n for n in tree.body if isinstance(n, ast.Expr) and n.lineno > end
+             and not (isinstance(n.value, ast.Constant) and isinstance(n.value.value, str))]
+    if not stmts:
+        return header
+    extra = "\n".join(ast.get_source_segment(content, n) or "" for n in stmts)
+    if header is None:
+        module_name = Path(file_path).stem
+        header = Capsule(id=_make_id(file_path, 1, f"file_header:{module_name}"), type="file_header",
+                         name=f"{module_name}.__header__", file_path=file_path,
+                         start_line=stmts[0].lineno, end_line=stmts[-1].end_lineno or stmts[-1].lineno,
+                         language="python", signature=f"[imports] {module_name}", content=extra,
+                         properties={"module": module_name, "constants": "", "import_lines": 0})
+    else:
+        header.content += "\n" + extra
+    return header
 
 
 def _extract_file_header(content: str, file_path: str) -> Optional[Capsule]:

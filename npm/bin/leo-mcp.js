@@ -13,9 +13,14 @@ const VERSION = require("../package.json").version;
 const isWin = process.platform === "win32";
 const log = (msg) => process.stderr.write(`[leo-mcp] ${msg}\n`);
 
+// process.env ignores case on Windows, but a copy ({...process.env}) keeps the real
+// name, which there is usually "Path": reading env.PATH found nothing.
+const getEnv = (env, name) =>
+  env[name] ?? env[Object.keys(env).find((k) => k.toUpperCase() === name)];
+
 function which(cmd, env = process.env) {
-  const exts = isWin ? (env.PATHEXT || ".EXE;.CMD;.BAT").split(";") : [""];
-  for (const dir of (env.PATH || "").split(path.delimiter)) {
+  const exts = isWin ? (getEnv(env, "PATHEXT") || ".EXE;.CMD;.BAT").split(";") : [""];
+  for (const dir of (getEnv(env, "PATH") || "").split(path.delimiter)) {
     for (const ext of exts) {
       const p = path.join(dir, cmd + ext);
       if (dir && fs.existsSync(p) && fs.statSync(p).isFile()) return p;

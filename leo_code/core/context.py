@@ -1,6 +1,10 @@
 """Serialización markdown de contexto para enviar al LLM."""
 
 
+# Claves de properties que el parser guarda en español; el agente lee la salida en inglés.
+_LABELS = {"parametros": "Params", "tipo_retorno": "Returns", "lineas": "Lines"}
+
+
 def serialize_context(nodes: list[dict], edges: list[dict] = None) -> str:
     """
     Markdown format: readable to LLM, visual hierarchy.
@@ -61,7 +65,7 @@ def serialize_context(nodes: list[dict], edges: list[dict] = None) -> str:
                 if len(v_str) > 120:
                     v_str = v_str[:117] + "..."
                 # Format key name
-                key_label = k.replace("_", " ").title()
+                key_label = _LABELS.get(k) or k.replace("_", " ").title()
                 lines.append(f"**{key_label}:** {v_str}")
 
         # Any remaining props in properties dict
@@ -70,7 +74,7 @@ def serialize_context(nodes: list[dict], edges: list[dict] = None) -> str:
                 v_str = str(v).replace("\n", " ").strip()
                 if len(v_str) > 120:
                     v_str = v_str[:117] + "..."
-                key_label = k.replace("_", " ").title()
+                key_label = _LABELS.get(k) or k.replace("_", " ").title()
                 lines.append(f"**{key_label}:** {v_str}")
 
         if content_body:
@@ -78,7 +82,7 @@ def serialize_context(nodes: list[dict], edges: list[dict] = None) -> str:
             # Red de seguridad: los productores capan antes (body_chars); esto solo
             # protege de un productor sin cap, no decide el tamaño del contexto.
             if len(body_str) > 8000:
-                body_str = body_str[:8000] + "\n# ... [truncado]"
+                body_str = body_str[:8000] + "\n# ... [truncated]"
             lines.append("**Content:**")
             lines.append(f"```\n{body_str}\n```")
 

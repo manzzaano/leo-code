@@ -126,3 +126,98 @@ def test_refs_added_after_parsing_stay_by_name():
     main = next(c for c in caps.values() if c.name == "main")
     main.calls.append("handler")
     assert "main" in _callers(GraphQuery(caps), "handler")
+
+
+# ---- impact por definición (revisión #5, 27/10) ----
+TARGET = {"p/core.py": "def target():\n    pass\n"}
+
+
+def test_impact_keeps_homonymous_dependents():
+    # antes se deduplicaba por nombre base: solo salía uno de los dos `run`
+    files = {**TARGET,
+             "p/a.py": "from core import target\n\ndef run():\n    target()\n",
+             "p/b.py": "from core import target\n\ndef run():\n    target()\n"}
+    g = _graph(files)
+    assert sorted(c.file for c in g.impact("target").cites) == ["p/a.py", "p/b.py"]
+    # y no depende del orden en que llegan las cápsulas
+    rev = GraphQuery(dict(reversed(list(g.caps.items()))))
+    assert [str(c) for c in rev.impact("target").cites] == [str(c) for c in g.impact("target").cites]
+
+
+def test_impact_does_not_follow_homonyms_of_dependents():
+    g = _graph({**TARGET,
+                "p/svc.py": "from core import target\n\ndef helper():\n    target()\n",
+                "p/t.py": "def helper():\n    pass\n\ndef test_x():\n    helper()\n"})
+    assert {c.name for c in g.impact("target").cites} == {"helper"}   # test_x llama a SU helper
+
+
+def test_impact_of_class_method_starts_from_that_definition():
+    g = _graph({"p/m.py": "class A:\n    def save(self):\n        pass\n"
+                          "class B:\n    def save(self):\n        pass\n"
+                          "def use_a():\n    a = A()\n    a.save()\n"
+                          "def use_b():\n    b = B()\n    b.save()\n"})
+    assert {c.name for c in g.impact("A.save").cites} == {"use_a"}
+
+
+# ---- trace por definición (revisión #6, 27/10) ----
+# b.py va primero: antes cada salto se citaba con la PRIMERA def del nombre (B.get)
+GETS = {"p/b.py": "class B:\n    def get(self):\n        return 1\n",
+        "p/a.py": "class A:\n    def get(self):\n        return helper_a()\n"
+                  "def helper_a():\n    return target()\n",
+        "p/target.py": "def target():\n    pass\n",
+        "p/main.py": "from a import A\n\ndef main():\n    x = A()\n    return x.get()\n"
+                     "def loose(obj):\n    return obj.get()\n"}
+
+
+def test_trace_cites_the_definitions_it_walks():
+    p = _graph(GETS).trace("main", "target")
+    assert [(c.file, c.line) for c in p.cites] == [("p/main.py", 3), ("p/a.py", 2), ("p/a.py", 4),
+                                                   ("p/target.py", 1)]
+    assert str(p.cites[1]) == "A.get (method) @ p/a.py:2 ← called at :5"
+
+
+def test_trace_marks_hops_that_go_by_name():
+    p = _graph(GETS).trace("loose", "target")
+    assert str(p.cites[1]) == "A.get (method) @ p/a.py:2 ← called at :7 ≈ by name, 2 candidates"
+
+
+def test_trace_from_class_method_and_homonym_note():
+    g = _graph(GETS)
+    assert not g.trace("B.get", "target").found
+    p = g.trace("get", "target")
+    assert p.found and "`get` matches 2 definitions (this path uses p/a.py:2)" in p.render()
+
+
+def test_trace_does_not_depend_on_capsule_order():
+    g = _graph(GETS)
+    rev = GraphQuery(dict(reversed(list(g.caps.items()))))
+    for a, b in (("main", "target"), ("loose", "target"), ("get", "target")):
+        assert rev.trace(a, b).render() == g.trace(a, b).render()
+
+
+def test_trace_marks_by_name_hops_even_with_one_candidate():
+    # `Path(x).resolve()` de pathlib cae por nombre en el único `resolve` del repo
+    p = _graph({"p/s.py": "class Scope:\n    def resolve(self):\n        return 1\n",
+                "p/m.py": "def run(x):\n    return Path(x).resolve()\n"}).trace("run", "resolve")
+    assert str(p.cites[1]) == "Scope.resolve (method) @ p/s.py:2 ← called at :2 ≈ by name"
+
+
+CTOR = {"p/s.py": ("from dataclasses import dataclass\nfrom t import target, other\n\nclass Base:\n    def __init__(self):\n        target()\n\n"
+                   "class Svc(Base):\n    def run(self):\n        return other()\n\n"
+                   "@dataclass\nclass Data:\n    def __post_init__(self):\n        target()\n"),
+        "p/t.py": "def target():\n    pass\n\ndef other():\n    pass\n",
+        "p/m.py": ("from s import Svc, Data\n\ndef main():\n    return Svc()\n\n"
+                   "def make():\n    return Data()\n")}
+
+
+def test_trace_entra_en_el_init_al_construir_una_clase():
+    # Antes una clase intermedia cortaba el camino: construir ejecuta su __init__ (heredado)
+    p = _graph(CTOR).trace("main", "target")
+    assert [c.name for c in p.cites] == ["main", "Svc", "Base.__init__", "target"]
+    assert str(p.cites[2]) == "Base.__init__ (method) @ p/s.py:5 ← on construction"
+    assert _graph(CTOR).trace("make", "target").found          # __post_init__ también
+
+
+def test_trace_no_inventa_caminos_por_los_metodos_de_la_clase():
+    # `Svc()` no ejecuta `Svc.run`, que es el que llama a `other`
+    assert not _graph(CTOR).trace("main", "other").found

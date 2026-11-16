@@ -16,20 +16,23 @@ Self-check:  python -m leo_code.core.guardian
 
 from __future__ import annotations
 
+import os
 from collections import deque
+from pathlib import Path
 from dataclasses import dataclass, field
 
-from leo_code.core.graphquery import GraphQuery, Cite, _bare
+from leo_code.core.graphquery import GraphQuery, Cite
 
 
 @dataclass
 class Affected:
     """Un símbolo dentro del radio de explosión, con su estado de cobertura."""
     cite: Cite
-    covered: bool          # ¿lo alcanza algún test?
+    covered: bool          # ¿lo alcanza algún test? (estático: alcanzable, no ejecutado)
+    is_test: bool = False  # un test dependiente es cobertura, no riesgo
 
     def __str__(self) -> str:
-        mark = "✓ tested" if self.covered else "✗ NO test"
+        mark = "✓ reached by a test" if self.covered else "✗ NO test"
         return f"{self.cite}  [{mark}]"
 
 
@@ -39,27 +42,47 @@ class ChangeReport:
     symbol: str
     changed_covered: bool
     affected: list[Affected] = field(default_factory=list)
+    note: str = ""         # de impact: «stopped at N; more dependents exist»
 
     @property
     def uncovered(self) -> list[Affected]:
-        return [a for a in self.affected if not a.covered]
+        """Riesgo: dependientes de producto sin test. Nada cubre a un test, así que listar
+        los tests aquí era el 86% de las entradas (27/10, leo-code y django)."""
+        return [a for a in self.affected if not a.covered and not a.is_test]
 
-    def render(self) -> str:
+    def render(self, shown: int = 40) -> str:
         lines = [f"changing `{self.symbol}`"
-                 + ("  [✓ tested]" if self.changed_covered else "  [✗ NO test]")]
+                 + ("  [✓ reached by a test]" if self.changed_covered else "  [✗ NO test]")]
         if not self.affected:
-            lines.append("  → breaks nothing that is indexed.")
+            lines.append(f"  → {self.note}" if self.note else "  → breaks nothing that is indexed.")
             return "\n".join(lines)
-        risk = len(self.uncovered)
-        lines.append(f"  → affects {len(self.affected)} symbol(s)"
-                     + (f", {risk} with NO test (risk)" if risk else ", all tested ✓"))
-        for a in self.affected[:40]:
-            lines.append(f"    · {a}")
+        risk = self.uncovered
+        n_tests = sum(a.is_test for a in self.affected)
+        lines.append(f"  → affects {len(self.affected)} symbol(s): {n_tests} test(s) depend on it, "
+                     f"{len(self.affected) - n_tests} in code"
+                     + (f", {len(risk)} with NO test (risk):" if risk
+                        else ", all reached by a test ✓"))
+        lines += [f"    · {a.cite}" for a in risk[:shown]]   # orden del BFS: menor profundidad antes
+        if len(risk) > shown:
+            lines.append(f"    … showing {shown} of {len(risk)}")
+        if self.note:
+            lines.append(f"  ({self.note})")
         return "\n".join(lines)
 
 
+
+def _in_repo(file_path: str | None, root: str | None) -> Path:
+    """Ruta del archivo relativa al repo (tal cual si no se sabe el repo o cae fuera)."""
+    p = Path(file_path or "")
+    if root:
+        try:
+            return Path(os.path.abspath(p)).relative_to(root)
+        except ValueError:
+            pass
+    return p
+
 class Guardian:
-    def __init__(self, capsules: dict):
+    def __init__(self, capsules: dict, repo: str | None = None):
         # El guardián usa el grafo AUMENTADO con aristas de referencia/dispatch
         # (completitud: cambiar X que se invoca por dict debe marcar a quien lo despacha).
         # Sobre una COPIA de las listas `calls` para NO contaminar el grafo directo y
@@ -75,53 +98,59 @@ class Guardian:
         self.caps = aug
         self.gq = GraphQuery(aug)
         self._covered: set[str] | None = None
+        self._root = os.path.abspath(repo) if repo else None   # la regla de test mira la ruta DENTRO del repo, no sus carpetas padre
+        # cita (archivo, línea, nombre) → su cápsula: la cobertura va por definición
+        self._at = {(c.file_path or "?", c.start_line or 0, c.name): c for c in aug.values()}
 
     # ---- cobertura: símbolos alcanzados por algún test ----
     @staticmethod
-    def _is_test(c) -> bool:
+    def _is_test(c, root: str | None = None) -> bool:
         if c.type == "test":
             return True
-        nm = (c.name or "").lower()
-        fp = (c.file_path or "").lower().replace("\\", "/")
-        return nm.startswith("test_") or "/tests/" in fp or fp.endswith("_test.py") \
-            or "test" in fp.split("/")[-1]
+        # Mismo criterio que el hook: «test» suelto en el nombre del archivo marcaba
+        # producto como test (django: testing.py, testserver.py).
+        from leo_code.guard_hook import _is_test_path
+        return (c.name or "").lower().startswith("test_") or _is_test_path(_in_repo(c.file_path, root))
 
     def test_closure(self) -> set[str]:
-        """Nombres (base) alcanzables desde cualquier test siguiendo `calls` (transitivo)."""
+        """Ids de las definiciones alcanzables desde algún test (transitivo).
+
+        Por definición, con la resolución de llamadas (`_hops`: resueltas → su def; sin
+        resolver → todas las homónimas, no se quita una arista incierta). Por nombre, un
+        test de un `helper` cubría a todos los `helper` del repo."""
         if self._covered is not None:
             return self._covered
-        by_name: dict[str, list] = {}
-        for c in self.caps.values():
-            by_name.setdefault(_bare(c.name), []).append(c)
         seen: set[str] = set()
-        q: deque = deque()
-        for c in self.caps.values():
-            if self._is_test(c):
-                for callee in (c.calls or []):
-                    q.append(_bare(callee))
+        q: deque = deque(d for c in self.caps.values() if self._is_test(c, self._root)
+                         for d, _, _ in self.gq._hops(c))
         while q:
-            name = q.popleft()
-            if name in seen:
+            d = q.popleft()
+            if d.id in seen:
                 continue
-            seen.add(name)
-            for c in by_name.get(name, []):
-                for callee in (c.calls or []):
-                    b = _bare(callee)
-                    if b not in seen:
-                        q.append(b)
+            seen.add(d.id)
+            hops = self.gq.ctor_hops(d)   # alcanzar una clase no ejecuta todos sus métodos
+            q.extend(t for t, _, _ in (self.gq._hops(d) if hops is None else hops)
+                     if t.id not in seen)
         self._covered = seen
         return seen
 
-    def is_covered(self, name: str) -> bool:
-        return _bare(name) in self.test_closure()
+    def is_covered(self, sym) -> bool:
+        """Una cápsula: ¿la alcanza un test? Un nombre: ¿alguna de sus defs?"""
+        if not isinstance(sym, str):
+            return sym.id in self.test_closure()
+        return any(c.id in self.test_closure() for c in self.gq._resolve(sym))
 
     # ---- radio de explosión + revisión ----
     def review(self, changed_symbol: str, limit: int = 200) -> ChangeReport:
         impact = self.gq.impact(changed_symbol, limit=limit)
-        affected = [Affected(c, self.is_covered(c.name)) for c in impact.cites]
+        caps = [self._at[(c.file, c.line, c.name)] for c in impact.cites]
+        affected = [Affected(c, self.is_covered(cap), self._is_test(cap, self._root))
+                    for c, cap in zip(impact.cites, caps)]
+        defs = self.gq.defs_named(changed_symbol)
         return ChangeReport(symbol=changed_symbol,
-                            changed_covered=self.is_covered(changed_symbol),
-                            affected=affected)
+                            changed_covered=(any(map(self.is_covered, defs)) if defs
+                                             else self.is_covered(changed_symbol)),
+                            affected=affected, note=impact.note)
 
     def review_many(self, symbols: list[str]) -> list[ChangeReport]:
         return [self.review(s) for s in symbols]
@@ -186,12 +215,18 @@ def guard_repo(repo: str = ".", staged: bool = False, base: str | None = None) -
     idx.build(repo, verbose=False)
     caps = idx.get_capsules()
     link_http_edges(caps)                 # aristas HTTP para impacto cross-lenguaje
-    g = Guardian(caps)
+    g = Guardian(caps, repo)
     reports = g.review_diff(git_diff(repo, staged, base))
-    affected = sum(len(r.affected) for r in reports)
-    uncovered = sum(len(r.uncovered) for r in reports)
-    summary = {"changed": len(reports), "affected": affected, "uncovered_risk": uncovered}
-    return reports, summary
+    return reports, summarize(reports)
+
+
+def summarize(reports: list[ChangeReport]) -> dict:
+    """Totales sin repetir: un dependiente de varios símbolos cambiados cuenta una vez
+    (sumando, el diff main..dev daba 2.344 «riesgo» para ~41 símbolos distintos)."""
+    key = lambda a: (a.cite.file, a.cite.line, a.cite.name)
+    return {"changed": len(reports),
+            "affected": len({key(a) for r in reports for a in r.affected}),
+            "uncovered_risk": len({key(a) for r in reports for a in r.uncovered})}
 
 
 # ----------------------------------------------------------------------------
@@ -256,7 +291,7 @@ if __name__ == "__main__":
         idx.build(args.repo, verbose=False)
         caps = idx.get_capsules()
         link_http_edges(caps)
-        print(Guardian(caps).review(args.symbol).render())
+        print(Guardian(caps, args.repo).review(args.symbol).render())
         sys.exit(0)
 
     if not args.staged and not args.base:

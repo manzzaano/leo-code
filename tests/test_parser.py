@@ -1,8 +1,27 @@
 """Tests: parser — extracción de cápsulas Python."""
 
+import ast
+from pathlib import Path
+
 from leo_code.core.parser import (
     Capsule, extract_from_python, build_call_graph, detect_language, EXT_LANG
 )
+
+
+def test_segment_matches_ast_get_source_segment():
+    from leo_code.core.parser import _segment, _source_lines
+    samples = [
+        "def f(a,\n      b):\n    return 'ñandú' + g(a)\n\nx = 1; y = 'é'; z = f(x, y)",
+        "class A:\r\n    def m(self):\r\n        return 1\r\n",
+        "a = 1\rb = (2,\r     3)\r",
+        "s = '''línea\x0cuna\nlínea dos'''\nt = s\x0c\n",
+        Path(__file__).read_text(encoding="utf-8"),
+    ]
+    for src in samples:
+        lines = _source_lines(src)
+        for n in ast.walk(ast.parse(src)):
+            if getattr(n, "end_lineno", None) is not None:
+                assert _segment(lines, n) == ast.get_source_segment(src, n)
 
 
 def test_extract_function():
