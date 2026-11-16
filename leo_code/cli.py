@@ -4,6 +4,7 @@
   leo-mcp index [repo]       indexa y enseña qué ve leo-mcp (lenguajes, símbolos más usados)
   leo-mcp doctor [repo]      comprueba la instalación y da el snippet de configuración
   leo-mcp init [--client X]  registra leo-mcp en la config MCP del proyecto
+  leo-mcp init --user        lo registra para el usuario (Claude Code), sin tocar el repo
 
 Salida al usuario en inglés. `serve` no escribe NADA en stdout (canal JSON-RPC).
 """
@@ -160,13 +161,31 @@ def cmd_doctor(args) -> int:
                            "(watchdog missing, or the OS ran out of watches)")
     # "no me avisa" tiene dos causas posibles y ninguna es obvia: el hook no está
     # instalado, o lo está apagado. Que se vea aquí.
-    hook = Path(repo) / ".claude" / "settings.json"
-    installed = hook.exists() and "leo_code.guard_hook" in hook.read_text(encoding="utf-8",
-                                                                         errors="replace")
+    # Vale el settings del repo (init) o el del usuario (init --user).
+    texts = [f.read_text(encoding="utf-8", errors="replace")
+             for f in (Path(repo) / ".claude" / "settings.json", _user_settings()) if f.exists()]
+
+    def hook_state(module: str) -> bool | None:
+        states = [_hook_python_ok(t, module) for t in texts]
+        return True if True in states else (False if False in states else None)
+
+    stale = "points to a Python that no longer exists (re-run: leo-mcp init)"
+    idx = hook_state("leo_code.index_hook")
+    if os.getenv("LEO_INDEX_HOOK") == "0":
+        row("index hook", None, "off (LEO_INDEX_HOOK=0)")
+    elif idx:
+        row("index hook", True, "indexes a git repo in the background when a session opens")
+    elif idx is False:
+        row("index hook", None, stale)
+    else:
+        row("index hook", None, "not installed (run: leo-mcp init --user)")
+    installed = hook_state("leo_code.guard_hook")
     if os.getenv("LEO_GUARD_HOOK") == "0":
         row("guard hook", None, "off (LEO_GUARD_HOOK=0)")
     elif installed:
         row("guard hook", True, "warns before editing a symbol whose dependents have no test")
+    elif installed is False:
+        row("guard hook", None, stale)
     elif _ephemeral(sys.executable):
         row("guard hook", None, "not installed here (needs `uv tool install leo-mcp`, then leo-mcp init)")
     else:
@@ -180,26 +199,49 @@ def cmd_doctor(args) -> int:
     launch = " ".join(_launch())
     print("\nAdd leo-mcp to your agent:")
     print(f"  Claude Code   claude mcp add leo-mcp -- {launch}")
+    print("  Claude Code, all repos (writes nothing in them)   leo-mcp init --user")
     print(f"  any client    leo-mcp init --client {{{','.join(CLIENTS)}}}")
     print("\n" + ("Ready." if ok else "Fix the ERR rows above."))
     return 0 if ok else 1
 
 
-def _hook_command() -> str:
-    """Comando del hook de guard, apuntando a ESTE intérprete.
+def _hook_command(module: str = "leo_code.guard_hook") -> str:
+    """Comando de un hook de leo, apuntando a ESTE intérprete.
 
     No pasa por `npx`/`uvx` a propósito: el hook corre en cada edición y un arranque de
     npx por edición no cabe en el presupuesto (medido con el intérprete directo: 0,28 s
     sobre un índice de 1.220 símbolos). Si mueves o reinstalas el entorno, vuelve a
     ejecutar `leo-mcp init`.
     """
-    exe = sys.executable
-    return f'"{exe}" -m leo_code.guard_hook' if " " in exe else f"{exe} -m leo_code.guard_hook"
+    # Claude Code lanza los hooks con Git Bash en Windows: sin comillas y con `\` bash se
+    # come las barras (exit 127). Con comillas y `/` vale en bash y en cmd.
+    # ponytail: una ruta POSIX con `\` literal se rompería; no existe en la práctica.
+    exe = sys.executable.replace("\\", "/")
+    return f'"{exe}" -m {module}'
 
 
-def _install_guard_hook(root: Path) -> int:
-    """Añade el hook PreToolUse al settings.json del proyecto, sin pisar lo que haya."""
-    target = root / ".claude" / "settings.json"
+def _hook_python_ok(settings_text: str, module: str) -> bool | None:
+    """None si no hay hook de `module`; si lo hay, ¿existe el python al que apunta?
+    Solo buscar el nombre daba "ok" con el entorno borrado o movido."""
+    try:
+        data = json.loads(settings_text or "{}")
+    except json.JSONDecodeError:
+        return None
+    found = None
+    groups = data.get("hooks", {}) if isinstance(data, dict) else {}
+    for entries in (groups.values() if isinstance(groups, dict) else []):
+        for group in entries if isinstance(entries, list) else []:
+            for h in group.get("hooks", []) if isinstance(group, dict) else []:
+                cmd = str(h.get("command", "")) if isinstance(h, dict) else ""
+                if f"-m {module}" in cmd:
+                    exe = cmd.split(f" -m {module}")[0].strip().strip('"')
+                    found = found or os.path.exists(exe)
+    return found
+
+
+def _install_hook(target: Path, event: str, matcher: str, module: str) -> int:
+    """Añade un hook de leo a un settings.json de Claude Code, sin pisar lo que haya.
+    Idempotente; si el intérprete cambió de sitio, re-apunta la entrada existente."""
     data = {}
     if target.exists():
         try:
@@ -207,28 +249,35 @@ def _install_guard_hook(root: Path) -> int:
         except json.JSONDecodeError as e:
             print(f"{target} is not valid JSON ({e}); not touching it.", file=sys.stderr)
             return 1
-    entries = data.setdefault("hooks", {}).setdefault("PreToolUse", [])
-    command = _hook_command()
+    entries = data.setdefault("hooks", {}).setdefault(event, [])
+    command = _hook_command(module)
     for group in entries:
         for h in group.get("hooks", []):
-            if "leo_code.guard_hook" in str(h.get("command", "")):
+            if module in str(h.get("command", "")):
                 if h.get("command") != command:
                     h["command"] = command   # el entorno cambió de sitio: repuntar
                     _write_json(target, data)
-                    print(f"Updated the leo-mcp guard hook in {target}")
+                    print(f"Updated the leo-mcp {event} hook in {target}")
                     return 0
-                print(f"leo-mcp guard hook already in {target}")
+                print(f"leo-mcp {event} hook already in {target}")
                 return 0
-    entry = {"matcher": "Edit|Write",
-             "hooks": [{"type": "command", "command": command}]}
+    entry = {"matcher": matcher, "hooks": [{"type": "command", "command": command}]}
     entries.append(entry)
     _write_json(target, data)
     print(f"Added to {target}:")
-    print(json.dumps({"hooks": {"PreToolUse": [entry]}}, indent=2))
-    print("  It warns you before Claude edits a symbol whose dependents have no test, and"
-          " stays quiet otherwise. It never blocks an edit. Turn it off with LEO_GUARD_HOOK=0"
-          " or by deleting those lines.")
+    print(json.dumps({"hooks": {event: [entry]}}, indent=2))
     return 0
+
+
+def _install_guard_hook(root: Path) -> int:
+    """Añade el hook PreToolUse al settings.json del proyecto, sin pisar lo que haya."""
+    target = root / ".claude" / "settings.json"
+    code = _install_hook(target, "PreToolUse", "Edit|Write", "leo_code.guard_hook")
+    if code == 0:
+        print("  It warns you before Claude edits a symbol whose dependents have no test, and"
+              " stays quiet otherwise. It never blocks an edit. Turn it off with LEO_GUARD_HOOK=0"
+              " or by deleting those lines.")
+    return code
 
 
 def _maybe_hook(args, root: Path) -> int:
@@ -251,7 +300,62 @@ def _write_json(target: Path, data: dict) -> None:
     target.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
+def _user_settings() -> Path:
+    return Path.home() / ".claude" / "settings.json"
+
+
+def _register_user_mcp(launch: list[str]) -> str:
+    """Registra el MCP con scope user a través del CLI de Claude Code, que es el dueño de
+    ~/.claude.json (lo reescribe mientras corre: editarlo a mano pisaría o sería pisado).
+    Devuelve "added", "exists" o "manual". Un registro existente no se toca nunca: puede
+    llevar variables de entorno del usuario."""
+    claude = shutil.which("claude")
+    if claude:
+        try:
+            out = subprocess.run([claude, "mcp", "add", "--scope", "user", "leo-mcp", "--", *launch],
+                                 capture_output=True, text=True, timeout=60)
+        except (OSError, subprocess.TimeoutExpired):
+            out = None
+        if out is not None and out.returncode == 0:
+            print("Added leo-mcp to Claude Code (user scope, all your projects).")
+            return "added"
+        if out is not None and "already exists" in f"{out.stdout}{out.stderr}":
+            print("leo-mcp is already registered in Claude Code (user scope); leaving it as is.")
+            return "exists"
+    shown = " ".join(f'"{a}"' if " " in a else a for a in launch)
+    print("Register the MCP server by running:\n"
+          f"  claude mcp add --scope user leo-mcp -- {shown}")
+    return "manual"
+
+
+def _init_user(args) -> int:
+    """`init --user`: servidor + aviso antes de editar + índice al abrir sesión, para todos
+    los repos del usuario y sin escribir nada en ninguno."""
+    if args.client != "claude":
+        print("--user is only supported for Claude Code (--client claude).", file=sys.stderr)
+        return 2
+    _register_user_mcp(_launch())
+    if getattr(args, "no_hook", False):
+        return 0
+    if _ephemeral(sys.executable):
+        print("Hooks not installed: leo-mcp is running from uv's cache (npx/uvx), which uv may"
+              " delete. To get them: `uv tool install leo-mcp`, then run `leo-mcp init --user` again.")
+        return 0
+    target = _user_settings()
+    code = _install_hook(target, "PreToolUse", "Edit|Write", "leo_code.guard_hook")
+    if code:
+        return code
+    code = _install_hook(target, "SessionStart", "startup|resume", "leo_code.index_hook")
+    if code == 0:
+        print("  PreToolUse warns before Claude edits a symbol whose dependents have no test"
+              " (off: LEO_GUARD_HOOK=0). SessionStart indexes a git repo in the background when"
+              " a session opens (off: LEO_INDEX_HOOK=0). Neither ever blocks Claude.")
+    return code
+
+
 def cmd_init(args) -> int:
+    if getattr(args, "user", False):
+        return _init_user(args)
     root = Path(args.repo).resolve()
     launch = _launch()
     if args.client == "codex":
@@ -307,8 +411,10 @@ def main(argv: list[str] | None = None) -> int:
         sub.add_parser(name, help=help_).add_argument("repo", nargs="?", default=".")
     p = sub.add_parser("init", help="register leo-mcp in a project's MCP config")
     p.add_argument("--client", choices=CLIENTS, default="claude")
+    p.add_argument("--user", action="store_true",
+                   help="register for your user in Claude Code (all repos), writing nothing in the repo")
     p.add_argument("--no-hook", action="store_true",
-                   help="do not install the pre-edit guard hook (Claude Code only)")
+                   help="do not install the hooks (Claude Code only)")
     p.add_argument("repo", nargs="?", default=".")
     args = ap.parse_args(argv)
     if args.cmd not in (None, "serve"):

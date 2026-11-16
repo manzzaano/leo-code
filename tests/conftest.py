@@ -14,6 +14,14 @@ def _isolate_usage_log(tmp_path, monkeypatch):
     monkeypatch.setattr(metrics, "USAGE_LOG_PATH", tmp_path / "usage.jsonl")
 
 
+@pytest.fixture(autouse=True)
+def _isolate_user_settings(tmp_path, monkeypatch):
+    """`doctor` e `init --user` leen/escriben ~/.claude/settings.json: sin esto un test
+    dependería de los hooks reales del usuario (o los tocaría)."""
+    from leo_code import cli
+    monkeypatch.setattr(cli, "_user_settings", lambda: tmp_path / "user-home" / ".claude" / "settings.json")
+
+
 @pytest.fixture
 def mini_repo_path():
     """Path to mini repo fixture directory."""

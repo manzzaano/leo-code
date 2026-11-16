@@ -281,3 +281,36 @@ def test_avisa_aunque_el_repo_viva_bajo_una_carpeta_test(tmp_path, monkeypatch):
     finally:
         engine._get_indexer().stop_watch()
     assert out is not None and "lonely_writer" in out["hookSpecificOutput"]["additionalContext"]
+
+
+def test_install_hook_vale_para_cualquier_evento_y_repunta(tmp_path, monkeypatch):
+    from leo_code import cli
+    target = tmp_path / "settings.json"
+    assert cli._install_hook(target, "SessionStart", "startup|resume", "leo_code.index_hook") == 0
+    g = json.loads(target.read_text(encoding="utf-8"))["hooks"]["SessionStart"]
+    assert g[0]["matcher"] == "startup|resume" and "leo_code.index_hook" in g[0]["hooks"][0]["command"]
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "otro" / "python.exe"))
+    assert cli._install_hook(target, "SessionStart", "startup|resume", "leo_code.index_hook") == 0
+    g = json.loads(target.read_text(encoding="utf-8"))["hooks"]["SessionStart"]
+    assert len(g) == 1 and "otro" in g[0]["hooks"][0]["command"], "re-apunta, no duplica"
+
+
+def test_hook_command_funciona_en_bash_de_windows(monkeypatch):
+    """Claude Code lanza los hooks con Git Bash en Windows: sin comillas, bash se come
+    las barras invertidas (`C:UsersX...python.exe: command not found`, exit 127)."""
+    from leo_code import cli
+    monkeypatch.setattr(sys, "executable", r"C:\Users\x\Python312\python.exe")
+    assert cli._hook_command("leo_code.index_hook") == '"C:/Users/x/Python312/python.exe" -m leo_code.index_hook'
+
+
+def test_hook_command_real_corre_en_bash(tmp_path):
+    """El comando que escribe init, ejecutado como lo ejecuta Claude Code."""
+    import shutil
+    from leo_code import cli
+    bash = shutil.which("bash")
+    if not bash:
+        pytest.skip("sin bash")
+    p = subprocess.run([bash, "-c", cli._hook_command("leo_code.index_hook")], input="{}",
+                       capture_output=True, text=True, timeout=60,
+                       env={**os.environ, "PYTHONPATH": str(ROOT)})
+    assert p.returncode == 0, p.stderr[-300:]

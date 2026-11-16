@@ -29,8 +29,10 @@ leo-mcp is in beta, published on PyPI and npm:
 ```bash
 uv tool install leo-mcp   # installs the leo-mcp command
 leo-mcp doctor                  # checks your setup and prints the config snippet
-claude mcp add leo-mcp -- leo-mcp   # Claude Code
+leo-mcp init --user            # Claude Code: every repo, hooks included, nothing written in them
 ```
+
+Just the server, no hooks: `claude mcp add leo-mcp -- leo-mcp`.
 
 Other clients: run `leo-mcp init --client opencode|cursor|codex` inside your project.
 
@@ -74,6 +76,7 @@ leo-mcp index        # index the current repo and show what leo-mcp sees
 leo-mcp doctor       # check the install, print the config snippet
 leo-mcp init         # add leo-mcp to this project's .mcp.json + the pre-edit guard hook
 leo-mcp init --no-hook   # ...without the hook
+leo-mcp init --user      # Claude Code for all your repos: user-scope server + both hooks, nothing in the repo
 ```
 
 ```
@@ -111,7 +114,7 @@ leo-mcp indexed C:\...\NEXUS  (build in 0.17s)
 
 ## It warns you before your agent breaks something
 
-`leo-mcp init` also installs a `PreToolUse` hook in Claude Code. Before the agent edits a
+`leo-mcp init` (and `init --user`) also installs a `PreToolUse` hook in Claude Code. Before the agent edits a
 symbol, leo looks up who depends on it. If some of those dependents have **no test**, it says
 so — to the agent, so that it checks them, and to you, in one line:
 
@@ -127,6 +130,10 @@ It costs 0.28 s per edit on a 1,220-symbol index. It never builds an index (no i
 silence), it goes quiet above a 4 MB index instead of adding seconds to every edit, and it
 **never blocks an edit**: it has no way to. It emits no permission decision and always exits
 0, and both invariants have tests.
+
+So that "no index yet" doesn't mean a silent first session, `init --user` adds a second hook:
+on `SessionStart` in a git repo it starts `leo-mcp index` in the background and returns at
+once, printing nothing. Turn it off with `LEO_INDEX_HOOK=0`.
 
 **Its silence is not a guarantee.** Same static graph as the rest of the product: a dependency
 through a WebSocket, a queue, a subprocess or a name built from strings is not in it, so the
