@@ -71,3 +71,14 @@ def test_como_proceso_el_indice_aparece_sin_esperarlo(tmp_path):
     # lo escribe el hijo desacoplado
     assert _espera(lambda: any(cache.glob("repos/*/index-v*.json.gz")), 60), \
         f"sin índice en {cache}: {list(cache.rglob('*')) if cache.exists() else 'no existe'}"
+
+
+@pytest.mark.parametrize("cwd", ["", ".", "repo"])
+def test_cwd_vacio_o_relativo_no_indexa_la_carpeta_del_proceso(cwd, tmp_path, monkeypatch):
+    """Sin una ruta absoluta, os.path resuelve contra la carpeta del PROCESO del hook:
+    indexaría otro repo. Solo vale lo que diga Claude Code, y siempre es absoluto."""
+    (tmp_path / ".git").mkdir()
+    (tmp_path / "repo" / ".git").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(index_hook, "_spawn", lambda cmd: pytest.fail(f"lanzó {cmd}"))
+    assert index_hook.run({"cwd": cwd}) is None

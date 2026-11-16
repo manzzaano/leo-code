@@ -37,7 +37,10 @@ def run(payload: dict) -> list[str] | None:
     cwd = payload.get("cwd")
     # ponytail: solo la raíz del repo (como el hook de craft); subir hasta .git si alguien
     # abre sesiones en subcarpetas
-    if not isinstance(cwd, str) or not os.path.isdir(os.path.join(cwd, ".git")):
+    # Solo rutas absolutas: una vacía o relativa se resolvería contra la carpeta de ESTE
+    # proceso e indexaría otro repo.
+    if (not isinstance(cwd, str) or not os.path.isabs(cwd)
+            or not os.path.isdir(os.path.join(cwd, ".git"))):
         return None
     cmd = [sys.executable, "-m", "leo_code.cli", "index", cwd]
     _spawn(cmd)
