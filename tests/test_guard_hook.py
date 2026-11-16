@@ -293,3 +293,24 @@ def test_install_hook_vale_para_cualquier_evento_y_repunta(tmp_path, monkeypatch
     assert cli._install_hook(target, "SessionStart", "startup|resume", "leo_code.index_hook") == 0
     g = json.loads(target.read_text(encoding="utf-8"))["hooks"]["SessionStart"]
     assert len(g) == 1 and "otro" in g[0]["hooks"][0]["command"], "re-apunta, no duplica"
+
+
+def test_hook_command_funciona_en_bash_de_windows(monkeypatch):
+    """Claude Code lanza los hooks con Git Bash en Windows: sin comillas, bash se come
+    las barras invertidas (`C:UsersX...python.exe: command not found`, exit 127)."""
+    from leo_code import cli
+    monkeypatch.setattr(sys, "executable", r"C:\Users\x\Python312\python.exe")
+    assert cli._hook_command("leo_code.index_hook") == '"C:/Users/x/Python312/python.exe" -m leo_code.index_hook'
+
+
+def test_hook_command_real_corre_en_bash(tmp_path):
+    """El comando que escribe init, ejecutado como lo ejecuta Claude Code."""
+    import shutil
+    from leo_code import cli
+    bash = shutil.which("bash")
+    if not bash:
+        pytest.skip("sin bash")
+    p = subprocess.run([bash, "-c", cli._hook_command("leo_code.index_hook")], input="{}",
+                       capture_output=True, text=True, timeout=60,
+                       env={**os.environ, "PYTHONPATH": str(ROOT)})
+    assert p.returncode == 0, p.stderr[-300:]

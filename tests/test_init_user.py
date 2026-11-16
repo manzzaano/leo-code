@@ -178,3 +178,13 @@ def test_doctor_respeta_la_escotilla_del_indice(env, monkeypatch, capsys):
     _init_user(env)
     monkeypatch.setenv("LEO_INDEX_HOOK", "0")
     assert "off (LEO_INDEX_HOOK=0)" in _doctor(env, monkeypatch, capsys)
+
+
+def test_doctor_no_da_ok_si_el_hook_apunta_a_un_python_que_no_existe(env, monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "borrado" / "python.exe"))
+    _init_user(env)
+    monkeypatch.undo()   # doctor corre desde el python real; el hook apunta al borrado
+    monkeypatch.setattr(cli, "_user_settings", lambda: env.settings)
+    out = _doctor(env, monkeypatch, capsys)
+    fila = next(l for l in out.splitlines() if "guard hook" in l)
+    assert "[ok ]" not in fila and "init" in fila

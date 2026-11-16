@@ -17,6 +17,7 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 
 def _spawn(cmd: list[str]) -> None:
@@ -41,6 +42,9 @@ def run(payload: dict) -> list[str] | None:
     # proceso e indexaría otro repo.
     if (not isinstance(cwd, str) or not os.path.isabs(cwd)
             or not os.path.isdir(os.path.join(cwd, ".git"))):
+        return None
+    # Un home con dotfiles en git: indexaría todo el home en cada sesión abierta ahí.
+    if os.path.normcase(os.path.abspath(cwd)) == os.path.normcase(str(Path.home())):
         return None
     cmd = [sys.executable, "-m", "leo_code.cli", "index", cwd]
     _spawn(cmd)

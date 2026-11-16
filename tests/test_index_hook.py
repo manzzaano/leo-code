@@ -82,3 +82,11 @@ def test_cwd_vacio_o_relativo_no_indexa_la_carpeta_del_proceso(cwd, tmp_path, mo
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(index_hook, "_spawn", lambda cmd: pytest.fail(f"lanzó {cmd}"))
     assert index_hook.run({"cwd": cwd}) is None
+
+
+def test_no_indexa_el_home_aunque_sea_un_repo_git(tmp_path, monkeypatch):
+    """Home con dotfiles en git: indexaría TODO el home en cada sesión abierta ahí."""
+    (tmp_path / ".git").mkdir()
+    monkeypatch.setattr(index_hook.Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.setattr(index_hook, "_spawn", lambda cmd: pytest.fail("indexó el home"))
+    assert index_hook.run({"cwd": str(tmp_path)}) is None

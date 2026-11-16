@@ -162,20 +162,30 @@ def cmd_doctor(args) -> int:
     # "no me avisa" tiene dos causas posibles y ninguna es obvia: el hook no está
     # instalado, o lo está apagado. Que se vea aquí.
     # Vale el settings del repo (init) o el del usuario (init --user).
-    settings = "".join(f.read_text(encoding="utf-8", errors="replace")
-                       for f in (Path(repo) / ".claude" / "settings.json", _user_settings())
-                       if f.exists())
-    installed = "leo_code.guard_hook" in settings
+    texts = [f.read_text(encoding="utf-8", errors="replace")
+             for f in (Path(repo) / ".claude" / "settings.json", _user_settings()) if f.exists()]
+
+    def hook_state(module: str) -> bool | None:
+        states = [_hook_python_ok(t, module) for t in texts]
+        return True if True in states else (False if False in states else None)
+
+    stale = "points to a Python that no longer exists (re-run: leo-mcp init)"
+    idx = hook_state("leo_code.index_hook")
     if os.getenv("LEO_INDEX_HOOK") == "0":
         row("index hook", None, "off (LEO_INDEX_HOOK=0)")
-    elif "leo_code.index_hook" in settings:
+    elif idx:
         row("index hook", True, "indexes a git repo in the background when a session opens")
+    elif idx is False:
+        row("index hook", None, stale)
     else:
         row("index hook", None, "not installed (run: leo-mcp init --user)")
+    installed = hook_state("leo_code.guard_hook")
     if os.getenv("LEO_GUARD_HOOK") == "0":
         row("guard hook", None, "off (LEO_GUARD_HOOK=0)")
     elif installed:
         row("guard hook", True, "warns before editing a symbol whose dependents have no test")
+    elif installed is False:
+        row("guard hook", None, stale)
     elif _ephemeral(sys.executable):
         row("guard hook", None, "not installed here (needs `uv tool install leo-mcp`, then leo-mcp init)")
     else:
@@ -203,8 +213,30 @@ def _hook_command(module: str = "leo_code.guard_hook") -> str:
     sobre un índice de 1.220 símbolos). Si mueves o reinstalas el entorno, vuelve a
     ejecutar `leo-mcp init`.
     """
-    exe = sys.executable
-    return f'"{exe}" -m {module}' if " " in exe else f"{exe} -m {module}"
+    # Claude Code lanza los hooks con Git Bash en Windows: sin comillas y con `\` bash se
+    # come las barras (exit 127). Con comillas y `/` vale en bash y en cmd.
+    # ponytail: una ruta POSIX con `\` literal se rompería; no existe en la práctica.
+    exe = sys.executable.replace("\\", "/")
+    return f'"{exe}" -m {module}'
+
+
+def _hook_python_ok(settings_text: str, module: str) -> bool | None:
+    """None si no hay hook de `module`; si lo hay, ¿existe el python al que apunta?
+    Solo buscar el nombre daba "ok" con el entorno borrado o movido."""
+    try:
+        data = json.loads(settings_text or "{}")
+    except json.JSONDecodeError:
+        return None
+    found = None
+    groups = data.get("hooks", {}) if isinstance(data, dict) else {}
+    for entries in (groups.values() if isinstance(groups, dict) else []):
+        for group in entries if isinstance(entries, list) else []:
+            for h in group.get("hooks", []) if isinstance(group, dict) else []:
+                cmd = str(h.get("command", "")) if isinstance(h, dict) else ""
+                if f"-m {module}" in cmd:
+                    exe = cmd.split(f" -m {module}")[0].strip().strip('"')
+                    found = found or os.path.exists(exe)
+    return found
 
 
 def _install_hook(target: Path, event: str, matcher: str, module: str) -> int:
