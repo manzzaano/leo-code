@@ -7,7 +7,8 @@
   },
   "files": [
     "bin/leo-mcp.js",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=18"
@@ -26,6 +27,7 @@
     "ast"
   ],
   "author": "Ismael Manzano Leon",
+  "license": "MIT",
   "homepage": "https://github.com/manzzaano/leo-code#readme",
   "repository": {
     "type": "git",

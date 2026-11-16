@@ -27,6 +27,6 @@ jobs:
 
       - name: Publish
         working-directory: npm
-        run: cp ../README.md README.md && npm publish --provenance --access public
+        run: cp ../README.md ../LICENSE . && npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
