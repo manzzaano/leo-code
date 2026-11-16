@@ -13,7 +13,6 @@ Reglas duras, todas con test:
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 import sys
@@ -52,9 +51,10 @@ def run(payload: dict) -> list[str] | None:
 
 
 def main() -> int:
+    from leo_code.guard_hook import read_payload   # UTF-8 también en Windows
     try:
-        run(json.loads(sys.stdin.read() or "{}"))
-    except Exception:
+        run(read_payload())
+    except BaseException:   # SystemExit(2) incluido: exit 2 es un bloqueo en Claude Code
         pass   # un fallo del hook no puede molestar al abrir sesión
     return 0
 

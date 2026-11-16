@@ -197,6 +197,14 @@ def run(payload: dict, started: float) -> dict | None:
                                    "additionalContext": context}}
 
 
+def read_payload() -> dict:
+    """El JSON del hook. Claude Code lo manda en UTF-8; en Windows `sys.stdin` lo
+    decodifica como cp1252 y una ruta con tilde llegaba deformada (hook mudo). Se leen
+    los bytes."""
+    data = sys.stdin.buffer.read().decode("utf-8", "replace")
+    return json.loads(data or "{}")
+
+
 def main(argv: list[str] | None = None) -> int:
     """Entrypoint del hook. Devuelve 0 SIEMPRE: ver la cabecera del módulo."""
     started = time.monotonic()
@@ -208,11 +216,10 @@ def main(argv: list[str] | None = None) -> int:
     # y el JSON se escribe en el stdout real. Mismo reparto que en el server MCP.
     real_stdout, sys.stdout = sys.stdout, sys.stderr
     try:
-        payload = json.loads(sys.stdin.read() or "{}")
-        out = run(payload, started)
+        out = run(read_payload(), started)
         if out is not None:
             real_stdout.write(json.dumps(out))
-    except Exception as e:
+    except BaseException as e:   # también SystemExit(2): en Claude Code exit 2 BLOQUEA
         # Un hook roto no puede frenar al agente. A stderr, que Claude Code manda al
         # log de debug sin interpretarlo como decisión.
         print(f"[leo-mcp] guard hook skipped: {type(e).__name__}: {e}", file=sys.stderr)
