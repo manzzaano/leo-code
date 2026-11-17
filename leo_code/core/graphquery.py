@@ -245,6 +245,7 @@ class _PyScope:
         self._sub_builtins = {n for fs in self.classes.values() for n, r in fs if not r and n in _BUILTIN_TYPES}
         self._mros: dict[str, tuple] = {}
         self._descs: dict[str, tuple] = {}
+        self._imp: dict[str, set] = {}
 
     def _mod_files(self, mod: str, level: int, here: str) -> list | None:
         """Archivos del módulo: lista, [] = fuera del repo, None = no se sabe."""
@@ -432,10 +433,11 @@ class _PyScope:
         self.resolve(caller, [(name, recv)], by_name, resolved)
         return None if by_name else list(resolved.values())
 
-    def resolve(self, caller, forms, by_name: list, resolved: dict) -> None:
+    def resolve(self, caller, forms, by_name: list, resolved: dict, loose: list | None = None) -> None:
         """`targets` de cada forma de llamada de `caller`: el nombre va a `by_name` si no se
-        decide, sus defs a `resolved` (id → def) si sí. Ruta normalizada una vez y sin
-        objetos por llamada: corre por cada símbolo al reconstruir el grafo (chequeo (e))."""
+        decide, sus defs a `resolved` (id → def) si sí. Con `loose`, los `x.nombre()` con `x`
+        desconocido van ahí y no a `by_name`. Ruta normalizada una vez y sin objetos por
+        llamada: corre por cada símbolo al reconstruir el grafo (chequeo (e))."""
         here = _norm(caller.file_path)
         if here not in self.files:
             by_name += [n for n, _ in forms]
@@ -488,7 +490,7 @@ class _PyScope:
                         resolved[d.id] = d
                 continue
             if recv and recv not in local and recv not in binds and recv not in top:
-                by_name.append(name)          # obj.foo(), a.b.foo(): por nombre
+                (by_name if loose is None else loose).append(name)   # obj.foo(), a.b.foo(): por nombre
                 continue
             if (recv or name) in local:       # import dentro de la función: tapa al del archivo
                 t = self._bound(local[recv or name], name, recv, here)
@@ -566,6 +568,16 @@ class _PyScope:
             return self._bind_targets(b, here)
         files = self._bind_module(b, here)
         return files if not files else self._in_module(files, name, 0)
+
+    def imported_files(self, caller) -> set:
+        """Archivos del repo que importa el archivo de `caller` (más sus imports locales)."""
+        here = _norm(caller.file_path)
+        out = self._imp.get(here)
+        if out is None:
+            out = self._imp[here] = {f for b in self.binds.get(here, _NONE).values()
+                                     for f in self._bind_module(b, here) or ()}
+        lb = (caller.properties or {}).get("local_binds")
+        return out | {f for b in lb for f in self._bind_module(b, here) or ()} if lb else out
 
 
 def _is_import(c) -> bool:
@@ -685,12 +697,12 @@ class GraphQuery:
         callers = self.callers.get(name) or self.callers.get(_bare(name)) or []
         return [c for c in callers if self._edge_ok(c, name)] + self._res.get(_bare(name), [])
 
-    def _split(self, c, forms, calls) -> tuple[list, Iterable]:
+    def _split(self, c, forms, calls, loose: list | None = None) -> tuple[list, Iterable]:
         """(nombres que van por nombre, defs resueltas) de las llamadas de `c`. Los nombres
         de `calls` sin forma (refs que añaden refgraph/boundary) van por nombre."""
         by_name = calls[(c.properties or {}).get("n_calls", len(calls)):]
         resolved = {}
-        self._scope.resolve(c, forms, by_name, resolved)
+        self._scope.resolve(c, forms, by_name, resolved, loose)
         return by_name, resolved.values()
 
     def _callees_of(self, c) -> list[tuple[str, list]]:
@@ -841,16 +853,31 @@ class GraphQuery:
             notes.append(TYPE_NOTE)
         return Proof("impact", name, cites, note=" · ".join(notes))
 
-    def _hops(self, c) -> list[tuple]:
+    def _hops(self, c, strict: bool = False) -> list[tuple]:
         """(def destino, exacta, nº de defs posibles) por llamada de `c`: las resueltas van a
-        su def; las demás, a todas las defs con ese nombre (no se quita una arista incierta)."""
+        su def; las demás, a todas las defs con ese nombre (no se quita una arista incierta).
+
+        `strict`: `x.f()` con `x` desconocido solo va a métodos `f` o a funciones `f` de un
+        módulo que el archivo de `c` importa; una función suelta de otro módulo no puede ser
+        un atributo de `x` (sobre leo-code, cobertura de más 80→53 contra coverage.py)."""
         calls = getattr(c, "calls", None) or []
         forms = (c.properties or {}).get("call_forms")
-        by_name, resolved = (calls, ()) if forms is None else self._split(c, forms, calls)
+        loose = [] if strict and forms is not None else None
+        by_name, resolved = (calls, ()) if forms is None else self._split(c, forms, calls, loose)
         out = [(d, True, 1) for d in resolved]
-        for n in dict.fromkeys(by_name):
+        names = dict.fromkeys(by_name)
+        for n in names:
             if self._edge_ok(c, n):
                 ts = [t for t in self._resolve(n) if not _is_import(t) and t.type != "type_def"]
+                out += [(t, False, len(ts)) for t in ts]
+        if loose:
+            mods = self._scope.imported_files(c)
+            for n in dict.fromkeys(loose):
+                if n in names or not self._edge_ok(c, n):
+                    continue
+                ts = [t for t in self._resolve(n) if not _is_import(t) and t.type != "type_def"
+                      and (t.type == "method" or "class" in (t.properties or {})
+                           or _norm(t.file_path) in mods)]
                 out += [(t, False, len(ts)) for t in ts]
         return out
 

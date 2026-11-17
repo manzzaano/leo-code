@@ -196,3 +196,31 @@ def test_clase_con_base_de_fuera_sigue_cubriendo_por_la_clase(tmp_path):
         "test_a.py": "from a import Svc\n\ndef test_svc():\n    assert Svc()\n",
     })
     assert Guardian(caps).is_covered("helper")
+
+
+def test_receptor_desconocido_solo_cubre_metodos_y_modulos_importados(tmp_path):
+    # `obj.run()` con `obj` de tipo desconocido: por nombre cubría TODAS las `run`, también
+    # funciones sueltas de módulos que el test ni importa (medido: `hook.main()` → 9 `main`).
+    # Un atributo así solo puede ser un método o una función de un módulo importado.
+    caps = _repo_caps(tmp_path, {
+        "a.py": "def run():\n    return 1\n",
+        "b.py": "class Worker:\n    def run(self):\n        return 2\n",
+        "c.py": "def go():\n    return 3\n",
+        "test_x.py": "import c\n\ndef test_x(obj):\n    obj.run()\n    obj.go()\n",
+    })
+    g = Guardian(caps)
+    runs = {c.file_path.replace("\\", "/").rsplit("/", 1)[-1]: c
+            for c in g.caps.values() if c.name == "run"}
+    assert g.is_covered(runs["b.py"]), "método: puede ser el de obj"
+    assert not g.is_covered(runs["a.py"]), "función suelta de un módulo no importado"
+    assert g.is_covered("go"), "función de un módulo importado: `obj` puede ser ese módulo"
+
+
+def test_receptor_desconocido_y_llamada_suelta_sigue_por_nombre(tmp_path):
+    # Si el nombre también se llama sin receptor y sin enlace, sigue por nombre: no se quita
+    # una arista que la forma no descarta.
+    caps = _repo_caps(tmp_path, {
+        "a.py": "def run():\n    return 1\n",
+        "test_x.py": "def test_x(obj):\n    obj.run()\n    run()\n",
+    })
+    assert Guardian(caps).is_covered("run")

@@ -116,20 +116,21 @@ class Guardian:
         """Ids de las definiciones alcanzables desde algún test (transitivo).
 
         Por definición, con la resolución de llamadas (`_hops`: resueltas → su def; sin
-        resolver → todas las homónimas, no se quita una arista incierta). Por nombre, un
+        resolver → todas las homónimas, no se quita una arista incierta; `x.f()` con `x`
+        desconocido, solo métodos y funciones de módulos importados). Por nombre, un
         test de un `helper` cubría a todos los `helper` del repo."""
         if self._covered is not None:
             return self._covered
         seen: set[str] = set()
         q: deque = deque(d for c in self.caps.values() if self._is_test(c, self._root)
-                         for d, _, _ in self.gq._hops(c))
+                         for d, _, _ in self.gq._hops(c, strict=True))
         while q:
             d = q.popleft()
             if d.id in seen:
                 continue
             seen.add(d.id)
             hops = self.gq.ctor_hops(d)   # alcanzar una clase no ejecuta todos sus métodos
-            q.extend(t for t, _, _ in (self.gq._hops(d) if hops is None else hops)
+            q.extend(t for t, _, _ in (self.gq._hops(d, strict=True) if hops is None else hops)
                      if t.id not in seen)
         self._covered = seen
         return seen
