@@ -12,9 +12,12 @@ atribuir la tabla a todas las funciones del archivo. Antes se hacía eso (y con 
 imports incluidos): la mediana de dependientes de guard en leo-code era 608, casi todo
 el repo; así es 158, con 0 falsos «sin test» frente a coverage.py (28/10).
 
-Solo para nombres ÚNICOS en el índice (definidos exactamente una vez): así `_detect_go`
-(único) se conecta, pero nombres comunes (`run`, `get`, `build`) no inyectan ruido —
-mantenemos la precisión del grafo.
+Un nombre ÚNICO en el índice (definido exactamente una vez) se conecta por nombre: así
+`_detect_go` se conecta, pero nombres comunes (`run`, `get`, `build`) no inyectan ruido.
+Un nombre REPETIDO solo se conecta si el archivo lo importa explícitamente o lo define en
+su nivel superior, y entonces como `ruta.py:nombre` (la def de ese módulo, no todas las
+homónimas): es la regla de imports de PyCG y la expansión de comodines de pyan (#88).
+`TestClient(app)` con varios `app` en el repo antes no dejaba arista.
 """
 
 from __future__ import annotations
@@ -22,28 +25,55 @@ from __future__ import annotations
 import ast
 import textwrap
 
-from leo_code.core.graphquery import _bare, _is_import
+from leo_code.core.graphquery import _bare, _is_import, _norm
 
 _DEF_TYPES = {"function", "method", "class", "async_function", "dataclass", "exception", "test",
               "constant", "variable"}
 
 
-def augment_refs(capsules: dict) -> int:
-    """Añade aristas de referencia (in-place) a `calls`. Devuelve nº de aristas añadidas."""
+def augment_refs(capsules: dict, scope=None) -> int:
+    """Añade aristas de referencia (in-place) a `calls`. Devuelve nº de aristas añadidas.
+    Con `scope` (`_PyScope` de las mismas cápsulas) también las de nombres repetidos que
+    el archivo importa o define (cualificadas `ruta.py:nombre`)."""
     counts: dict[str, int] = {}
+    where: dict[str, set] = {}            # nombre → archivos que lo definen
     for c in capsules.values():
         if c.type in _DEF_TYPES and not _is_import(c):
             b = _bare(c.name)
             counts[b] = counts.get(b, 0) + 1
+            where.setdefault(b, set()).add(_norm(c.file_path))
     unique = {n for n, k in counts.items() if k == 1}
 
-    def _refs(tree) -> set[str]:
+    def _qualified(c, names) -> set[str]:
+        """`ruta.py:nombre` para los nombres repetidos que el archivo de `c` enlaza."""
+        here = _norm(c.file_path)
+        if scope is None or here not in scope.files:
+            return set()
+        lb = (c.properties or {}).get("local_binds")
+        local = {b[0]: b for b in lb} if lb else {}
+        binds = scope.binds.get(here) or {}
         out = set()
-        for n in ast.walk(tree):
-            nm = n.id if isinstance(n, ast.Name) else (n.attr if isinstance(n, ast.Attribute) else None)
-            if nm in unique:
-                out.add(nm)
+        for nm in names:
+            if counts.get(nm, 0) < 2:
+                continue
+            b = local.get(nm) or binds.get(nm)
+            if b is not None:
+                _, mod, attr, level = b
+                # `import m` (sin attr) enlaza un módulo, no una def. `from m import x as y`:
+                # la def se llama x. ponytail: un `obj.y` también cuenta como uso de y.
+                files = (scope._mod_files(mod, level, here) or ()) if attr else ()
+                out.update(f"{f}:{attr}" for f in files if f in where.get(attr, ()))
+            # la cabecera son las sentencias de módulo: ahí `X = 1` es la def de X, no un uso
+            elif here in where.get(nm, ()) and c.type != "file_header":
+                out.add(f"{here}:{nm}")
         return out
+
+    def _names(tree) -> set[str]:
+        return {n.id if isinstance(n, ast.Name) else n.attr
+                for n in ast.walk(tree) if isinstance(n, (ast.Name, ast.Attribute))}
+
+    def _refs(tree) -> set[str]:
+        return unique.intersection(_names(tree))
 
     added = 0
     for c in capsules.values():
@@ -52,13 +82,14 @@ def augment_refs(capsules: dict) -> int:
             continue
         stored = (c.properties or {}).get("refs")   # Python: guardadas al indexar (parser._store_refs)
         if stored is not None:
-            found = unique.intersection(stored.split())
+            names = stored.split()
         else:
             try:
-                found = _refs(ast.parse(textwrap.dedent(content)))
+                names = _names(ast.parse(textwrap.dedent(content)))
             except SyntaxError:
                 continue
         have = set(c.calls); self_bare = _bare(c.name)
+        found = unique.intersection(names) | _qualified(c, set(names) - {self_bare})
         for nm in found:
             if nm != self_bare and nm not in have:
                 c.calls.append(nm); have.add(nm); added += 1

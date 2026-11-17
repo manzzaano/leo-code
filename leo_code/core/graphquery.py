@@ -598,7 +598,7 @@ def _is_aux_path(c) -> bool:
 class GraphQuery:
     """Índices deterministas sobre un store de cápsulas (id -> Capsule)."""
 
-    def __init__(self, capsules: dict):
+    def __init__(self, capsules: dict, scope: "_PyScope | None" = None):
         self.caps = capsules or {}
         # defaultdict al construir: `setdefault(k, [])` crea una lista por llamada aunque la
         # clave exista, y esa basura dispara pasadas del GC dentro del chequeo (e).
@@ -610,8 +610,10 @@ class GraphQuery:
         # Cada llamada con forma conocida se intenta resolver (_PyScope). Resuelta → arista
         # exacta caller→def (`_res`, por nombre de la def); sin resolver → por nombre, como
         # siempre. `calls` sin forma (otros lenguajes, refs que añade refgraph) → por nombre.
-        self._scope = scope = _PyScope(self.caps.values())
+        self._scope = scope = scope or _PyScope(self.caps.values())
         self._res: dict[str, list] = defaultdict(list)   # nombre base de la def → callers resueltos
+        # caller id → refs `ruta.py:nombre` de refgraph: cuentan solo para la def de ese archivo
+        self._qref: dict[str, list] = {}
         pending, resolved = [], {}              # reutilizados: menos objetos → menos pasadas del GC
         for c in self.caps.values():
             calls = getattr(c, "calls", None) or []
@@ -627,6 +629,10 @@ class GraphQuery:
                     self._res[_bare(d.name)].append(c)
                 by_name = pending
             for callee in by_name:
+                if ":" in callee and _split_file(callee)[0]:
+                    self._res[_bare(callee)].append(c)
+                    self._qref.setdefault(c.id, []).append(callee)
+                    continue
                 self.callers[callee].append(c)
                 self.callers[_bare(callee)].append(c)
         # Familias de lenguaje por nombre, precomputadas: _edge_ok se llama UNA VEZ POR
@@ -784,6 +790,9 @@ class GraphQuery:
             if (any(self.hits_def(c, f, d) for f in forms)
                     # sin forma con ese nombre: arista de refgraph/boundary (llega por nombre)
                     or (not forms and c.id in named)
+                    # ref cualificada de refgraph (`ruta.py:nombre`): solo la def de ese archivo
+                    or any(_split_file(q)[1] == name and _in_file(d, _split_file(q)[0])
+                           for q in self._qref.get(c.id, ()))
                     # alias resuelto (`import run as other`): solo si va a ESTA def
                     or any(self._goes_to(c, f, d) for f in allf if f[0] != name)):
                 out.append(c)

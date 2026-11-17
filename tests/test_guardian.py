@@ -224,3 +224,32 @@ def test_receptor_desconocido_y_llamada_suelta_sigue_por_nombre(tmp_path):
         "test_x.py": "def test_x(obj):\n    obj.run()\n    run()\n",
     })
     assert Guardian(caps).is_covered("run")
+
+
+def test_referencia_a_nombre_repetido_importado_va_a_su_archivo(tmp_path):
+    # `TestClient(app)` con varios `app` en el repo: refgraph descartaba la referencia (solo
+    # unía nombres únicos) y lo que `app` usa salía sin test. Como PyCG y pyan (#88): si el
+    # archivo importa el nombre, la referencia va a la def de ESE módulo, no a las homónimas.
+    caps = _repo_caps(tmp_path, {
+        "a.py": "def handler():\n    return 1\n\napp = {'h': handler}\n",
+        "b.py": "def other():\n    return 2\n\napp = {'o': other}\n",
+        "test_x.py": "from a import app\n\ndef test_x():\n    assert app\n",
+    })
+    g = Guardian(caps)
+    assert g.is_covered("handler"), "test → a.py:app → handler"
+    assert not g.is_covered("other"), "b.py:app es otra def: no la toca el test"
+    apps = {c.file_path.replace("\\", "/").rsplit("/", 1)[-1]: c
+            for c in g.caps.values() if c.name == "app"}
+    callers = lambda d: {c.name for c in g.gq.callers_of_def(d)}
+    assert "test_x" in callers(apps["a.py"]) and "test_x" not in callers(apps["b.py"])
+
+
+def test_referencia_a_nombre_repetido_sin_import_se_descarta(tmp_path):
+    # Sin import ni def en el archivo no se sabe a cuál va: se descarta, como hasta ahora.
+    caps = _repo_caps(tmp_path, {
+        "a.py": "def handler():\n    return 1\n\napp = {'h': handler}\n",
+        "b.py": "def other():\n    return 2\n\napp = {'o': other}\n",
+        "test_x.py": "def test_x():\n    assert app\n",
+    })
+    g = Guardian(caps)
+    assert not g.is_covered("handler") and not g.is_covered("other")

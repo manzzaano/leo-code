@@ -88,15 +88,17 @@ class Guardian:
         # Sobre una COPIA de las listas `calls` para NO contaminar el grafo directo y
         # preciso que usan who_calls/trace/where (que se demuestra sound+complete vs ast).
         import copy
+        from leo_code.core.graphquery import _PyScope
         from leo_code.core.refgraph import augment_refs
         aug = {}
         for k, c in (capsules or {}).items():
             cc = copy.copy(c)
             cc.calls = list(c.calls or [])
             aug[k] = cc
-        augment_refs(aug)
+        scope = _PyScope(aug.values())     # no mira `calls`: vale antes y después de aumentar
+        augment_refs(aug, scope)
         self.caps = aug
-        self.gq = GraphQuery(aug)
+        self.gq = GraphQuery(aug, scope)
         self._covered: set[str] | None = None
         self._root = os.path.abspath(repo) if repo else None   # la regla de test mira la ruta DENTRO del repo, no sus carpetas padre
         # cita (archivo, línea, nombre) → su cápsula: la cobertura va por definición
