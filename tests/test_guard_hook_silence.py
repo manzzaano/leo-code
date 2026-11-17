@@ -78,6 +78,19 @@ def test_techo_por_defecto_2_mb():
         assert guard_hook._MAX_INDEX_MB == 2.0
 
 
+def test_total_cortado_por_el_limite_se_dice_con_mas(tmp_path, index):
+    """Revisión 17/11: 30 de 66 avisos de leo-code decían «(200 dependents)» cuando el
+    recorrido se paraba en 200: la cifra era un tope, no un total."""
+    root = tmp_path / "big"
+    root.mkdir()
+    body = "def f():\n    return 1\n" + "".join(f"\n\ndef g{i}():\n    return f()\n" for i in range(205))
+    (root / "core.py").write_text(body, encoding="utf-8")
+    index(root)
+    out = _edit(root, "core.py", "    return 1")
+    assert out is not None and "(200+ dependents)" in out["systemMessage"]
+    assert "200+ dependent(s) in total" in out["hookSpecificOutput"]["additionalContext"]
+
+
 def test_calla_si_el_plazo_vence_durante_el_informe(tmp_path, index, monkeypatch):
     """C: el plazo se mira también entre las fases caras del informe."""
     root = tmp_path / "py"

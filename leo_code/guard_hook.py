@@ -162,7 +162,10 @@ def _report(caps: list, symbols: list, repo: str | None = None,
             continue
         risky = sorted(risky.values(), key=lambda c: (c.file_path or "", c.start_line or 0))
         rel, name = _rel(cap.file_path, repo), _qual(cap)
-        total = len(guard.review(f"{rel}:{name}").affected)
+        # Solo la cuenta: `impact` sin el `is_covered` por dependiente de `review` (2,7 frente
+        # a 5,0 ms por símbolo), y su nota dice si el recorrido se paró en el límite.
+        proof = guard.gq.impact(f"{rel}:{name}")
+        total = f"{len(proof.cites)}{'+' if 'stopped at' in proof.note else ''}"
         shown = risky[:_MAX_SYMBOLS_REPORTED]
         rest = len(risky) - len(shown)
         lines = [f"leo-mcp: `{name}` ({rel}:{cap.start_line}) has {len(risky)} direct caller(s) "

@@ -120,13 +120,13 @@ so — to the agent, with each caller as `file:line`, so that it checks them, an
 line:
 
 ```
-leo: ensure_structural → 2 direct caller(s) with no test (200 dependents)
+leo: ensure_structural → 2 direct caller(s) with no test (200+ dependents)
 ```
 
 The rest of the time it says nothing, by design: a warning that fires on every edit is a
 warning you turn off. Callers that *are* covered by a test raise nothing, untested code
 further up the chain only counts toward the total, and editing a test file raises nothing.
-On leo-code itself it speaks on about 1 edit in 4.
+On leo-code itself it speaks for about 1 symbol in 8 (66 of 564, measured over every symbol).
 
 It costs about 0.3 s per edit on a 1,800-symbol index. It never builds an index (no index yet →
 silence), it goes quiet above a 2 MB index (about 13,000 symbols) or past 2 s instead of adding
