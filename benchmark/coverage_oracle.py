@@ -7,8 +7,12 @@ desde los tests):
   SOUNDNESS (lo crítico para el guardián): todo símbolo que los tests EJECUTAN debe estar
   en el alcance de leo. Si no → leo daría un falso "SIN test (riesgo)". Cero violaciones.
 
-(La dirección inversa —leo alcanza algo que no se ejecutó— es conservadora y aceptable:
-el grafo estático sobre-aproxima; el guardián prefiere avisar de más, no de menos.)
+SOBRE-COBERTURA (informativa, sin gate): funciones que leo da por cubiertas y los tests
+no ejecutan. NO es conservadora: «cubierta» hace callar al hook y a guard, así que cada
+una es un aviso que no sale. Medido el 17/11 en leo-code: 331 de 682 (49%) con este
+Indexer() histórico; 80 de 355 (23%) con el índice del producto (hygiene). Sobre todo por
+`x.nombre()` con `x` de tipo desconocido unido por nombre a todas las homónimas
+(`hook.main()` → los 9 `main`, `server.run()` → los 11 `run`).
 
 Uso:  python benchmark/coverage_oracle.py
 """
@@ -47,6 +51,7 @@ def run():
 
     code_types = {"function", "async_function", "method"}
     dyn_covered = 0
+    static_covered = over = 0   # leo la da por cubierta / y de esas, no se ejecutó
     violations = []   # ejecutado por tests pero leo dice fuera de alcance (falso "SIN test")
     for c in caps.values():
         if c.type not in code_types or not (c.file_path or "").endswith(".py"):
@@ -76,6 +81,9 @@ def run():
         lines = executed.get(str(Path(c.file_path).resolve()), set())
         # CUERPO ejecutado, no la línea `def` (que corre al importar al definir la función).
         ran = any(c.start_line < ln <= c.end_line for ln in lines)
+        if g.is_covered(c):
+            static_covered += 1
+            over += not ran
         if ran:
             dyn_covered += 1
             if not g.is_covered(c):         # por definición, no por nombre
@@ -85,6 +93,8 @@ def run():
     print(f"funciones EJECUTADAS por los tests (coverage.py): {dyn_covered}")
     print(f"de esas, leo las alcanza estáticamente: {dyn_covered - len(violations)}")
     print(f"SOUNDNESS cobertura: {'✅ 0 falsos SIN-test' if ok else f'❌ {len(violations)} falsos'}")
+    print(f"sobre-cobertura (sin gate): {over} de {static_covered} cubiertas por leo no se ejecutan"
+          f" ({over / max(static_covered, 1):.0%}): avisos que el hook no da")
     for n, f in violations[:15]:
         print(f"    falso SIN-test: {n}  ({f})")
     return ok, dyn_covered, len(violations)
