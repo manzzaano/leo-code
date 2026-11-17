@@ -115,3 +115,24 @@ def test_index_does_not_fill_called_by(tmp_path):
     _write(tmp_path / "a.py", "def caller():\n    return helper()\n\ndef helper():\n    return 2\n")
     idx.sync(str(tmp_path), since_mtime=since, languages=["python"])
     assert all(not c.called_by for c in idx.get_capsules().values())
+
+
+def test_orden_de_capsulas_canonico_tras_build_y_sync(tmp_path):
+    # El retrieval desempata por el orden de las cápsulas. Con `as_completed` dependía de qué
+    # hilo acababa antes, y `sync` ponía al final lo re-parseado: el mismo código daba 57%,
+    # 60% o 63% en nl_retrieval_bench según la máquina. Mismo contenido → mismo orden.
+    for n in "abcd":
+        _write(tmp_path / f"{n}.py", f"def {n}1():\n    return 1\n\ndef {n}2():\n    return 2\n")
+    idx = Indexer()
+    idx.build(str(tmp_path), languages=["python"])
+    t = time.time()
+    for n in "bcd":
+        os.utime(tmp_path / f"{n}.py", (t - 100, t - 100))
+    _write(tmp_path / "a.py", "def a1():\n    return 3\n\ndef a2():\n    return 4\n")
+    os.utime(tmp_path / "a.py", (t + 100, t + 100))
+    idx.sync(str(tmp_path), since_mtime=t, languages=["python"])
+    fresh = Indexer()
+    fresh.build(str(tmp_path), languages=["python"])
+    order = lambda i: [(Path(c.file_path).name, c.name) for c in i.get_capsules().values()]
+    assert order(idx) == order(fresh)
+    assert [f for f, _ in order(fresh)] == sorted(f for f, _ in order(fresh))

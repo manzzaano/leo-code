@@ -211,6 +211,7 @@ class Indexer:
                     stats[lang]["capsules"] += n
                 if verbose and not error:
                     print(f"  [{lang}] {path.relative_to(repo)}: {n} symbols")
+        self._sort_capsules()
 
         if self.vector_store and self._capsules:
             self.vector_store.add(list(self._capsules.values()))
@@ -339,6 +340,8 @@ class Indexer:
                 except OSError:
                     pass
 
+        if reparsed:
+            self._sort_capsules()
         if removed or reparsed:
             # Solo el delta (capsulas nuevas/re-parseadas), no todo el repo — un
             # sync que toca 1 archivo no debe re-embeber las ~1400 capsulas del resto.
@@ -476,6 +479,15 @@ class Indexer:
             "by_type": dict(by_type),
             "by_language": dict(by_lang),
         }
+
+    def _sort_capsules(self) -> None:
+        """Orden canónico: por archivo, y dentro del archivo el del parser (sort estable).
+        El retrieval desempata por este orden; con el de llegada de los hilos, o lo
+        re-parseado al final, el mismo código daba otro top-5 en cada máquina. Con `/`
+        en la clave: `\\` ordena detrás de dígitos y mayúsculas, `/` delante."""
+        with self._capsules_lock:
+            self._capsules = dict(sorted(self._capsules.items(),
+                                         key=lambda kv: kv[1].file_path.replace("\\", "/")))
 
     def get_capsules(self) -> dict[str, Capsule]:
         return self._capsules
