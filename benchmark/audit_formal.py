@@ -20,6 +20,7 @@ Uso:  python benchmark/audit_formal.py [repo1 repo2 ...]
       (repos extra para (a)/(d) a escala; por defecto el propio leo-code)
 """
 
+import gc
 import os
 import subprocess
 import sys
@@ -137,8 +138,8 @@ def check_e(repos):
       1. la reconstrucción (filtro por repo + frontera HTTP + índices) ≤ 20 µs/símbolo;
       2. la escritura del índice NO ocurre dentro de la llamada (reescribir el .json.gz
          completo son ~9 s a 300k símbolos).
-    El presupuesto lleva 4× de aire sobre lo medido: es una red contra regresiones de
-    complejidad, no un benchmark de la máquina.
+    Es una red contra regresiones de complejidad, no un benchmark de la máquina. El margen
+    ya no es 4×: medido en CI 19,8 µs (17/11) tras la frontera HTTP de 7c025b6.
     """
     from leo_code import engine
     from leo_code.core.boundary import link_http_edges
@@ -150,6 +151,10 @@ def check_e(repos):
     idx.build(repo, languages=["python", "typescript", "javascript"], verbose=False)
     n = len(idx.get_capsules())
 
+    # Sin esto, una pasada completa del GC cae o no dentro del tramo según la basura que
+    # dejó lo anterior: ordenar las cápsulas (74k tuplas temporales) subió django de 19,8
+    # a 26,1 µs en CI sin añadir trabajo (con colecta previa, 14,3 vs 15,0 µs: igual).
+    gc.collect()
     t0 = time.perf_counter()
     caps = {c.id: c for c in engine._repo_caps(idx, os.path.abspath(repo))}
     link_http_edges(caps)
