@@ -156,8 +156,11 @@ def _report(caps: list, symbols: list, repo: str | None = None,
     if _late(started):
         return None
     for cap in symbols:
+        # El bloque `if __name__ == "__main__":` no lo ejecuta ningún test: contado, cada
+        # `main` avisaba (17/11, +17 avisos en leo-code). Es un punto de entrada, no un uso.
         risky = {c.id: c for c in guard.gq.callers_of_def(cap)
-                 if not guard._is_test(c, guard._root) and not guard.is_covered(c)}
+                 if not guard._is_test(c, guard._root) and not guard.is_covered(c)
+                 and not (c.type == "entrypoint" and c.name.endswith(".__main__"))}
         if not risky:
             continue
         risky = sorted(risky.values(), key=lambda c: (c.file_path or "", c.start_line or 0))

@@ -103,3 +103,24 @@ def test_calla_si_el_plazo_vence_durante_el_informe(tmp_path, index, monkeypatch
     monkeypatch.setattr(boundary, "link_http_edges", lambda caps: (time.sleep(0.3), real(caps))[1])
     monkeypatch.setattr(guard_hook, "_DEADLINE_S", 0.2)
     assert _edit(root, "core.py", "    return 1") is None
+
+
+def test_bloque_main_sin_test_no_avisa(tmp_path, index):
+    """17/11: `if __name__ == "__main__": main()` no lo ejecuta ningún test, así que cada
+    `main` avisaba. Un punto de entrada no es un llamador que el agente pueda romper."""
+    root = tmp_path / "ep"
+    root.mkdir()
+    (root / "tool.py").write_text("def main():\n    return 1\n\n\nif __name__ == \"__main__\":\n"
+                                  "    main()\n", encoding="utf-8")
+    index(root)
+    assert _edit(root, "tool.py", "    return 1") is None
+
+
+def test_bloque_main_no_tapa_otro_llamador_sin_test(tmp_path, index):
+    root = tmp_path / "ep2"
+    root.mkdir()
+    (root / "tool.py").write_text("def main():\n    return 1\n\n\ndef other():\n    return main()\n\n\n"
+                                  "if __name__ == \"__main__\":\n    main()\n", encoding="utf-8")
+    index(root)
+    out = _edit(root, "tool.py", "    return 1")
+    assert out is not None and "1 direct caller(s)" in out["hookSpecificOutput"]["additionalContext"]
