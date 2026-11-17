@@ -128,8 +128,10 @@ warning you turn off. Callers that *are* covered by a test raise nothing, untest
 further up the chain only counts toward the total, and editing a test file raises nothing.
 On leo-code itself it speaks on about 1 edit in 4.
 
-It costs 0.28 s per edit on a 1,220-symbol index. It never builds an index (no index yet →
-silence), it goes quiet above a 4 MB index instead of adding seconds to every edit, and it
+It costs about 0.3 s per edit on a 1,800-symbol index. It never builds an index (no index yet →
+silence), it goes quiet above a 2 MB index (about 13,000 symbols) or past 2 s instead of adding
+seconds to every edit, it re-reads the file you are editing if it changed after the index was
+written, and it
 **never blocks an edit**: it has no way to. It emits no permission decision and always exits
 0, and both invariants have tests.
 

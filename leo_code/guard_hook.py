@@ -22,21 +22,27 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
 
 # Presupuesto por edición. Se comprueba antes de cada paso caro: si ya se pasó, calla.
 _DEADLINE_S = float(os.getenv("LEO_GUARD_DEADLINE_S", "2.0"))
-# Techo por tamaño del índice comprimido: proxy medido de cuántos símbolos hay dentro
-# (~216 KB ≈ 1.100 símbolos · ~7,9 MB ≈ 300.000). Cargar un índice de 300k cuesta ~3 s,
-# que no se paga en cada edición. Leer el tamaño es un stat; contar símbolos exigiría
-# descomprimirlo, que es justo lo que se quiere evitar.
-_MAX_INDEX_MB = float(os.getenv("LEO_GUARD_MAX_INDEX_MB", "4"))
+# Techo por tamaño del índice comprimido: proxy de cuántos símbolos hay dentro. Medido el
+# 17/11: ~6,5k símbolos/MB (leo-code 0,4 MB ≈ 1,8k · django 11 MB ≈ 72k), y con django el
+# hook entero (cargar + informe) cuesta 5,8 s. A 2 MB (~13k símbolos) sale ~1 s. Leer el
+# tamaño es un stat; contar símbolos exigiría descomprimirlo, justo lo que se evita.
+_MAX_INDEX_MB = float(os.getenv("LEO_GUARD_MAX_INDEX_MB", "2"))
 _MAX_SYMBOLS_REPORTED = 5   # más que esto es un muro de texto que el agente se salta
 _MAX_SYMBOLS_REVIEWED = 3   # un Write toca muchos símbolos: se revisan los mayores
 
 _TEST_MARKERS = ("/tests/", "/test/", "/__tests__/", "/spec/")
+# Revisión #16: sin `_test.go`, Go no tenía ningún test y nada quedaba cubierto.
+_TEST_SUFFIXES = ("_test.py", "_test.go", "_test.rb", "_spec.rb") + tuple(
+    f".{kind}.{ext}" for kind in ("test", "spec")
+    for ext in ("ts", "tsx", "js", "jsx", "mjs", "cjs"))
+_JAVA_TEST = re.compile(r"[a-z0-9]Tests?\.java$")
 
 
 def _is_test_path(path: Path) -> bool:
@@ -44,9 +50,11 @@ def _is_test_path(path: Path) -> bool:
     posix = "/" + path.as_posix().lower()   # "/" delante: `tests/x.py` relativo también
     name = path.name.lower()
     return (any(m in posix for m in _TEST_MARKERS)
-            or name.startswith("test_") or name.startswith("test.") or name == "tests.py"
-            or any(name.endswith(s) for s in ("_test.py", ".test.ts", ".test.tsx", ".test.js",
-                                              ".spec.ts", ".spec.tsx", ".spec.js")))
+            or name.startswith("test_") or name.startswith("test.")
+            or name in ("tests.py", "conftest.py")
+            or name.endswith(_TEST_SUFFIXES)
+            # Java: FooTest.java / FooTests.java, en mayúscula (Latest.java no es un test)
+            or bool(_JAVA_TEST.search(path.name)))
 
 
 def _line_of(path: Path, needle: str) -> int | None:
@@ -107,7 +115,29 @@ def _rel(path: str, repo: str | None) -> str:
         return path
 
 
-def _report(caps: list, symbols: list, repo: str | None = None) -> tuple[str, str] | None:
+def _fresh(caps: list, path: Path, index_mtime: float) -> list:
+    """Si `path` cambió después de escribirse el índice, sus símbolos se vuelven a parsear
+    (un archivo: milisegundos). Con las líneas viejas el hook culpaba al símbolo que ANTES
+    estaba en esa línea: el server escribe el índice 3 s después del último cambio, y sin
+    server no lo escribe en toda la sesión."""
+    try:
+        if path.stat().st_mtime <= index_mtime:
+            return caps
+        from leo_code.core.parser import extract_from_file
+        from leo_code.rag.indexer import Indexer
+        new = extract_from_file(str(path), Indexer.CODE_EXTENSIONS[path.suffix.lower()])
+    except Exception:
+        return caps            # no se pudo re-parsear: mejor el índice que nada
+    target = os.path.normcase(str(path))
+    return [c for c in caps if os.path.normcase(c.file_path or "") != target] + new
+
+
+def _late(started: float | None) -> bool:
+    return started is not None and time.monotonic() - started > _DEADLINE_S
+
+
+def _report(caps: list, symbols: list, repo: str | None = None,
+            started: float | None = None) -> tuple[str, str] | None:
     """(contexto para el agente, línea para el humano), o None si no hay nada que avisar.
 
     Revisión #14 (16/11): avisa solo si algún llamador DIRECTO (resuelto por definición,
@@ -120,7 +150,11 @@ def _report(caps: list, symbols: list, repo: str | None = None) -> tuple[str, st
 
     by_id = {c.id: c for c in caps}
     link_http_edges(by_id)   # un fetch del frontend también es un dependiente
+    if _late(started):       # el plazo se mira entre las fases caras, no solo antes
+        return None
     guard = Guardian(by_id, repo)
+    if _late(started):
+        return None
     for cap in symbols:
         risky = {c.id: c for c in guard.gq.callers_of_def(cap)
                  if not guard._is_test(c, guard._root) and not guard.is_covered(c)}
@@ -178,6 +212,8 @@ def run(payload: dict, started: float) -> dict | None:
     caps = _load_caps(repo)
     if not caps:
         return None
+    from leo_code import engine
+    caps = _fresh(caps, path, engine.repo_index_path(repo).stat().st_mtime)
 
     old = tool_input.get("old_string")
     line = _line_of(path, old) if old else None
@@ -185,7 +221,7 @@ def run(payload: dict, started: float) -> dict | None:
     if not symbols or time.monotonic() - started > _DEADLINE_S:
         return None
 
-    found = _report(caps, symbols, repo)
+    found = _report(caps, symbols, repo, started)
     if found is None:
         return None
     context, human = found
