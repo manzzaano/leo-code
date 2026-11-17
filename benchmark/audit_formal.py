@@ -251,6 +251,11 @@ def check_f(repos):
 
 
 def main(extra):
+    # `--only b,c`: solo esos chequeos. CI reparte la auditoría en jobs paralelos, cada uno
+    # en su máquina (los de tiempo y RAM, d/e/f, sin nada más corriendo al lado).
+    only = None
+    if extra[:1] == ["--only"]:
+        only, extra = set(extra[1].split(",")), extra[2:]
     repos = _repos(extra)
     print("=" * 72)
     print("AUDITORÍA FORMAL — leo correcto vs oráculos independientes (exit 0 solo al 100%)")
@@ -267,6 +272,11 @@ def main(extra):
         ("(f) RAM: pico del camino del producto en frío y en caliente ≤500 MB",
          lambda: check_f(repos)),
     ]
+    if only is not None:
+        checks = [(label, fn) for label, fn in checks if label[1:label.index(")")] in only]
+        if not checks:
+            print(f"--only {sorted(only)}: ningún chequeo con ese nombre (a, a-ts, b…f)")
+            return 2
     results = []
     for label, fn in checks:
         try:
