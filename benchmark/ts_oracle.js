@@ -60,7 +60,9 @@ walkFiles(repo, files);
 const result = {};
 for (const f of files) {
   let sf;
-  try { sf = ts.createSourceFile(f, fs.readFileSync(f, "utf8"), ts.ScriptTarget.Latest, true); }
+  // Saltos como los ve leo (Python `read_text`: \r\n y \r → \n); si no, un nombre computado
+  // de varias líneas (`[\r\n  {…}\r\n]`) difiere solo por el \r.
+  try { sf = ts.createSourceFile(f, fs.readFileSync(f, "utf8").replace(/\r\n?/g, "\n"), ts.ScriptTarget.Latest, true); }
   catch { continue; }
   // Sintaxis inválida (tests de recuperación de errores del compilador): cada parser se
   // recupera a su manera, no hay verdad que comparar.
