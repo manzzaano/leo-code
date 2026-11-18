@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 from collections import deque
+from functools import lru_cache
 from pathlib import Path
 from dataclasses import dataclass, field
 
@@ -81,6 +82,15 @@ def _in_repo(file_path: str | None, root: str | None) -> Path:
             pass
     return p
 
+@lru_cache(maxsize=1 << 16)
+def _test_file(file_path: str | None, root: str | None, cwd: str | None) -> bool:
+    """¿Es de test el archivo? Una vez por archivo: django tiene 72k cápsulas en 2,4k
+    archivos y `relative_to` por cápsula era casi todo `test_closure`. `cwd` entra en la
+    clave porque `_in_repo` resuelve las rutas relativas con `abspath`."""
+    from leo_code.guard_hook import _is_test_path
+    return _is_test_path(_in_repo(file_path, root))
+
+
 class Guardian:
     def __init__(self, capsules: dict, repo: str | None = None):
         # El guardián usa el grafo AUMENTADO con aristas de referencia/dispatch
@@ -111,8 +121,8 @@ class Guardian:
             return True
         # Mismo criterio que el hook: «test» suelto en el nombre del archivo marcaba
         # producto como test (django: testing.py, testserver.py).
-        from leo_code.guard_hook import _is_test_path
-        return (c.name or "").lower().startswith("test_") or _is_test_path(_in_repo(c.file_path, root))
+        return ((c.name or "").lower().startswith("test_")
+                or _test_file(c.file_path, root, root and os.getcwd()))
 
     def test_closure(self) -> set[str]:
         """Ids de las definiciones alcanzables desde algún test (transitivo).

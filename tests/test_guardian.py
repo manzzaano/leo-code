@@ -253,3 +253,20 @@ def test_referencia_a_nombre_repetido_sin_import_se_descarta(tmp_path):
     })
     g = Guardian(caps)
     assert not g.is_covered("handler") and not g.is_covered("other")
+
+
+def test_test_path_is_classified_once_per_file(monkeypatch):
+    # django: 72k cápsulas en 2,4k archivos; calcular la ruta relativa por cápsula
+    # (pathlib.relative_to) era casi todo el coste de test_closure (18/11).
+    import leo_code.guard_hook as gh
+    from leo_code.core import guardian as G
+    seen = []
+    real = gh._is_test_path
+    monkeypatch.setattr(gh, "_is_test_path", lambda p: seen.append(p) or real(p))
+    G._test_file.cache_clear()
+    caps = {c.id: c for c in [_cap(f"f{i}", file="pkg/mod.py", line=i * 10) for i in range(50)]
+            + [_cap("helper", file="tests/x_test.py")]}
+    g = Guardian(caps, None)
+    g.test_closure()
+    assert len(seen) == 2
+    assert Guardian._is_test(caps["tests/x_test.py:helper"]) and not Guardian._is_test(caps["pkg/mod.py:f0"])
