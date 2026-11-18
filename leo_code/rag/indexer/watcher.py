@@ -11,6 +11,7 @@ Uso:
 """
 
 import gzip
+import hashlib
 import json
 import os
 import subprocess
@@ -47,8 +48,12 @@ class Indexer:
         self.max_file_kb = max_file_kb
         self._junk_seen: dict[str, float] = {}   # path -> mtime de archivos descartados
         self._empty_seen: dict[str, float] = {}  # path -> mtime de archivos sin cápsulas
+        # path -> (mtime_ns, size, hash) al parsear, como el índice de git (racy-git): un
+        # contenido nuevo con mtime antiguo (cp -p, rsync -a, tar) no pasa `mtime > since`.
+        self._file_sig: dict[str, tuple[int, int, str]] = {}
         self._observers: dict[str, object] = {}  # repo abs -> Observer de watchdog
-        self._dirty: set[str] = set()            # repos con cambios de FS sin sincronizar
+        # repo abs -> rutas cambiadas sin sincronizar; None = hace falta walk completo
+        self._dirty_paths: dict[str, set[str] | None] = {}
         self._dirty_lock = threading.Lock()
 
     def _process_one(self, path: Path, lang: str, verbose: bool, repo: Path) -> tuple[list[Capsule], str, int, str | None]:
@@ -57,7 +62,10 @@ class Indexer:
                 lang = detect_language(str(path))
             # extract_from_file ya elige el parser: ast (Python), tree-sitter (TS/JS) o
             # regex genérica. No hay un modo "tree-sitter" que forzar desde fuera.
+            sig = _file_sig(path)   # antes de parsear: si cambia entre medias, lo verá el mtime
             capsules = extract_from_file(str(path), lang)
+            if capsules:
+                self._file_sig[str(path)] = sig
             return capsules, lang, len(capsules), None
         except Exception as e:
             return [], lang, 0, str(e)
@@ -181,6 +189,8 @@ class Indexer:
                 if not _under(c.file_path, repo_abs)
                 and not (os.path.isabs(c.file_path) and not os.path.exists(c.file_path))
             }
+        for fp in [fp for fp in self._file_sig if _under(fp, repo_abs)]:
+            self._file_sig.pop(fp, None)
 
         files = self._discover_files(repo_path, languages)
         repo = Path(repo_path)
@@ -254,6 +264,10 @@ class Indexer:
                     "calls": c.calls, "called_by": c.called_by,
                     "imports": c.imports, "properties": c.properties,
                 }) + b"\n")
+            files = {c.file_path for c in items}
+            sigs = {fp: sig for fp, sig in dict(self._file_sig).items() if fp in files}
+            if sigs:   # una línea más, no una cápsula: load la reconoce por la clave
+                f.write(_dumps({"__file_sigs__": sigs}) + b"\n")
         os.replace(tmp, path)
         print(f"[indexer] saved: {path} ({len(items)} symbols)")
 
@@ -271,6 +285,9 @@ class Indexer:
             else:
                 docs = map(_loads, filter(None, (first, *f)))
             for d in docs:
+                if "__file_sigs__" in d:
+                    self._file_sig.update({fp: tuple(v) for fp, v in d["__file_sigs__"].items()})
+                    continue
                 self._capsules[d["id"]] = Capsule(
                     id=d["id"], type=d["type"], name=d["name"],
                     file_path=d["file_path"], start_line=d["start_line"],
@@ -284,35 +301,49 @@ class Indexer:
         print(f"[indexer] loaded: {path} ({n} symbols)")
 
     def sync(self, repo_path: str, since_mtime: float,
-             languages: Optional[list[str]] = None) -> dict:
+             languages: Optional[list[str]] = None, paths: set[str] | None = None) -> dict:
         """Actualización incremental sobre un índice ya cargado: re-parsea solo
         archivos cambiados (mtime > since_mtime) o nuevos y quita los borrados.
         Mucho más barato que build() cuando cambian pocos.
         Devuelve {changed, new, deleted, reparsed_capsules, removed, capsules}.
+
+        paths: rutas que vio cambiar el watcher. Si todas estaban ya indexadas se
+        re-parsean (o se quitan si ya no existen) sin recorrer el repo; si alguna es
+        nueva, walk completo, que es quien aplica .gitignore y los filtros de basura.
         """
         if languages is None:
             languages = self.CODE_LANGUAGES if self.hygiene else ["python", "text"]
-        files = self._discover_files(repo_path, languages)
-        disk_paths = {str(p) for p, _ in files}
         # Solo las cápsulas de ESTE repo: con varios repos cargados, los archivos de
         # los otros no están en disk_paths y se borraban como "eliminados".
         repo_abs = os.path.abspath(repo_path)
         indexed_paths = {c.file_path for c in self._capsules.values() if _under(c.file_path, repo_abs)}
+        if paths is not None and paths <= indexed_paths:
+            exts = self._exts()
+            changed = [(Path(p), exts.get(Path(p).suffix.lower(), "auto"))
+                       for p in sorted(paths) if os.path.isfile(p)]
+            new = []
+            deleted = [p for p in paths if not os.path.isfile(p)]
+        else:
+            files = self._discover_files(repo_path, languages)
+            disk_paths = {str(p) for p, _ in files}
 
-        changed = [(p, l) for p, l in files if os.path.getmtime(p) > since_mtime]
-        # Un archivo indexable que no produce cápsulas (`__init__.py` vacío, `types.ts`
-        # de solo tipos, un .d.ts) no está en indexed_paths y se re-parseaba en CADA sync.
-        # Se recuerda por mtime: se re-mira solo si cambia.
-        new = [(p, l) for p, l in files
-               if str(p) not in indexed_paths and self._empty_seen.get(str(p)) != os.path.getmtime(p)]
+            changed = [(p, l) for p, l in files
+                       if os.path.getmtime(p) > since_mtime or self._content_changed(str(p))]
+            # Un archivo indexable que no produce cápsulas (`__init__.py` vacío, `types.ts`
+            # de solo tipos, un .d.ts) no está en indexed_paths y se re-parseaba en CADA sync.
+            # Se recuerda por mtime: se re-mira solo si cambia.
+            new = [(p, l) for p, l in files
+                   if str(p) not in indexed_paths and self._empty_seen.get(str(p)) != os.path.getmtime(p)]
+            deleted = [fp for fp in indexed_paths
+                       if fp not in disk_paths and Path(fp).suffix.lower() in self._exts()]
         to_parse = {str(p): (p, l) for p, l in changed}
         for p, l in new:
             to_parse[str(p)] = (p, l)
-        deleted = [fp for fp in indexed_paths
-                   if fp not in disk_paths and Path(fp).suffix.lower() in self._exts()]
 
         # Quitar cápsulas de archivos a re-parsear + borrados
         drop = set(to_parse) | set(deleted)
+        for fp in deleted:
+            self._file_sig.pop(fp, None)
         removed = 0
         if drop:
             with self._capsules_lock:
@@ -354,6 +385,25 @@ class Indexer:
                 "deleted": len(deleted), "reparsed_capsules": reparsed,
                 "removed": removed, "capsules": touched_capsules}
 
+    def _content_changed(self, fp: str) -> bool:
+        """¿Contenido distinto del parseado aunque el mtime no sea posterior? Solo se lee
+        el archivo si su stat difiere del guardado; si el contenido es igual, se apunta
+        el stat nuevo para no volver a leerlo en cada sync."""
+        old = self._file_sig.get(fp)
+        if old is None:
+            return False
+        try:
+            st = os.stat(fp)
+            if (st.st_mtime_ns, st.st_size) == old[:2]:
+                return False
+            sig = _file_sig(Path(fp))
+        except OSError:
+            return False
+        if sig[2] != old[2]:
+            return True
+        self._file_sig[fp] = sig
+        return False
+
     def watch(self, repo_path: str) -> bool:
         """Marca el repo como sucio ante cambios reales del FS (evento nativo del SO).
 
@@ -389,22 +439,28 @@ class Indexer:
             en Windows no pasa porque ReadDirectoryChangesW no reporta aperturas)."""
 
             def _mark(self, event):
-                # Un evento de directorio no cambia cápsulas por sí mismo: el archivo
-                # que se creó/borró dentro llega como su propio evento.
-                if event.is_directory:
-                    return
                 for raw in (event.src_path, getattr(event, "dest_path", None)):
                     if not raw:
                         continue
                     path = Path(os.fsdecode(raw))
-                    if path.suffix.lower() not in exts:
-                        continue
                     # .git escribe sin parar (index.lock, objetos); node_modules y
                     # build output no se indexan: no deben despertar un sync.
                     if any(d in skip or d.endswith(".egg-info") for d in path.parts[:-1]):
                         continue
-                    indexer.mark_dirty(repo_abs)
-                    return
+                    if event.is_directory:
+                        # "modified" de carpeta = algo cambió dentro, y eso llega como su
+                        # propio evento. Crear/borrar/mover una carpeta no dice qué archivos
+                        # lleva (una papelera o un move desde fuera no los listan): walk.
+                        if event.event_type != "modified" and path.name not in skip:
+                            indexer.mark_dirty(repo_abs)
+                        continue
+                    if path.suffix.lower() in exts:
+                        indexer.mark_dirty(repo_abs, str(path))
+                    elif event.event_type in ("deleted", "moved") and path.name not in skip:
+                        # En Windows una carpeta que sale del árbol (papelera, mv fuera) llega
+                        # como FileDeletedEvent de la carpeta, sin eventos de sus archivos: la
+                        # ruta ya no existe y watchdog no sabe que era carpeta. Walk.
+                        indexer.mark_dirty(repo_abs)
 
             on_created = on_deleted = on_modified = on_moved = _mark
 
@@ -435,18 +491,28 @@ class Indexer:
             self._observers[repo_abs] = obs
         return True
 
-    def mark_dirty(self, repo_abs: str):
+    def mark_dirty(self, repo_abs: str, path: str | None = None):
+        """Anota un cambio. path=None: no se sabe qué archivos cambiaron → walk completo."""
         with self._dirty_lock:
-            self._dirty.add(repo_abs)
+            if path is None:
+                self._dirty_paths[repo_abs] = None
+            elif repo_abs not in self._dirty_paths:
+                self._dirty_paths[repo_abs] = {path}
+            elif self._dirty_paths[repo_abs] is not None:
+                self._dirty_paths[repo_abs].add(path)
 
-    def take_dirty(self, repo_path: str) -> bool:
-        """¿Cambió algo desde la última llamada? Lee Y limpia (los eventos que lleguen
-        durante el sync vuelven a ensuciar, así que ninguno se pierde)."""
+    def take_changes(self, repo_path: str) -> tuple[bool, set[str] | None]:
+        """(¿cambió algo?, rutas cambiadas o None si hace falta walk). Lee Y limpia: los
+        eventos que lleguen durante el sync vuelven a ensuciar, así que ninguno se pierde."""
         repo_abs = os.path.abspath(repo_path)
         with self._dirty_lock:
-            was_dirty = repo_abs in self._dirty
-            self._dirty.discard(repo_abs)
-            return was_dirty
+            if repo_abs not in self._dirty_paths:
+                return False, set()
+            return True, self._dirty_paths.pop(repo_abs)
+
+    def take_dirty(self, repo_path: str) -> bool:
+        """¿Cambió algo desde la última llamada? Lee y limpia, como take_changes."""
+        return self.take_changes(repo_path)[0]
 
     def stop_watch(self, repo_path: str | None = None):
         """Para el/los observer(s). El proceso puede salir sin esto (los hilos de
@@ -458,7 +524,7 @@ class Indexer:
                 if obs is None:
                     continue
                 self._observers.pop(key, None)
-                self._dirty.discard(key)
+                self._dirty_paths.pop(key, None)
         for _, obs in items:
             if obs is not None:
                 obs.stop()
@@ -497,7 +563,17 @@ class Indexer:
         return any(p in Indexer._SKIP_DIRS for p in path.parts)
 
 
+def _file_sig(path: Path) -> tuple[int, int, str]:
+    st = path.stat()
+    return st.st_mtime_ns, st.st_size, hashlib.blake2b(path.read_bytes(), digest_size=16).hexdigest()
+
+
 def _under(file_path: str, repo_abs: str) -> bool:
     """file_path pertenece a repo_abs (con separador: /a/proj no contiene /a/proj2)."""
+    prefix = repo_abs.rstrip(os.sep) + os.sep
+    # Camino rápido: las cápsulas ya llevan ruta absoluta y el abspath era la mitad del
+    # coste de cada sync tras una edición (72k cápsulas en django).
+    if file_path.startswith(prefix) and ".." not in file_path:
+        return True
     p = os.path.abspath(file_path)
-    return p == repo_abs or p.startswith(repo_abs.rstrip(os.sep) + os.sep)
+    return p == repo_abs or p.startswith(prefix)

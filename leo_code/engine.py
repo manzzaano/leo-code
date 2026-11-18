@@ -236,7 +236,7 @@ def _warn_if_huge(repo: str, n: int) -> None:
 # Sube cuando cambia lo que el parser extrae (nuevas cápsulas, nuevas aristas): el índice
 # en disco se re-parsea solo por mtime, así que sin esto una caché vieja seguiría sirviendo
 # símbolos del parser anterior para siempre (p.ej. sin arrow functions ni atributos de clase).
-_INDEX_FORMAT = 12   # 12: cápsulas en orden canónico (el retrieval desempata por él)
+_INDEX_FORMAT = 13   # 13: huella (mtime_ns, size, hash) por archivo (12: orden canónico)
 
 
 def repo_index_path(repo: str) -> Path:
@@ -342,12 +342,17 @@ def ensure_structural(repo: str) -> dict | None:
         last = _structural_at.get(repo)
         idx = _get_indexer()
         watching = idx.watch(repo) if _WATCH else False
+        paths = None   # rutas que vio el watcher; None = walk completo
         if last is not None:
             elapsed = time.monotonic() - last
             if elapsed < _RESYNC_S:
                 return None
-            if watching and elapsed < _MAX_STALE_S and not idx.take_dirty(repo):
-                return None
+            if watching:
+                dirty, seen = idx.take_changes(repo)
+                if elapsed < _MAX_STALE_S:
+                    if not dirty:
+                        return None
+                    paths = seen
         path = repo_index_path(repo)
         t0 = time.perf_counter()
         action = "sync"
@@ -363,8 +368,11 @@ def ensure_structural(repo: str) -> dict | None:
         # Se toma ANTES de parsear: un archivo tocado durante el parseo entra al próximo.
         now = time.time()
         since = _synced_at.get(repo)
-        if path.exists():
-            s = idx.sync(repo, since_mtime=since if since is not None else path.stat().st_mtime)
+        # Ya en memoria (last) → sync aunque el índice aún no esté en disco: la escritura
+        # va diferida y, si se miraba solo el disco, cada edición reconstruía el repo entero.
+        if last is not None or path.exists():
+            s = idx.sync(repo, since_mtime=since if since is not None else path.stat().st_mtime,
+                         paths=paths)
             changed = bool(s["reparsed_capsules"] or s["removed"])
         else:
             idx.build(repo)

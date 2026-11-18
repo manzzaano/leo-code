@@ -99,7 +99,7 @@ def test_ensure_structural_no_walkea_si_el_watcher_no_vio_nada(repo, tmp_path, m
             if out is None:
                 time.sleep(0.05)
         assert out is not None, "tras editar un archivo el sync debe dispararse"
-        assert calls, "el sync real sí descubre archivos"
+        assert calls == [], "un archivo ya indexado se re-parsea sin recorrer el repo"
         assert any(c.name == "nueva" for c in engine._repo_caps(idx, repo_str))
     finally:
         engine._get_indexer().stop_watch()
