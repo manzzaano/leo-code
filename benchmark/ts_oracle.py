@@ -32,7 +32,8 @@ def _oracle(repo: str) -> dict:
     for f, syms in data.items():
         rf = str(Path(f).resolve())
         for name, line, calls in syms:
-            omap[(rf, str(name).split(".")[-1], line)] = set(calls)
+            # get y set del mismo nombre en la misma línea comparten clave: se unen
+            omap.setdefault((rf, str(name).split(".")[-1], line), set()).update(calls)
     return omap
 
 
@@ -65,19 +66,22 @@ def run(repo: str = "."):
     tot_leo = tot_or = tot_int = 0
     matched = 0
     false_e, miss_e = [], []
+    leo_map: dict = {}   # misma unión por clave que omap
     for c in idx.get_capsules().values():
         if c.type not in code_types or not (c.file_path or "").endswith((".ts", ".tsx")):
             continue
         key = (str(Path(c.file_path).resolve()), c.name.split(".")[-1], c.start_line)
         if key not in omap or key[0] in broken:
             continue   # símbolo no comparable (arrow/.d.ts/desalineado) → fuera de alcance
+        leo_map.setdefault(key, set()).update(c.calls or [])
+    for key, leo in leo_map.items():
         matched += 1
-        leo, orc = set(c.calls or []), omap[key]
+        orc = omap[key]
         tot_leo += len(leo); tot_or += len(orc); tot_int += len(leo & orc)
         for e in leo - orc:
-            false_e.append((c.name, c.start_line, e))
+            false_e.append((key[1], key[2], e))
         for e in orc - leo:
-            miss_e.append((c.name, c.start_line, e))
+            miss_e.append((key[1], key[2], e))
 
     if matched == 0 or tot_or == 0:
         print(f"❌ ORÁCULO TS VACUO en {repo!r}: 0 símbolos comparables (no es un pase).")

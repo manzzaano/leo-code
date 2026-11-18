@@ -67,14 +67,22 @@ for (const f of files) {
   // Sintaxis inválida (tests de recuperación de errores del compilador): cada parser se
   // recupera a su manera, no hay verdad que comparar.
   if (sf.parseDiagnostics && sf.parseDiagnostics.length) continue;
+  // Línea = nº de \n antes de pos + 1, como las filas de tree-sitter: tsc también cuenta
+  // U+2028/U+2029 como salto y desalinearía la clave (archivo, nombre, línea).
+  const nls = [];
+  for (let i = sf.text.indexOf("\n"); i !== -1; i = sf.text.indexOf("\n", i + 1)) nls.push(i);
+  const lineOf = (pos) => { let lo = 0, hi = nls.length; while (lo < hi) { const m = (lo + hi) >> 1; if (nls[m] < pos) lo = m + 1; else hi = m; } return lo + 1; };
   const syms = [];
   (function rec(n) {
     let name = null;
     // Con cuerpo: abstract y overloads son firmas, y leo aún no las indexa.
     if (ts.isFunctionDeclaration(n) && n.name && n.body) name = n.name.text;
     // `.text` resuelve los escapes unicode del nombre (como parser_ts.py); los computados no tienen `.text`
-    else if (ts.isMethodDeclaration(n) && n.name && n.body)
+    // get/set y constructor también: en tree-sitter son method_definition, como un método
+    else if ((ts.isMethodDeclaration(n) || ts.isGetAccessorDeclaration(n) || ts.isSetAccessorDeclaration(n))
+             && n.name && n.body)
       name = (ts.isIdentifier(n.name) || ts.isPrivateIdentifier(n.name)) ? n.name.text : n.name.getText(sf);
+    else if (ts.isConstructorDeclaration(n) && n.body) name = "constructor";
     else if (ts.isClassDeclaration(n) && n.name) name = n.name.text;
     // Funciones declaradas como variable u objeto de funciones (const f = () => …,
     // const f = useCallback(() => …), { jobs: () => … }): misma regla en parser_ts.py.
@@ -96,16 +104,20 @@ for (const f of files) {
              && !(n.flags & ts.NodeFlags.GlobalAugmentation))
       typeName = ts.isIdentifier(n.name) ? n.name.text : n.name.getText(sf);
     if (typeName) {
-      const line = sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
+      const line = lineOf(n.getStart(sf));
       syms.push([typeName, line, []]);
     }
     if (name) {
       // Método decorado: su línea es la del primer token tras los decoradores (modificador o
       // nombre), como el `def` en Python y el method_definition de tree-sitter TS. Las
       // llamadas de los decoradores sí cuentan (callsIn recorre el nodo entero).
-      const decos = ts.isMethodDeclaration(n) ? (n.modifiers || []).filter(ts.isDecorator) : [];
+      // Solo lo que en tree-sitter es method_definition: un campo decorado lleva el `@` dentro
+      // del nodo y su línea es la del `@` en los dos lados.
+      const member = ts.isMethodDeclaration(n) || ts.isGetAccessorDeclaration(n)
+                     || ts.isSetAccessorDeclaration(n) || ts.isConstructorDeclaration(n);
+      const decos = member ? (n.modifiers || []).filter(ts.isDecorator) : [];
       const pos = decos.length ? ts.skipTrivia(sf.text, decos[decos.length - 1].end) : n.getStart(sf);
-      const line = sf.getLineAndCharacterOfPosition(pos).line + 1;
+      const line = lineOf(pos);
       syms.push([name, line, callsIn(n)]);
     }
     ts.forEachChild(n, rec);
