@@ -173,7 +173,18 @@ def _evict_repo(repo: str) -> None:
         pass
 
 
+# Un lock por repo para todo `graph`: `GraphQuery.update` cambia el grafo en sitio y los
+# handlers corren en hilos (asyncio.to_thread); una consulta a medias de un update leería
+# índices mezclados.
+_graph_locks: dict[str, threading.Lock] = {}
+
+
+def _graph_lock(repo: str) -> threading.Lock:
+    return _graph_locks.setdefault(repo, threading.Lock())
+
+
 def _repo_graph(repo: str) -> tuple[dict, GraphQuery]:
+    """Cápsulas y grafo de la generación actual del repo. Llamar con `_graph_lock(repo)`."""
     _index(repo)
     gen = engine.generation(repo)
     hit = _gq_cache.get(repo)
@@ -181,8 +192,19 @@ def _repo_graph(repo: str) -> tuple[dict, GraphQuery]:
         _gq_cache[repo] = _gq_cache.pop(repo)   # el más usado al final (LRU de inserción)
         return hit[1], hit[2]
     caps = {c.id: c for c in engine._repo_caps(engine._get_indexer(), repo)}
-    link_http_edges(caps)  # idempotente: no duplica aristas ya añadidas
-    gq = GraphQuery(caps)
+    touched: set = set()
+    link_http_edges(caps, touched)  # idempotente: no duplica aristas ya añadidas
+    gq = None
+    if hit:
+        # tras una edición solo se re-resuelve lo afectado (django: ~0,1 s frente a ~0,9 s)
+        gq = hit[2]
+        try:
+            gq.update(caps, touched)
+        except Exception:
+            log.exception("GraphQuery.update falló en %s: se reconstruye entero", repo)
+            gq = None                            # puede haber quedado a medias
+    if gq is None:
+        gq = GraphQuery(caps)
     _gq_cache.pop(repo, None)
     _gq_cache[repo] = (gen, caps, gq)
     while len(_gq_cache) > _GQ_CACHE_MAX:
@@ -277,6 +299,11 @@ def _graph(args: dict) -> str:
     if missing:
         raise ValueError(f"graph op={op} requires: {', '.join(missing)}")
     repo = _repo(args)
+    with _graph_lock(repo):
+        return _graph_op(op, args, repo)
+
+
+def _graph_op(op: str, args: dict, repo: str) -> str:
     caps, gq = _repo_graph(repo)
     if not caps:
         return _empty_msg(repo)
