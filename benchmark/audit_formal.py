@@ -12,7 +12,7 @@ Checks:
       ⊆ lo que el guardián predijo (mutation testing real).
   (d) LATENCIA: cualquier query estructural <50ms a escala.
   (e) PRESUPUESTO POST-EDICIÓN: reconstruir el grafo ≤24 µs/símbolo en frío; tras
-      re-parsear un archivo ≤13 y ≤0,75 del frío; sin escribir el índice dentro de la llamada al tool.
+      re-parsear un archivo con GraphQuery.update ≤6 y ≤0,35 del frío; sin escribir el índice dentro de la llamada al tool.
   (f) RAM: pico del proceso en el camino del producto (arranque en frío y en caliente +
       get_context) ≤ 500 MB, lo que tiene libre cualquier portátil de desarrollador.
 
@@ -161,20 +161,22 @@ def check_e(repos):
     t0 = time.perf_counter()
     caps = {c.id: c for c in engine._repo_caps(idx, os.path.abspath(repo))}
     link_http_edges(caps)
-    GraphQuery(caps)
+    gq = GraphQuery(caps)
     per_symbol = (time.perf_counter() - t0) / max(n, 1) * 1e6
 
-    # (e2) Lo que paga de verdad cada edición: reconstruir tras re-parsear UN archivo (el de
-    # más símbolos). sync sustituye sus cápsulas por objetos nuevos y el resto conserva lo
-    # ya calculado (escaneo HTTP por cápsula: django 13 → 7 µs/símbolo, 18/11).
+    # (e2) Lo que paga de verdad cada edición: rehacer el grafo tras re-parsear UN archivo
+    # (el de más símbolos) como lo hace `mcp_server._repo_graph`: sync sustituye sus
+    # cápsulas por objetos nuevos, el escaneo HTTP de las demás se reutiliza y
+    # `GraphQuery.update` re-resuelve solo lo afectado.
     by_file = Counter(c.file_path for c in idx.get_capsules().values())
     edited = max(sorted(by_file), key=by_file.__getitem__)
     idx.sync(repo, since_mtime=float("inf"), paths={edited})
     gc.collect()
     t0 = time.perf_counter()
     caps = {c.id: c for c in engine._repo_caps(idx, os.path.abspath(repo))}
-    link_http_edges(caps)
-    GraphQuery(caps)
+    touched: set = set()
+    link_http_edges(caps, touched)
+    incremental = gq.update(caps, touched)
     per_edit = (time.perf_counter() - t0) / max(n, 1) * 1e6
 
     # (2) el índice no se escribe dentro de la llamada
@@ -193,16 +195,17 @@ def check_e(repos):
     # 19 µs/símbolo con 2,5k símbolos y 4,5 µs con 300k. Lo que el gate persigue es una
     # regresión de COMPLEJIDAD, así que el límite lleva un término fijo.
     budget = 24 + 40_000 / max(n, 1)
-    # (e2): 7,0-7,8 µs en local. El límite absoluto solo frena desastres; lo que caza perder
-    # la caché es la proporción con la reconstrucción en frío del MISMO proceso, que no
-    # depende de la máquina: con caché 0,49-0,58, sin ella 0,99-1,18 (django, 18/11).
-    budget_edit = 13 + 40_000 / max(n, 1)
+    # (e2): 1,4-1,5 µs en local con update (antes, GraphQuery desde cero: 7,0-7,8). El
+    # límite absoluto solo frena desastres; lo que caza perder la caché HTTP (~+6 µs) es la
+    # proporción con la reconstrucción en frío del MISMO proceso, que no depende de la
+    # máquina: 0,10-0,11 (django, 18/11). Perder update lo caza `incremental`.
+    budget_edit = 6 + 40_000 / max(n, 1)
     ratio = per_edit / max(per_symbol, 1e-9)
-    ok = (per_symbol <= budget and per_edit <= budget_edit and ratio <= 0.75
-          and not inline_write)
+    ok = (per_symbol <= budget and per_edit <= budget_edit and ratio <= 0.35
+          and incremental and not inline_write)
     return ok, (f"{Path(repo).name}, {n:,} símbolos: reconstrucción "
                 f"{per_symbol:.1f} µs/símbolo (<{budget:.1f}) · tras editar 1 archivo "
-                f"{per_edit:.1f} (<{budget_edit:.1f}; {ratio:.2f} del frío, <0,75) · índice escrito dentro de la "
+                f"{per_edit:.1f} (<{budget_edit:.1f}; {ratio:.2f} del frío, <0,35; incremental: {'sí' if incremental else 'NO ❌'}) · índice escrito dentro de la "
                 f"llamada: {'SÍ ❌' if inline_write else 'no'}")
 
 
