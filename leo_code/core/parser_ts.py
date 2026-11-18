@@ -89,7 +89,26 @@ def _jsx_name(node) -> str | None:
     return nm if nm[:1].isupper() else None
 
 
+_FN_LIKE = {"function_declaration", "generator_function_declaration", "function_expression",
+            "generator_function", "arrow_function", "method_definition"}
+
+
+def _await_name(node):
+    """`await(x)` fuera de una función async: tree-sitter da await_expression, tsc una
+    llamada al identificador `await` (solo con paréntesis; `await x` es siempre await)."""
+    arg = node.named_children[-1] if node.named_children else None
+    if arg is None or arg.type != "parenthesized_expression":
+        return None
+    p = node.parent
+    while p is not None and p.type not in _FN_LIKE:
+        p = p.parent
+    if p is not None and any(c.type == "async" for c in p.children):
+        return None
+    return "await"
+
+
 _CALL_NODES = {"call_expression": _callee_name, "new_expression": _new_name,
+               "await_expression": _await_name,
                "jsx_opening_element": _jsx_name, "jsx_self_closing_element": _jsx_name}
 
 

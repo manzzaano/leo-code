@@ -85,3 +85,17 @@ def test_decorated_method_keeps_its_name_line():
     # file:line del método = línea del nombre (como el `def` en Python), no la del `@`
     caps = extract_from_tree_sitter(DECORATED, "x.ts", "typescript")
     assert next(c for c in caps if c.name == "findAll").start_line == 9
+
+
+@pytest.mark.parametrize("src,name,expected", [
+    # fuera de una función async, `await(x)` es para tsc una llamada al identificador `await`
+    ("function f() { const x = await(Promise.resolve(1)); }", "f", {"await", "resolve"}),
+    ("class C { m() { await(z()); } }", "m", {"await", "z"}),
+    ("async function f() { const g = () => await(y()); }", "f", {"await", "y"}),
+    # dentro de una async es un AwaitExpression, sin paréntesis también
+    ("async function f() { const x = await(Promise.resolve(1)); }", "f", {"resolve"}),
+    ("function f() { const g = async () => await(y()); }", "f", {"y"}),
+    ("function f() { await x; }", "f", set()),
+])
+def test_await_call_outside_async_like_tsc(src, name, expected):
+    assert _calls(name, extract_from_tree_sitter(src, "x.ts", "typescript")) == expected
