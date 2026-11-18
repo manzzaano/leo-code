@@ -232,7 +232,7 @@ def _client_calls(capsules: dict) -> list[tuple]:
     return _scan(capsules)[1]
 
 
-def link_http_edges(capsules: dict) -> int:
+def link_http_edges(capsules: dict, touched: set | None = None) -> int:
     """Añade aristas cliente→endpoint donde la ruta casa. Devuelve nº de aristas.
 
     Muta las cápsulas cliente: añade el nombre del endpoint a `calls` (+ registra la
@@ -251,6 +251,8 @@ def link_http_edges(capsules: dict) -> int:
                 continue
             if ep.name not in client.calls:
                 client.calls.append(ep.name)
+                if touched is not None:      # ids mutados en sitio: GraphQuery.update los re-resuelve
+                    touched.add(client.id)
                 client.properties.setdefault("xlang_calls", []).append(
                     {"to": ep.name, "route": tmpl, "to_file": ep.file_path})
                 added += 1

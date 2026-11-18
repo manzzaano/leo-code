@@ -18,7 +18,9 @@ import ast
 import builtins
 import re
 import sys
+from bisect import bisect_left
 from collections import defaultdict, deque
+from itertools import groupby
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 
@@ -169,6 +171,13 @@ class _PyScope:
     """
 
     def __init__(self, caps):
+        # archivo llamante → archivos que consultó al resolver (módulos, re-exports, MRO,
+        # subclases). Cota superior: GraphQuery.update re-resuelve solo los que consultaron
+        # un archivo editado. Lo global (módulos, jerarquía) lo comprueba derive.
+        self.deps: dict[str, set] = {}
+        self._cur: set | None = None        # deps del archivo que se está resolviendo
+        self._mfiles: dict[str, frozenset] = {}
+        self._dfiles: dict[str, frozenset] = {}
         self.files: set[str] = set()
         self.top = defaultdict(lambda: defaultdict(list))   # archivo → nombre → defs top-level
         self.binds = defaultdict(dict)                      # archivo → nombre local → enlace
@@ -179,26 +188,7 @@ class _PyScope:
         self.methods: dict[str, object] = {}                # "clase\0nombre" → def o tupla de defs
         self.classes: dict[str, list] = {}                  # clase → formas de sus bases
         pkgs = set()
-        for c in caps:
-            if (getattr(c, "language", "") or "") != "python":
-                continue
-            f = _norm(c.file_path)
-            self.files.add(f)
-            if f.endswith("/__init__.py"):
-                pkgs.add(f.rsplit("/", 1)[0])
-            props = c.properties or {}
-            if "bind" in props:
-                self.binds[f][props["bind"][0]] = props["bind"]
-            elif c.type not in _NOT_DEFS and c.content:
-                if "class" in props:
-                    mk = f"{f}\0{props['class']}\0{c.name}"
-                    prev = self.methods.get(mk)
-                    self.methods[mk] = c if prev is None else (
-                        prev if isinstance(prev, tuple) else (prev,)) + (c,)
-                else:
-                    self.top[f][c.name].append(c)
-                    if "bases" in props:
-                        self.classes[f"{f}\0{c.name}"] = props["bases"]
+        self._ingest(caps, pkgs)
         # módulo con puntos → archivos. Sin raíces de sys.path: vale cualquier sufijo de la
         # ruta que empiece fuera de un paquete (su carpeta no tiene __init__.py).
         # ponytail: un __init__.py vacío no deja cápsulas → esa carpeta parece raíz y puede
@@ -225,7 +215,18 @@ class _PyScope:
         # jerarquía: bases resueltas con los imports (las de fuera del repo no entran)
         self._loose: list[tuple] = []      # (nombre de la base desconocida, clase que hereda)
         self._ext: set[str] = set()        # clases con una base de fuera del repo (no builtin)
-        self.bases = {k: self._class_keys(k, forms) for k, forms in self.classes.items()}
+        # archivo de clases → archivos que consultó al resolver sus bases (derive recalcula
+        # solo las clases cuyos archivos consultaron uno editado)
+        self.bdeps: dict[str, set] = {}
+        self.bases = {}
+        for k, forms in self.classes.items():
+            f = k.split("\0", 1)[0]
+            cur = self.bdeps.get(f)
+            if cur is None:
+                cur = self.bdeps[f] = {f}
+            self._cur = cur
+            self.bases[k] = self._class_keys(k, forms)
+        self._cur = None
         subs = defaultdict(list)
         for k, bs in self.bases.items():
             for b in bs:
@@ -247,21 +248,104 @@ class _PyScope:
         self._descs: dict[str, tuple] = {}
         self._imp: dict[str, set] = {}
 
+    def _ingest(self, caps, pkgs: set) -> None:
+        """Tablas por archivo (top, binds, methods, classes) de las cápsulas Python de `caps`."""
+        for c in caps:
+            if (getattr(c, "language", "") or "") != "python":
+                continue
+            f = _norm(c.file_path)
+            self.files.add(f)
+            if f.endswith("/__init__.py"):
+                pkgs.add(f.rsplit("/", 1)[0])
+            props = c.properties or {}
+            if "bind" in props:
+                self.binds[f][props["bind"][0]] = props["bind"]
+            elif c.type not in _NOT_DEFS and c.content:
+                if "class" in props:
+                    mk = f"{f}\0{props['class']}\0{c.name}"
+                    prev = self.methods.get(mk)
+                    self.methods[mk] = c if prev is None else (
+                        prev if isinstance(prev, tuple) else (prev,)) + (c,)
+                else:
+                    self.top[f][c.name].append(c)
+                    if "bases" in props:
+                        self.classes[f"{f}\0{c.name}"] = props["bases"]
+
+    @classmethod
+    def derive(cls, prev: "_PyScope", changed: set, caps) -> "_PyScope | None":
+        """Ámbito de la generación siguiente sin recorrer el repo: las tablas de `prev` salvo
+        las de los archivos `changed` (rutas normalizadas), rehechas con sus cápsulas nuevas
+        `caps`. Módulos y jerarquía se reutilizan si no cambian; las bases se recalculan y se
+        comparan (su resolución consulta otros archivos). None si cambian los archivos, las
+        clases o la jerarquía: el llamante reconstruye entero."""
+        caps = list(caps)
+        present = {_norm(c.file_path) for c in caps if (getattr(c, "language", "") or "") == "python"}
+        if any((f in present) != (f in prev.files) for f in changed):
+            return None                          # archivo Python nuevo o sin cápsulas: otros módulos
+        new = cls.__new__(cls)
+        new.deps, new._cur = {}, None
+        new.files, new.mods, new.tops = prev.files, prev.mods, prev.tops
+        new.top = defaultdict(lambda: defaultdict(list),
+                              {f: d for f, d in prev.top.items() if f not in changed})
+        new.binds = defaultdict(dict, {f: d for f, d in prev.binds.items() if f not in changed})
+        pre = tuple(f + "\0" for f in changed)
+        new.methods = {k: v for k, v in prev.methods.items() if not k.startswith(pre)}
+        new.classes = {k: v for k, v in prev.classes.items() if not k.startswith(pre)}
+        new._ingest(caps, set())
+        if new.classes != prev.classes:
+            return None
+        new.classes = prev.classes               # mismo contenido y el orden de siempre
+        for f in changed:
+            if f in new.top:
+                new.top[f].default_factory = None
+        new.top.default_factory = new.binds.default_factory = None
+        # bases de las clases cuyos archivos consultaron uno editado: si salen iguales, la
+        # jerarquía entera es la misma
+        hit = set(changed)
+        hit.update(f for f, ds in prev.bdeps.items() if not ds.isdisjoint(changed))
+        todo = [k for k in prev.classes if k.split("\0", 1)[0] in hit]
+        new._loose, new._ext, fresh = [], set(), {}
+        for k in todo:
+            f = k.split("\0", 1)[0]
+            new._cur = fresh.get(f) or fresh.setdefault(f, {f})
+            same = new._class_keys(k, prev.classes[k]) == prev.bases[k]
+            new._cur = None
+            if not same:
+                return None
+        todo_set = set(todo)
+        if new._ext != prev._ext & todo_set or new._loose != [x for x in prev._loose if x[1] in todo_set]:
+            return None
+        new.bases, new._ext, new._loose = prev.bases, prev._ext, prev._loose
+        new.bdeps = {**prev.bdeps, **fresh}
+        new.subs, new._sub_builtins = prev.subs, prev._sub_builtins
+        # misma jerarquía → mismas MRO y subclases: las cachés valen tal cual
+        new._mros, new._descs, new._mfiles, new._dfiles = prev._mros, prev._descs, prev._mfiles, prev._dfiles
+        new._memo, new._imp = {}, {}
+        return new
+
     def _mod_files(self, mod: str, level: int, here: str) -> list | None:
         """Archivos del módulo: lista, [] = fuera del repo, None = no se sabe."""
         if level:
             base = here.rsplit("/", level)[0]
             path = base + ("/" + mod.replace(".", "/") if mod else "")
-            return [f for f in (path + ".py", path + "/__init__.py") if f in self.files] or None
+            out = [f for f in (path + ".py", path + "/__init__.py") if f in self.files] or None
+            if out and self._cur is not None:
+                self._cur.update(out)
+            return out
         hit = self.mods.get(mod)
         if hit:
-            return [hit] if isinstance(hit, str) else hit
+            out = [hit] if isinstance(hit, str) else hit
+            if self._cur is not None:
+                self._cur.update(out)
+            return out
         top = mod.split(".")[0]
         return [] if top in sys.stdlib_module_names or top not in self.tops else None
 
     def _in_module(self, files: list, attr: str, depth: int) -> list | None:
         """Defs `attr` de esos archivos, siguiendo re-exports (`from .b import run` en un __init__)."""
         out, external = [], False
+        if self._cur is not None:
+            self._cur.update(files)
         for f in files:
             if attr in self.top.get(f, _NONE):
                 out += self.top[f][attr]
@@ -349,6 +433,30 @@ class _PyScope:
         self._mros[k] = tuple(out)
         return self._mros[k]
 
+    def _seen_mro(self, k: str) -> tuple:
+        """`_mro` anotando en las deps del archivo en curso los archivos de esa MRO."""
+        mro = self._mro(k)
+        if self._cur is not None:
+            fs = self._mfiles.get(k)
+            if fs is None:
+                fs = self._mfiles[k] = frozenset(x.split("\0", 1)[0] for x in mro if x[0] != "\0")
+            self._cur |= fs
+        return mro
+
+    def _seen_desc(self, k: str) -> None:
+        """Deps de despachar sobre `k`: sus subclases y las MRO que `_dispatch` puede recorrer
+        (las de una sola base se cubren con la de su padre, que también está aquí)."""
+        fs = self._dfiles.get(k)
+        if fs is None:
+            out = {x.split("\0", 1)[0] for x in self._mro(k) if x[0] != "\0"}
+            for sub in self._desc(k):
+                out.add(sub.split("\0", 1)[0])
+                b = self.bases.get(sub, ())
+                if not (len(b) == 1 and b[0][0] != "\0"):
+                    out.update(x.split("\0", 1)[0] for x in self._mro(sub) if x[0] != "\0")
+            fs = self._dfiles[k] = frozenset(out)
+        self._cur |= fs
+
     def _desc(self, k: str) -> tuple:
         """La clase `k` y todas sus subclases del repo."""
         hit = self._descs.get(k)
@@ -365,7 +473,7 @@ class _PyScope:
     def _lookup(self, k: str, name: str, after: str | None = None):
         """Primer `name` en la MRO de `k` (solo después de `after`, para `super()`).
         None si antes de encontrarlo aparece una base desconocida: podría estar en ella."""
-        mro = self._mro(k)
+        mro = self._seen_mro(k)
         if after is not None:
             if after not in mro:
                 return ()
@@ -384,6 +492,8 @@ class _PyScope:
         """`self.name()` (o `super().name()`) en la clase `k`: la clase y cada subclase.
         Es `_lookup` por cada subclase, en línea: con miles de subclases (los modelos de
         django) la llamada por subclase era la mitad del chequeo (e)."""
+        if self._cur is not None:
+            self._seen_desc(k)
         methods, mros, bases, owners = self.methods, self._mros, self.bases, set()
         for sub in self._desc(k):
             if sub != k and f"{sub}\0{name}" not in methods:
@@ -442,6 +552,10 @@ class _PyScope:
         if here not in self.files:
             by_name += [n for n, _ in forms]
             return
+        cur = self.deps.get(here)
+        if cur is None:
+            cur = self.deps[here] = {here}
+        self._cur = cur
         props = caller.properties or {}
         lb = props.get("local_binds")
         local = {b[0]: b for b in lb} if lb else {}
@@ -540,7 +654,7 @@ class _PyScope:
             return None if c == "object" or any(issubclass(getattr(builtins, n), bt) for n in self._sub_builtins) else ()
         out = {}
         for k in self._form_keys(c, m, local, top, binds, here) or [None]:
-            if k is None or any(n == "Protocol" for a in self._mro(k) for n, _ in self.classes.get(a, ())):
+            if k is None or any(n == "Protocol" for a in self._seen_mro(k) for n, _ in self.classes.get(a, ())):
                 return None
             t = self._dispatch(k, name, False)
             if t is None:
@@ -595,6 +709,38 @@ def _is_aux_path(c) -> bool:
     return any(p in ("tests", "test", "benchmark", "benchmarks") for p in parts)
 
 
+def _index_names(caps, by_name) -> None:
+    for c in caps:
+        by_name[c.name].append(c)
+        by_name[_bare(c.name)].append(c)
+
+
+def _index_calls(caps, scope, callers, res, qref) -> None:
+    """Aristas de llamada de `caps`, en su orden: resueltas → `res` por nombre de la def; el
+    resto → `callers` por nombre; refs `ruta.py:nombre` de refgraph → `res` y `qref`."""
+    pending, resolved = [], {}              # reutilizados: menos objetos → menos pasadas del GC
+    for c in caps:
+        calls = getattr(c, "calls", None) or []
+        props = c.properties or {}
+        forms = props.get("call_forms")
+        if forms is None:
+            by_name = calls
+        else:
+            pending.clear(); resolved.clear()
+            pending += calls[props.get("n_calls", len(calls)):]
+            scope.resolve(c, forms, pending, resolved)
+            for d in resolved.values():
+                res[_bare(d.name)].append(c)
+            by_name = pending
+        for callee in by_name:
+            if ":" in callee and _split_file(callee)[0]:
+                res[_bare(callee)].append(c)
+                qref.setdefault(c.id, []).append(callee)
+                continue
+            callers[callee].append(c)
+            callers[_bare(callee)].append(c)
+
+
 class GraphQuery:
     """Índices deterministas sobre un store de cápsulas (id -> Capsule)."""
 
@@ -604,9 +750,7 @@ class GraphQuery:
         # clave exista, y esa basura dispara pasadas del GC dentro del chequeo (e).
         self.by_name: dict[str, list] = defaultdict(list)
         self.callers: dict[str, list] = defaultdict(list)   # callee_name -> [cápsulas que lo llaman]
-        for c in self.caps.values():
-            self.by_name[c.name].append(c)
-            self.by_name[_bare(c.name)].append(c)
+        _index_names(self.caps.values(), self.by_name)
         # Cada llamada con forma conocida se intenta resolver (_PyScope). Resuelta → arista
         # exacta caller→def (`_res`, por nombre de la def); sin resolver → por nombre, como
         # siempre. `calls` sin forma (otros lenguajes, refs que añade refgraph) → por nombre.
@@ -614,27 +758,7 @@ class GraphQuery:
         self._res: dict[str, list] = defaultdict(list)   # nombre base de la def → callers resueltos
         # caller id → refs `ruta.py:nombre` de refgraph: cuentan solo para la def de ese archivo
         self._qref: dict[str, list] = {}
-        pending, resolved = [], {}              # reutilizados: menos objetos → menos pasadas del GC
-        for c in self.caps.values():
-            calls = getattr(c, "calls", None) or []
-            props = c.properties or {}
-            forms = props.get("call_forms")
-            if forms is None:
-                by_name = calls
-            else:
-                pending.clear(); resolved.clear()
-                pending += calls[props.get("n_calls", len(calls)):]
-                scope.resolve(c, forms, pending, resolved)
-                for d in resolved.values():
-                    self._res[_bare(d.name)].append(c)
-                by_name = pending
-            for callee in by_name:
-                if ":" in callee and _split_file(callee)[0]:
-                    self._res[_bare(callee)].append(c)
-                    self._qref.setdefault(c.id, []).append(callee)
-                    continue
-                self.callers[callee].append(c)
-                self.callers[_bare(callee)].append(c)
+        _index_calls(self.caps.values(), scope, self.callers, self._res, self._qref)
         # Familias de lenguaje por nombre, precomputadas: _edge_ok se llama UNA VEZ POR
         # ARISTA y resolverlas ahí costaba un _resolve() (con sort) por arista — a escala
         # real (296k símbolos, nombres muy repetidos) eso disparó who_calls ×54 e impact
@@ -648,6 +772,98 @@ class GraphQuery:
                 self._fams[_bare(c.name)].add(fam)
         for d in (self.by_name, self.callers, self._res, self._fams):
             d.default_factory = None            # ya construidos: leer una clave que falta no la crea
+
+    def update(self, caps: dict, touched=()) -> bool:
+        """Pasa el grafo a `caps` (la generación siguiente del mismo repo) re-resolviendo solo
+        los archivos con cápsulas nuevas, quitadas o en `touched` (ids que link_http_edges mutó
+        en sitio) y los que los consultaron al resolver (`_PyScope.deps`). Queda idéntico a
+        `GraphQuery(caps)`, orden de cada lista incluido; si cambian los archivos, los módulos
+        o la jerarquía, o las cápsulas no van agrupadas por archivo, reconstruye entero.
+        Devuelve True si fue incremental. Muta este objeto: no usarlo a la vez desde otro hilo."""
+        old = self.caps
+        rank: dict[str, int] = {}          # archivo (ruta tal cual) → posición en `caps`
+        changed: set[str] = set()
+        last, grouped = None, True
+        for c in caps.values():
+            f = c.file_path
+            if f != last:
+                if f in rank:
+                    grouped = False
+                rank[f] = len(rank)
+                last = f
+            if old.get(c.id) is not c:
+                changed.add(f)
+        if len(old) != len(caps) or changed:
+            changed.update(c.file_path for i, c in old.items() if i not in caps)
+        for i in touched:
+            if i in caps:
+                changed.add(caps[i].file_path)
+        if not changed:
+            self.caps = caps
+            return True
+        prev = self._scope
+        norm = {f: _norm(f) for f in changed | rank.keys()}
+        hit = {norm[f] for f in changed}
+        # un archivo que desaparece de `caps` no tiene sitio en el orden: entero (raro)
+        scope = (_PyScope.derive(prev, hit, (c for c in caps.values() if c.file_path in changed))
+                 if grouped and changed <= rank.keys() else None)
+        if scope is None:
+            self.__init__(caps)
+            return False
+        redo = set(hit)
+        for h, ds in prev.deps.items():
+            if not ds.isdisjoint(hit):
+                redo.add(h)
+        raw = {f for f, n in norm.items() if n in redo}
+        scope.deps = {h: ds for h, ds in prev.deps.items() if h not in redo}
+        # lo resuelto por los demás archivos no cambia: su memo vale (sus destinos son sus
+        # mismas cápsulas o las de archivos que no se tocaron)
+        scope._memo = {h: m for h, m in prev._memo.items() if h not in redo}
+        old_r = [c for c in old.values() if c.file_path in raw]
+        new_r = [c for c in caps.values() if c.file_path in raw]
+        # Lo que aportaban esos archivos (con el ámbito viejo) y lo que aportan ahora: las
+        # claves a tocar son la unión, y en cada una se quitan sus entradas y se ponen las nuevas.
+        gone_n, gone_c, gone_r = defaultdict(list), defaultdict(list), defaultdict(list)
+        _index_names(old_r, gone_n)
+        _index_calls(old_r, prev, gone_c, gone_r, {})
+        add_n, add_c, add_r, add_q = defaultdict(list), defaultdict(list), defaultdict(list), {}
+        _index_names(new_r, add_n)
+        _index_calls(new_r, scope, add_c, add_r, add_q)
+        # Cada lista va ordenada por archivo (el orden de `caps`) y un archivo ocupa un tramo
+        # seguido: se quita el tramo viejo y se pone el nuevo en su sitio, con bisect.
+        key = lambda c: rank[c.file_path]
+        file_of = lambda c: c.file_path
+        for table, gone, add in ((self.by_name, gone_n, add_n), (self.callers, gone_c, add_c),
+                                 (self._res, gone_r, add_r)):
+            for k in gone.keys() | add.keys():
+                lst = table.get(k)
+                if lst is None:
+                    lst = table[k] = []
+                for f, grp in groupby(gone.get(k, ()), file_of):
+                    lo = bisect_left(lst, rank[f], key=key)
+                    del lst[lo:lo + sum(1 for _ in grp)]
+                for f, grp in groupby(add.get(k, ()), file_of):
+                    lo = bisect_left(lst, rank[f], key=key)
+                    lst[lo:lo] = grp
+                if not lst:
+                    del table[k]
+        for c in old_r:
+            self._qref.pop(c.id, None)
+        self._qref.update(add_q)
+        for k in gone_n.keys() | add_n.keys():
+            was = {_family(c) for c in gone_n.get(k, ()) if self._is_def(c)}
+            now = {_family(c) for c in add_n.get(k, ()) if self._is_def(c)}
+            if was <= now:                 # no se va ninguna familia: basta con sumar
+                if now:
+                    self._fams.setdefault(k, set()).update(now)
+                continue
+            fams = {_family(c) for c in self.by_name.get(k, ()) if self._is_def(c)}
+            if fams:
+                self._fams[k] = fams
+            else:
+                self._fams.pop(k, None)
+        self.caps, self._scope, self._resolved = caps, scope, {}
+        return True
 
     # ---- helpers ----
     def _cite(self, c) -> Cite:
