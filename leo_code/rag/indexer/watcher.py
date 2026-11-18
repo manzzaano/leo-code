@@ -54,6 +54,7 @@ class Indexer:
         self._observers: dict[str, object] = {}  # repo abs -> Observer de watchdog
         # repo abs -> rutas cambiadas sin sincronizar; None = hace falta walk completo
         self._dirty_paths: dict[str, set[str] | None] = {}
+        self._watch_restarts: dict[str, int] = {}  # repo abs -> veces relanzado su observer
         self._dirty_lock = threading.Lock()
 
     def _process_one(self, path: Path, lang: str, verbose: bool, repo: Path) -> tuple[list[Capsule], str, int, str | None]:
@@ -83,6 +84,7 @@ class Indexer:
                           "target", "vendor", "bower_components", "site-packages", ".mypy_cache",
                           ".pytest_cache", ".ruff_cache", ".gradle", ".terraform", ".idea", ".vscode"}
     _DOC_DIRS = {"data", "docs", "doc", "synthetic"}
+    _MAX_WATCH_RESTARTS = 3   # observer muerto: se relanza hasta 3 veces, luego solo walk
 
     def _exts(self) -> dict[str, str]:
         return self.CODE_EXTENSIONS if self.hygiene else self._EXTENSIONS
@@ -419,8 +421,20 @@ class Indexer:
         repo_abs = os.path.abspath(repo_path)
         with self._dirty_lock:
             if repo_abs in self._observers:
+                obs = self._observers[repo_abs]
                 # None = ya se intentó y no se pudo: no se reintenta en cada llamada.
-                return self._observers[repo_abs] is not None
+                if obs is None or obs.is_alive():
+                    return obs is not None
+                # Murió: sin eventos, el repo solo se sincronizaba con el walk de
+                # seguridad. Se relanza (con tope, por si el backend muere en bucle) y
+                # se pide walk, porque lo que cambió mientras tanto no se sabe.
+                self._dirty_paths[repo_abs] = None
+                n = self._watch_restarts.get(repo_abs, 0)
+                if n >= self._MAX_WATCH_RESTARTS:
+                    self._observers[repo_abs] = None
+                    return False
+                self._watch_restarts[repo_abs] = n + 1
+                del self._observers[repo_abs]
         try:
             from watchdog.observers import Observer
             from watchdog.events import FileSystemEventHandler

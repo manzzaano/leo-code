@@ -199,3 +199,48 @@ def test_mover_carpeta_fuera_del_repo_quita_sus_simbolos(repo, eng, monkeypatch,
     shutil.move(str(repo / "src"), str(tmp_path_factory.mktemp("fuera") / "src"))
     out = _until(lambda: eng.ensure_structural(r))
     assert out is not None and "b" not in _names(r)
+
+
+# ── observer muerto ────────────────────────────────────────────────────────────
+
+def _kill(idx, r):
+    obs = idx._observers[r]
+    obs.stop()
+    obs.join(timeout=2)
+    assert not obs.is_alive()
+
+
+def test_observer_muerto_se_relanza_y_pide_walk(repo):
+    """Un observer que muere deja de entregar eventos: sin esto, el repo solo se
+    sincronizaba con el walk de seguridad de 60 s. Lo perdido mientras estuvo muerto
+    no se sabe: walk completo."""
+    idx = Indexer(hygiene=True)
+    r = os.path.abspath(str(repo))
+    try:
+        assert idx.watch(r)
+        time.sleep(0.3)
+        idx.take_changes(r)
+        _kill(idx, r)
+        assert idx.watch(r) is True
+        assert idx._observers[r].is_alive()
+        assert idx.take_changes(r) == (True, None)
+        (repo / "a.py").write_text("def a():\n    return 7\n", encoding="utf-8")
+        assert _until(lambda: idx.take_changes(r) if idx._dirty_paths.get(r) else None)[1] == {str(repo / "a.py")}
+    finally:
+        idx.stop_watch()
+
+
+def test_observer_que_muere_siempre_cae_al_walk(repo):
+    """Con un límite: un backend que muere en bucle no se relanza en cada llamada."""
+    idx = Indexer(hygiene=True)
+    r = os.path.abspath(str(repo))
+    try:
+        assert idx.watch(r)
+        for _ in range(Indexer._MAX_WATCH_RESTARTS):
+            _kill(idx, r)
+            assert idx.watch(r) is True
+        _kill(idx, r)
+        assert idx.watch(r) is False
+        assert idx.watch(r) is False
+    finally:
+        idx.stop_watch()
