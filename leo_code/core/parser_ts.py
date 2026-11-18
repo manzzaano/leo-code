@@ -91,19 +91,27 @@ def _jsx_name(node) -> str | None:
 
 _FN_LIKE = {"function_declaration", "generator_function_declaration", "function_expression",
             "generator_function", "arrow_function", "method_definition"}
+_FIELDS = {"public_field_definition", "field_definition"}
 
 
 def _await_name(node):
-    """`await(x)` fuera de una función async: tree-sitter da await_expression, tsc una
-    llamada al identificador `await` (solo con paréntesis; `await x` es siempre await)."""
-    arg = node.named_children[-1] if node.named_children else None
-    if arg is None or arg.type != "parenthesized_expression":
+    """`await(x)` fuera de contexto await: tree-sitter da await_expression, tsc una llamada
+    al identificador `await` (solo si sigue un `(`; `await x` es siempre await).
+    Contexto await como en tsc: función async o `static {}`; una función no async o el
+    inicializador de un campo lo cortan; una clave computada se evalúa en el ámbito exterior."""
+    arg = node.named_children[0] if node.named_children else None
+    if arg is None or not arg.text.startswith(b"("):   # también `await(a)(b)`, `await(a).f()`
         return None
-    p = node.parent
-    while p is not None and p.type not in _FN_LIKE:
-        p = p.parent
-    if p is not None and any(c.type == "async" for c in p.children):
-        return None
+    child, p = node, node.parent
+    while p is not None:
+        from_key = p.child_by_field_name("name") == child or p.child_by_field_name("property") == child
+        if p.type == "class_static_block":
+            return None
+        if p.type in _FN_LIKE and not from_key:
+            return None if any(c.type == "async" for c in p.children) else "await"
+        if p.type in _FIELDS and not from_key:
+            return "await"
+        child, p = p, p.parent
     return "await"
 
 
@@ -192,6 +200,18 @@ def _fn_value(node):
 # `class C\u0032` se llama C2 para tsc; un identificador no admite otras barras
 _BS_U = chr(92) + "u"
 _ESCAPE = re.compile(r"\\u(?:\{([0-9a-fA-F]+)\}|([0-9a-fA-F]{4}))")
+# escapes de un literal string JS: \xHH, \uHHHH, \u{H…} y `\c` → c (no los de control)
+_STR_ESC = re.compile(r"\\x([0-9a-fA-F]{2})|\\u(?:\{([0-9a-fA-F]+)\}|([0-9a-fA-F]{4}))|\\([^bfnrtv0-9xu\r\n])")
+
+
+def _is_constructor_key(name_node) -> bool:
+    r"""`"constructor"() {}` en una clase es el constructor (ES2015, tsc), también con
+    escapes (`"\x63onstructor"`); un escape de control (`\n`…) nunca da esa cadena."""
+    if name_node.type != "string":
+        return False
+    inner = name_node.text.decode("utf-8", "replace")[1:-1]
+    val = _STR_ESC.sub(lambda m: m.group(4) or chr(int(m.group(1) or m.group(2) or m.group(3), 16)), inner)
+    return val == "constructor"
 
 
 def _identifiers(node) -> list[str]:
@@ -207,6 +227,7 @@ def extract_from_tree_sitter(content: str, file_path: str, language: str) -> lis
     tree = _parser(grammar).parse(content.encode("utf-8"))
     lines = content.split("\n")
     caps: list[Capsule] = []
+    ids: set[str] = set()
 
     def emit(name: str, kind: str, node) -> None:
         if _BS_U in name and not name.startswith(("'", '"', "[")):
@@ -216,8 +237,12 @@ def extract_from_tree_sitter(content: str, file_path: str, language: str) -> lis
         is_type = kind in _TYPE_KINDS
         ctype = "type_def" if is_type else kind
         body = "\n".join(lines[start - 1:end])
+        cid = f"{file_path}:{start}:{name}"
+        if cid in ids:   # mismo nombre en la misma línea (get/set, `[{run}, {run}]`): el índice va por id
+            cid = f"{cid}:{node.start_point[1]}"
+        ids.add(cid)
         caps.append(Capsule(
-            id=f"{file_path}:{start}:{name}",
+            id=cid,
             type=ctype, name=name, file_path=file_path,
             start_line=start, end_line=end,
             language=language, signature=f"{kind} {name}",
@@ -265,6 +290,9 @@ def extract_from_tree_sitter(content: str, file_path: str, language: str) -> lis
                 # identifier aunque haya comentarios entre ellos
                 for seg in _identifiers(name_node):
                     emit(seg, kind, n)
+            elif (kind == "method" and n.parent is not None and n.parent.type == "class_body"
+                  and _is_constructor_key(name_node)):
+                emit("constructor", kind, n)
             else:
                 emit(name_node.text.decode("utf-8", "replace"), kind, n)
         stack.extend(n.children)

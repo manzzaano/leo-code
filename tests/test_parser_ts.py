@@ -99,3 +99,46 @@ def test_decorated_method_keeps_its_name_line():
 ])
 def test_await_call_outside_async_like_tsc(src, name, expected):
     assert _calls(name, extract_from_tree_sitter(src, "x.ts", "typescript")) == expected
+
+
+@pytest.mark.parametrize("src,name,expected", [
+    # el inicializador de un campo no hereda el async de la función exterior; static {} sí es await
+    ("async function f(){ class C { y = await(x()); } }", "f", {"await", "x"}),
+    ("function f(){ class C { static { await(x()); } } }", "f", {"x"}),
+    # encadenado: `await(a)(b)` y `await(a).foo()` siguen siendo la llamada `await(a)`
+    ("function f(){ await(a)(b); }", "f", {"await"}),
+    ("function f(){ await(a).foo(); }", "f", {"await", "foo"}),
+    ("async function f(){ await(a).foo(); }", "f", {"foo"}),
+    # una clave computada se evalúa fuera del método: manda el async exterior
+    ("async function f(){ class C { [await(x())]() {} } }", "f", {"x"}),
+    ("async function f(){ class C { [await(x())] = 1 } }", "f", {"x"}),
+])
+def test_await_context_edges_like_tsc(src, name, expected):
+    assert _calls(name, extract_from_tree_sitter(src, "x.ts", "typescript")) == expected
+
+
+def test_same_name_same_line_symbols_keep_distinct_ids():
+    # get/set o claves repetidas en una línea: con id archivo:línea:nombre el índice (dict
+    # por id) se quedaba con uno y perdía las llamadas del otro
+    src = "const o = { get q() { return a(); }, set q(v) { b(); } };\n" \
+          "const xs = [{ run: () => c() }, { run: () => d() }];\n"
+    caps = extract_from_tree_sitter(src, "x.ts", "typescript")
+    assert len({c.id for c in caps}) == len(caps)
+    assert sorted(sorted(c.calls) for c in caps if c.name == "q") == [["a"], ["b"]]
+    assert sorted(sorted(c.calls) for c in caps if c.name == "run") == [["c"], ["d"]]
+    assert "x.ts:1:q" in {c.id for c in caps}   # el primero conserva el id de siempre
+
+
+def test_quoted_constructor_is_the_constructor_like_tsc():
+    # en una clase, `"constructor"() {}` ES el constructor (ES2015); computado u objeto, no
+    src = r'''class C { "constructor"() { a(); } }
+class D { 'constructor'() { b(); } }
+class F { "\x63onstructor"() { c(); } }
+class G { "co\nstructor"() { d(); } }
+class E { ['constructor']() { e(); } }
+var o = { "constructor"() { f(); } };
+'''
+    names = {c.start_line: c.name for c in extract_from_tree_sitter(src, "x.ts", "typescript")
+             if c.type == "method"}
+    assert names == {1: "constructor", 2: "constructor", 3: "constructor",
+                     4: r'"co\nstructor"', 5: "['constructor']", 6: '"constructor"'}
