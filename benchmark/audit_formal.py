@@ -11,7 +11,7 @@ Checks:
   (c) BLAST RADIUS COMPLETO: romper un símbolo de verdad → todos los tests que fallan
       ⊆ lo que el guardián predijo (mutation testing real).
   (d) LATENCIA: cualquier query estructural <50ms a escala.
-  (e) PRESUPUESTO POST-EDICIÓN: reconstruir el grafo tras una edición ≤20 µs/símbolo
+  (e) PRESUPUESTO POST-EDICIÓN: reconstruir el grafo tras una edición ≤24 µs/símbolo
       y sin escribir el índice dentro de la llamada al tool.
   (f) RAM: pico del proceso en el camino del producto (arranque en frío y en caliente +
       get_context) ≤ 500 MB, lo que tiene libre cualquier portátil de desarrollador.
@@ -135,11 +135,13 @@ def check_e(repos):
     real (medido: 15 s a 300k símbolos antes de acotarlo, 1,4 s después).
 
     Dos cosas que no pueden volver a romperse:
-      1. la reconstrucción (filtro por repo + frontera HTTP + índices) ≤ 20 µs/símbolo;
+      1. la reconstrucción (filtro por repo + frontera HTTP + índices) ≤ 24 µs/símbolo;
       2. la escritura del índice NO ocurre dentro de la llamada (reescribir el .json.gz
          completo son ~9 s a 300k símbolos).
     Es una red contra regresiones de complejidad, no un benchmark de la máquina. El margen
-    ya no es 4×: medido en CI 19,8 µs (17/11) tras la frontera HTTP de 7c025b6.
+    ya no es 4×: medido en CI 19,8 µs (17/11) tras la frontera HTTP de 7c025b6. Con 20 de
+    base fallaba por ruido (18/11: 18,5-20,6 µs en CI con el mismo código): 24 deja ~20 %
+    sobre lo medido y una regresión de complejidad sigue saltando de largo.
     """
     from leo_code import engine
     from leo_code.core.boundary import link_http_edges
@@ -176,7 +178,7 @@ def check_e(repos):
     # cachés frías) dominan y el µs/símbolo sale alto sin que nada vaya mal. Medido:
     # 19 µs/símbolo con 2,5k símbolos y 4,5 µs con 300k. Lo que el gate persigue es una
     # regresión de COMPLEJIDAD, así que el límite lleva un término fijo.
-    budget = 20 + 40_000 / max(n, 1)
+    budget = 24 + 40_000 / max(n, 1)
     ok = per_symbol <= budget and not inline_write
     return ok, (f"{Path(repo).name}, {n:,} símbolos: reconstrucción "
                 f"{per_symbol:.1f} µs/símbolo (<{budget:.1f}) · índice escrito dentro de la "
