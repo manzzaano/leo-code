@@ -52,3 +52,36 @@ def test_awaited_call_with_type_arguments():
     caps = extract_from_tree_sitter("async function a(){ await this.get<T>(k); await go<T>(1); }",
                                     "x.ts", "typescript")
     assert _calls("a", caps) == {"get", "go"}
+
+
+DECORATED = """\
+const method3 = "method3";
+class C {
+    @dec(1) method1() {}
+    @dec(2) ["method2"]() {}
+    @dec(3) [method3]() {}
+    @Get('/x')
+    @UseGuards(AuthGuard)
+    // comentario entre decorador y método
+    findAll() { svc.list(); }
+    plain() { other(); }
+}
+"""
+
+
+@pytest.mark.parametrize("lang,path", [("typescript", "x.ts"), ("javascript", "x.js")])
+def test_member_decorator_calls_belong_to_the_method(lang, path):
+    # En tree-sitter TS el decorador de un miembro es HERMANO del method_definition en
+    # class_body; tsc (y ast en Python) lo cuelga del método: sus llamadas son del método.
+    caps = extract_from_tree_sitter(DECORATED, path, lang)
+    assert _calls("method1", caps) == {"dec"}
+    assert _calls('["method2"]', caps) == {"dec"}
+    assert _calls("[method3]", caps) == {"dec"}
+    assert _calls("findAll", caps) == {"Get", "UseGuards", "list"}
+    assert _calls("plain", caps) == {"other"}   # el decorador del vecino no se cuela
+
+
+def test_decorated_method_keeps_its_name_line():
+    # file:line del método = línea del nombre (como el `def` en Python), no la del `@`
+    caps = extract_from_tree_sitter(DECORATED, "x.ts", "typescript")
+    assert next(c for c in caps if c.name == "findAll").start_line == 9

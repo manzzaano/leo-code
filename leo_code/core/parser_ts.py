@@ -93,11 +93,24 @@ _CALL_NODES = {"call_expression": _callee_name, "new_expression": _new_name,
                "jsx_opening_element": _jsx_name, "jsx_self_closing_element": _jsx_name}
 
 
-def _calls_in(node) -> list[str]:
+def _member_decorators(node) -> list:
+    """Decoradores de un miembro de clase TS. tree-sitter TS los pone como hermanos previos
+    del method_definition en class_body; tsc (y `ast` en Python) los cuelga del método."""
+    out = []
+    if node.type == "method_definition":
+        prev = node.prev_sibling
+        while prev is not None and prev.type in ("decorator", "comment"):
+            if prev.type == "decorator":
+                out.append(prev)
+            prev = prev.prev_sibling
+    return out
+
+
+def _calls_in(node, extra=()) -> list[str]:
     """Todos los nombres llamados dentro del subárbol (incluye anidados, como el oráculo)."""
     out: list[str] = []
     seen: set[str] = set()
-    stack = [node]
+    stack = [node, *extra]
     while stack:
         n = stack.pop()
         namer = _CALL_NODES.get(n.type)
@@ -190,7 +203,7 @@ def extract_from_tree_sitter(content: str, file_path: str, language: str) -> lis
             start_line=start, end_line=end,
             language=language, signature=f"{kind} {name}",
             # un tipo no tiene aristas: `namespace` agregaría las de los símbolos que contiene
-            content=body[:3000], calls=[] if is_type else _calls_in(node),
+            content=body[:3000], calls=[] if is_type else _calls_in(node, _member_decorators(node)),
             properties={"lineas": end - start + 1},
         ))
 

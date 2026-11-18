@@ -98,7 +98,12 @@ for (const f of files) {
       syms.push([typeName, line, []]);
     }
     if (name) {
-      const line = sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
+      // Método decorado: su línea es la del primer token tras los decoradores (modificador o
+      // nombre), como el `def` en Python y el method_definition de tree-sitter TS. Las
+      // llamadas de los decoradores sí cuentan (callsIn recorre el nodo entero).
+      const decos = ts.isMethodDeclaration(n) ? (n.modifiers || []).filter(ts.isDecorator) : [];
+      const pos = decos.length ? ts.skipTrivia(sf.text, decos[decos.length - 1].end) : n.getStart(sf);
+      const line = sf.getLineAndCharacterOfPosition(pos).line + 1;
       syms.push([name, line, callsIn(n)]);
     }
     ts.forEachChild(n, rec);
