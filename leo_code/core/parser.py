@@ -29,6 +29,10 @@ class Capsule:
     called_by: list[str] = field(default_factory=list)
     imports: list[str] = field(default_factory=list)
     properties: dict = field(default_factory=dict)
+    # Caché de boundary._scan (no se compara ni se guarda). Campo y no atributo suelto:
+    # añadirlo después a 74k instancias rompía el reparto de claves de sus __dict__ y la
+    # reconstrucción en frío subía 3 µs/símbolo (django).
+    _http_scan: Optional[tuple] = field(default=None, compare=False, repr=False)
 
 
 def _make_id(file_path: str, start_line: int, signature: str) -> str:

@@ -141,53 +141,83 @@ def _hinted_finditer(rx, text: str, low: str, hints):
             end = max(m.end(), i + 1)
 
 
+def _scan_one(c) -> tuple:
+    """Lo que una cápsula aporta a la frontera HTTP: (rutas de servidor, URLs de cliente,
+    ¿puede llevar literales de ruta?). Solo depende de la propia cápsula."""
+    content = getattr(c, "content", "") or ""
+    # El parser AST de Python deja los decoradores FUERA de content/signature, en
+    # properties["decorators"] ("app.get('/api/x')"): sin mirarlos, ninguna ruta
+    # FastAPI/Flask de un repo real se cosía (medido en NEXUS, 2026-09-15).
+    props = getattr(c, "properties", None) or {}
+    deco = str(props.get("decorators", ""))
+    sig = getattr(c, "signature", "") or ""
+    server_text = " ".join((content, sig, deco))
+    low = server_text.lower()
+    if len(low) == len(server_text):     # sin copiar: content+sig es el prefijo de low
+        code_low, code_end = low, len(content) + 1 + len(sig)
+    else:
+        code_low = " ".join((content, sig)).lower(); code_end = len(code_low)
+    found = _route_literals(deco, deco.lower()) if deco else []
+    found += _server_literals(code_low, code_end)
+    routes = [_norm(r) for r in dict.fromkeys(found)]
+    urls = []
+    if any(h in low for h in _CLIENT_HINTS):
+        # low empieza por content.lower() si lower() no cambió longitudes
+        aligned = low[:len(content)] if len(low) == len(server_text) else content.lower()
+        for m in _hinted_finditer(_CLIENT_CALL, content, aligned, _CLIENT_HINTS):
+            url = m.group(1)
+            if url.startswith(("/", "http")) or "/" in url:
+                urls.append(_norm(url))
+    literal = ("/" in content or "http" in content) and any(h in content for h in _PATH_HINTS)
+    if not (routes or urls or literal):
+        return _NOTHING
+    return tuple(routes), tuple(urls), literal
+
+
+# Casi ninguna cápsula aporta nada (django: todas). Una constante compartida y no una tupla
+# por cápsula: 74k contenedores nuevos que sigue el GC subían el resto de la reconstrucción.
+_NOTHING = ()
+
+
 def _scan(capsules: dict) -> tuple[dict[str, list], list[tuple]]:
     """Una sola pasada: rutas de servidor y llamadas de cliente.
 
-    Recorrer las cápsulas dos veces significaba bajar a minúsculas y volver a tocar
-    todo el texto dos veces; aquí cada cápsula se lee una vez.
+    Lo de cada cápsula se guarda en ella (`_http_scan`): `sync` sustituye las cápsulas de
+    los archivos cambiados por objetos nuevos, así que tras una edición solo se escanean
+    esas y el resultado viejo se va con su cápsula. En django eran 6,2 µs/símbolo de los
+    12,8 de reconstruir el grafo, con 0 aristas HTTP.
     """
     routes: dict[str, list] = {}
     clients: list[tuple] = []
     seen: set = set()
     literal: list = []                   # cápsulas con literales de ruta, para el final
 
-    def add(c, url):
-        t = _norm(url)
+    def add(c, t):
         if (c.id, t) not in seen:
             seen.add((c.id, t)); clients.append((c, t))
     for c in capsules.values():
-        content = getattr(c, "content", "") or ""
-        # El parser AST de Python deja los decoradores FUERA de content/signature, en
-        # properties["decorators"] ("app.get('/api/x')"): sin mirarlos, ninguna ruta
-        # FastAPI/Flask de un repo real se cosía (medido en NEXUS, 2026-09-15).
-        props = getattr(c, "properties", None) or {}
-        deco = str(props.get("decorators", ""))
-        sig = getattr(c, "signature", "") or ""
-        server_text = " ".join((content, sig, deco))
-        low = server_text.lower()
-        if len(low) == len(server_text):     # sin copiar: content+sig es el prefijo de low
-            code_low, code_end = low, len(content) + 1 + len(sig)
-        else:
-            code_low = " ".join((content, sig)).lower(); code_end = len(code_low)
-        found = _route_literals(deco, deco.lower()) if deco else []
-        found += _server_literals(code_low, code_end)
-        for r in dict.fromkeys(found):
-            routes.setdefault(_norm(r), []).append(c)
-        if any(h in low for h in _CLIENT_HINTS):
-            # low empieza por content.lower() si lower() no cambió longitudes
-            aligned = low[:len(content)] if len(low) == len(server_text) else content.lower()
-            for m in _hinted_finditer(_CLIENT_CALL, content, aligned, _CLIENT_HINTS):
-                url = m.group(1)
-                if url.startswith(("/", "http")) or "/" in url:
-                    add(c, url)
-        if ("/" in content or "http" in content) and any(h in content for h in _PATH_HINTS):
-            literal.append((c, content))
-    # Sin rutas de servidor ningún literal puede coser (django, sympy, scipy): no se buscan.
-    for c, content in literal if routes else ():
-        for url in _literal_calls(content):
-            if _norm(url) != "/":            # `x.split("/")` coserían con la ruta raíz de todo backend
-                add(c, url)
+        hit = c._http_scan
+        if hit is None:
+            hit = c._http_scan = _scan_one(c)
+        if hit is _NOTHING:
+            continue
+        found, urls, lit = hit
+        for t in found:
+            routes.setdefault(t, []).append(c)
+        for t in urls:
+            add(c, t)
+        if lit:
+            literal.append(c)
+    # Sin rutas de servidor ningún literal puede coser (sympy, scipy): no se buscan. Si se
+    # buscan, se guardan en la cápsula como lo demás (True = aún sin buscar).
+    for c in literal if routes else ():
+        found, urls, lit = c._http_scan
+        if lit is True:
+            # `x.split("/")` coserían con la ruta raíz de todo backend
+            lit = tuple(t for t in map(_norm, _literal_calls(c.content)) if t != "/")
+            c._http_scan = (found, urls, lit)
+        for t in lit:
+            add(c, t)
     routes = {t: _innermost(eps) for t, eps in routes.items()}
     return routes, clients
 
