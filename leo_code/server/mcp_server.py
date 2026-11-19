@@ -41,7 +41,8 @@ leo-mcp gives you this repository's real call graph, parsed from the AST (full A
 - To understand code (how X works, where to change Y, why Z fails), call get_context with the question before grepping or opening files: it returns the relevant symbols with their bodies, compressed.
 - For structural facts use graph. It is exact and cites file:line: where (definition), who_calls (direct callers), impact (everything that transitively depends on a symbol), trace (call path from A to B, including frontend fetch -> backend route), guard (impact plus which dependents have no tests).
 - Before changing a function's signature or behavior, run graph op=guard on it.
-- The graph is static: calls through WebSockets, subprocesses, queues, reflection or string-built dispatch are not edges."""
+- The graph is static: calls through WebSockets, subprocesses, queues, reflection or string-built dispatch are not edges.
+- who_calls and impact count calls only: a function used as a value (callback, dict entry) or as a decorator can show no callers. guard also counts Python references to it by name (not decorators, not TS/JS), so "no results" is not proof that nothing uses it."""
 
 _REPO_PROP = {"repo_path": {"type": "string",
                             "description": "Repository root. Defaults to the project the server was started in."}}
