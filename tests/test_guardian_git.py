@@ -102,3 +102,44 @@ def test_changed_symbols_varios_archivos(repo):
     _change(repo, "app/core.py", "return 1", "return 10")
     _change(repo, "app/use.py", "return helper()", "return helper() + 1")
     assert sorted(_guardian(repo).changed_symbols(git_diff(str(repo)))) == ["caller", "helper"]
+
+
+def _staged(repo):
+    _git(repo, "add", "-A")
+    return _guardian(repo).changed_symbols(git_diff(str(repo), staged=True))
+
+
+def test_changed_symbols_ruta_no_ascii(repo):
+    """git cita la ruta con escapes octales: `+++ "b/\303\261/m.py"`."""
+    (repo / "ñ").mkdir()
+    (repo / "ñ" / "m.py").write_text("def uno():\n    return 1\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "ñ")
+    _change(repo, "ñ/m.py", "return 1", "return 9")
+    assert _staged(repo) == ["uno"]
+
+
+def test_changed_symbols_mismo_nombre_en_otra_carpeta(repo):
+    (repo / "otra").mkdir()
+    (repo / "otra" / "core.py").write_text(FILES["app/core.py"].replace("helper", "ajeno"), encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "otra")
+    _change(repo, "otra/core.py", "return 1", "return 9")
+    assert _staged(repo) == ["ajeno"]
+
+
+def test_changed_symbols_linea_que_parece_cabecera(repo):
+    """Una línea añadida `++ b/x.py` sale en el diff como `+++ b/x.py`: es contenido, no cabecera."""
+    _change(repo, "app/use.py", "def caller():\n", 'def caller():\n    """doc\n\n\n\n\n"""\n')
+    _git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "doc")
+    # única línea del diff: dentro de caller; leída como cabecera iría a la línea 9 de core.py
+    _change(repo, "app/use.py", '\n\n\n\n"""\n', '\n\n\n\n++ b/app/core.py\n"""\n')
+    assert _staged(repo) == ["caller"]
+
+
+def test_changed_symbols_renombre_borrado_y_binario(repo):
+    (repo / "app" / "core.py").rename(repo / "app" / "nucleo.py")
+    _change(repo, "app/nucleo.py", "return 2", "return 20")
+    (repo / "tests" / "test_core.py").unlink()
+    (repo / "logo.bin").write_bytes(b"\0\1\2")
+    assert _staged(repo) == ["tested"]

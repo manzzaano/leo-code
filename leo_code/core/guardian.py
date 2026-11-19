@@ -301,36 +301,46 @@ class Guardian:
     def changed_symbols(self, diff_text: str) -> list[str]:
         """Mapea las líneas cambiadas de un `git diff` a los símbolos (cápsulas) que
         las contienen. Es el puente diff → grafo."""
+        import codecs
         import re
-        import os
         changes: dict[str, set[int]] = {}   # archivo → líneas (lado nuevo) tocadas
         cur, ln = None, 0                   # ln: línea del lado nuevo dentro del hunk
+        old_left = new_left = 0             # líneas que quedan del hunk: dentro, nada es cabecera
         for line in diff_text.splitlines():
+            if old_left > 0 or new_left > 0:
+                # solo + y -: el contexto del hunk (3 líneas) es de funciones vecinas sin tocar
+                if line.startswith("+"):
+                    changes[cur].add(ln); ln += 1; new_left -= 1
+                elif line.startswith("-"):
+                    # un borrado no ocupa línea nueva: marca las dos que quedan a sus lados
+                    changes[cur].update((ln - 1, ln)); old_left -= 1
+                elif line.startswith(" ") or line == "":
+                    ln += 1; old_left -= 1; new_left -= 1
+                continue                    # «\ No newline at end of file»
             if line.startswith("diff --git"):
-                cur = None                  # el «--- a/» que sigue no es un borrado
+                cur = None
+            elif line.startswith('+++ "b/'):
+                # ruta con caracteres no ASCII o especiales: git la cita con escapes en octal
+                raw = line[4:].rstrip("\t").strip()[1:-1]
+                cur = codecs.escape_decode(raw.encode("latin-1", "backslashreplace"))[0] \
+                    .decode("utf-8", "replace")[2:]
+                changes.setdefault(cur, set())
             elif line.startswith("+++ b/"):
                 cur = line[6:].strip()
                 changes.setdefault(cur, set())
-            elif cur is None:
-                continue
-            elif line.startswith("@@"):
-                m = re.search(r"\+(\d+)", line)
-                ln = int(m.group(1)) if m else 0
-            # solo + y -: el contexto del hunk (3 líneas) es de funciones vecinas sin tocar
-            elif line.startswith("+"):
-                changes[cur].add(ln); ln += 1
-            elif line.startswith("-"):
-                # un borrado no ocupa línea nueva: marca las dos que quedan a sus lados
-                changes[cur].update((ln - 1, ln))
-            elif line.startswith(" "):
-                ln += 1
-        # cápsulas cuyo rango [start,end] solapa con líneas cambiadas del mismo archivo
+            elif line.startswith("@@") and cur is not None:
+                m = re.match(r"@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", line)
+                if m:
+                    old_left, ln = int(m.group(1) or 1), int(m.group(2))
+                    new_left = int(m.group(3) or 1)
+        # cápsulas cuyo rango [start,end] solapa con líneas cambiadas del mismo archivo; la
+        # ruta del diff es relativa a la raíz de git: se empareja por ruta, no por nombre
         out: list[str] = []
         seen: set[str] = set()
         for c in self.caps.values():
             cf = (c.file_path or "").replace("\\", "/")
             for f, lines in changes.items():
-                if cf.endswith(f) or os.path.basename(cf) == os.path.basename(f):
+                if cf == f or cf.endswith("/" + f) or f.endswith("/" + cf):
                     lo, hi = getattr(c, "start_line", 0), getattr(c, "end_line", 0)
                     if any(lo <= ln <= hi for ln in lines) and c.name not in seen \
                             and c.type in ("function", "method", "class", "endpoint",
