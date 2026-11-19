@@ -80,6 +80,13 @@ class Proof:
 _JS_FAMILY = {"javascript", "typescript", "js", "ts", "jsx", "tsx"}
 
 
+def _defsig(cs) -> set:
+    """Lo que mira un salto por nombre de sus destinos (`_call_targets`, `_fams`, el filtro de
+    `x.f()` suelto): si no cambia, quien llama por ese nombre va a los mismos ids."""
+    return {(c.id, c.type, GraphQuery._is_def(c), _is_import(c), "class" in (c.properties or {}))
+            for c in cs}
+
+
 def _family(c) -> str:
     lang = (getattr(c, "language", "") or "").lower()
     return "js" if lang in _JS_FAMILY else lang
@@ -777,6 +784,10 @@ class GraphQuery:
         # ×42 y tumbó el SLA del chequeo (d). Aquí es O(1) por arista.
         self._resolved: dict[str, list] = {}   # memo de _resolve: el grafo no cambia tras construirse
         self._targets: dict[str, list] = {}    # memo de _call_targets (test_closure: 3 M filtros en django)
+        # Qué re-resolvió el último update, para quien guarda datos derivados del grafo
+        # (Guardian._rows): (ids de las cápsulas re-resueltas, viejas y nuevas; sus archivos
+        # normalizados; nombres cuyas defs cambiaron). None = construido entero.
+        self.delta: tuple | None = None
         self._fams: dict[str, set] = defaultdict(set)
         for c in self.caps.values():
             if self._is_def(c):
@@ -812,7 +823,7 @@ class GraphQuery:
             if i in caps:
                 changed.add(caps[i].file_path)
         if not changed:
-            self.caps = caps
+            self.caps, self.delta = caps, (set(), set(), set())
             return True
         prev = self._scope
         norm = {f: _norm(f) for f in changed | rank.keys()}
@@ -878,6 +889,9 @@ class GraphQuery:
             else:
                 self._fams.pop(k, None)
         self.caps, self._scope, self._resolved, self._targets = caps, scope, {}, {}
+        self.delta = ({c.id for c in old_r} | {c.id for c in new_r}, redo,
+                      {k for k in gone_n.keys() | add_n.keys()
+                       if _defsig(gone_n.get(k, ())) != _defsig(add_n.get(k, ()))})
         return True
 
     # ---- helpers ----

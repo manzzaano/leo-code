@@ -120,6 +120,10 @@ class Guardian:
         self.caps = aug
         self.gq = GraphQuery(aug, scope)
         self._covered: set[str] | None = None
+        # test_closure: destinos (ids) de cada nodo alcanzado y de las semillas de cada archivo
+        # de test; update solo tira los que pueden haber cambiado (_invalidate)
+        self._rows: dict[str, tuple] = {}
+        self._seeds: dict[str, tuple] = {}
         self._root = os.path.abspath(repo) if repo else None   # la regla de test mira la ruta DENTRO del repo, no sus carpetas padre
         # cita (archivo, línea, nombre) → su cápsula: la cobertura va por definición
         self._at = {_key(c): c for c in aug.values()}
@@ -169,7 +173,44 @@ class Guardian:
         self._orig, self.caps, self._covered = capsules, aug, None
         inc = self.gq.update(aug)
         ix.scope = self.gq._scope
+        self._invalidate()
         return inc
+
+    def _invalidate(self) -> None:
+        """Tira las filas de test_closure cuyos saltos pueden haber cambiado en el último
+        `gq.update`: las cápsulas re-resueltas, quien llama por nombre a uno cuyas defs
+        cambiaron (`callers`, `_res`) y las subclases de las clases re-resueltas (su
+        constructor heredado, `ctor_hops`). Validado contra fuerza bruta en django: 64
+        ediciones, 0 nodos con saltos distintos fuera de esta cota."""
+        from leo_code.core.graphquery import _CLASS_TYPES, _norm
+        gq = self.gq
+        if gq.delta is None:                 # grafo construido entero
+            self._rows, self._seeds = {}, {}
+            return
+        ids, files, names = gq.delta
+        hit = set(ids)
+        for k in names:
+            for lst in (gq.callers.get(k, ()), gq._res.get(k, ())):
+                hit.update(c.id for c in lst)
+        sc = gq._scope
+        todo = [k for k in sc.classes if k.split("\0", 1)[0] in files]
+        seen = set(todo)
+        while todo:
+            for sub in sc.subs.get(todo.pop(), ()):
+                if sub not in seen:
+                    seen.add(sub); todo.append(sub)
+        for k in seen:
+            f, name = k.split("\0", 1)
+            hit.update(c.id for c in gq.by_name.get(name, ())
+                       if c.type in _CLASS_TYPES and _norm(c.file_path) == f)
+        seeds = set(files)
+        for i in hit:
+            self._rows.pop(i, None)
+            c = self.caps.get(i)
+            if c is not None:
+                seeds.add(_norm(c.file_path))
+        for f in seeds:
+            self._seeds.pop(f, None)
 
     # ---- cobertura: símbolos alcanzados por algún test ----
     @staticmethod
@@ -190,25 +231,50 @@ class Guardian:
         test de un `helper` cubría a todos los `helper` del repo."""
         if self._covered is not None:
             return self._covered
-        gq, seen = self.gq, set()
-        q: list = []                      # listas de destinos por visitar (pila: el orden da igual)
+        from leo_code.core.graphquery import _norm
+        tests: dict[str, list] = {}
         for c in self.caps.values():
             if self._is_test(c, self._root):
-                res, groups = gq._hop_groups(c, strict=True)
-                q.append(res); q += groups
+                tests.setdefault(_norm(c.file_path), []).append(c)
+        old = self._seeds
+        self._seeds = {}
+        q: list = []                      # filas por visitar (pila: el orden da igual)
+        for f, cs in tests.items():
+            r = old.get(f)
+            if r is None:
+                r = self._seed_row(cs)
+            self._seeds[f] = r
+            q.append(r)
+        seen: set[str] = set()
+        rows, caps = self._rows, self.caps
         while q:
-            for d in q.pop():
-                if d.id in seen:
+            for i in q.pop():
+                if i in seen:
                     continue
-                seen.add(d.id)
-                hops = gq.ctor_hops(d)    # alcanzar una clase no ejecuta todos sus métodos
-                if hops is None:
-                    res, groups = gq._hop_groups(d, strict=True)
-                    q.append(res); q += groups
-                else:
-                    q.append([t for t, _, _ in hops])
+                seen.add(i)
+                r = rows.get(i)
+                if r is None:
+                    r = rows[i] = self._row(caps[i])
+                q.append(r)
         self._covered = seen
         return seen
+
+    def _row(self, d) -> tuple:
+        """Ids a los que salta `d` al ejecutarse."""
+        hops = self.gq.ctor_hops(d)       # alcanzar una clase no ejecuta todos sus métodos
+        if hops is not None:
+            return tuple({t.id for t, _, _ in hops})
+        return self._seed_row((d,))
+
+    def _seed_row(self, cs) -> tuple:
+        """Ids a los que saltan las cápsulas `cs` (las de test, siempre por sus llamadas)."""
+        out: set[str] = set()
+        for c in cs:
+            res, groups = self.gq._hop_groups(c, strict=True)
+            out.update(t.id for t in res)
+            for g in groups:
+                out.update(t.id for t in g)
+        return tuple(out)
 
     def is_covered(self, sym) -> bool:
         """Una cápsula: ¿la alcanza un test? Un nombre: ¿alguna de sus defs?"""

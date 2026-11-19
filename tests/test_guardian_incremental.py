@@ -33,10 +33,16 @@ FILES = {
         "def work():\n    return 5\n\n"
         "if __name__ == '__main__':\n    work()\n"
     ),
+    # construir Sub ejecuta el __init__ heredado de Base (ctor_hops), que está en otro archivo
+    "pkg/base.py": "class Base:\n    def __init__(self):\n        self.x = 1\n",
+    "pkg/sub.py": "from pkg.base import Base\n\nclass Sub(Base):\n    def other(self):\n        return 2\n",
+    # nieta: solo nombra a Sub, así que no llama por nombre a nada de base.py
+    "pkg/sub2.py": "from pkg.sub import Sub\n\nclass Sub2(Sub):\n    pass\n",
     "tests/test_run.py": (
-        "from pkg.table import run\nfrom script import launch\n\n"
+        "from pkg.table import run\nfrom script import launch\nfrom pkg.sub2 import Sub2\n\n"
         "def test_run():\n    assert run('a') == 1\n\n"
-        "def test_launch():\n    launch()\n"
+        "def test_launch():\n    launch()\n\n"
+        "def test_sub():\n    Sub2()\n"
     ),
 }
 SYMBOLS = ["handler", "shared", "run", "work", "lonely", "fire", "_DISPATCH", "HOOKS", "launch"]
@@ -196,3 +202,32 @@ def test_diferencial_ediciones_aleatorias(repo):
         caps = _edit(root, idx, rel, rnd.choice(heads) + FILES[rel] + "\n" + defs)
         modes.add(_check(g, root, caps))
     assert True in modes
+
+
+def test_init_heredado_en_otro_archivo(repo):
+    """Sub2 no cambia, pero su __init__ (de Base, dos niveles arriba) llama ahora a `lonely`."""
+    root, idx, g = repo
+    assert not g.is_covered("lonely")
+    caps = _edit(root, idx, "pkg/base.py", "from pkg.other import lonely\n\nclass Base:\n"
+                 "    def __init__(self):\n        self.x = lonely()\n")
+    _check(g, root, caps, True)
+    assert g.is_covered("lonely")
+
+
+def test_cierre_tras_editar_reutiliza_las_filas(repo, monkeypatch):
+    """G3: tras una edición local solo se recalculan los saltos de lo que puede cambiar."""
+    root, idx, g = repo
+    g.test_closure()
+    total = len(g._rows) + len(g._seeds)
+    assert total
+    done = []
+    real_row, real_seed = Guardian._row, Guardian._seed_row
+    monkeypatch.setattr(Guardian, "_row", lambda self, c: done.append(c.id) or real_row(self, c))
+    monkeypatch.setattr(Guardian, "_seed_row", lambda self, cs: done.append(cs[0].id) or real_seed(self, cs))
+    caps = _edit(root, idx, "pkg/handlers.py", FILES["pkg/handlers.py"].replace("return 1", "return 7"))
+    g.update(caps)
+    g.test_closure()
+    assert 0 < len(done) < total
+    monkeypatch.setattr(Guardian, "_row", real_row)
+    monkeypatch.setattr(Guardian, "_seed_row", real_seed)
+    assert _snap(g) == _snap(Guardian(caps, str(root)))
