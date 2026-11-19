@@ -94,25 +94,40 @@ _FN_LIKE = {"function_declaration", "generator_function_declaration", "function_
 _FIELDS = {"public_field_definition", "field_definition"}
 
 
+_PARAMS = {"required_parameter", "optional_parameter"}
+
+
 def _await_name(node):
     """`await(x)` fuera de contexto await: tree-sitter da await_expression, tsc una llamada
-    al identificador `await` (solo si sigue un `(`; `await x` es siempre await).
-    Contexto await como en tsc: función async o `static {}`; una función no async o el
-    inicializador de un campo lo cortan; una clave computada se evalúa en el ámbito exterior."""
-    arg = node.named_children[0] if node.named_children else None
-    if arg is None or not arg.text.startswith(b"("):   # también `await(a)(b)`, `await(a).f()`
+    al identificador `await` (solo si sigue un `(`, también `await<T>(x)`; `await x` es
+    siempre await). Contexto await como en tsc: función async, `static {}` o el nivel
+    superior de un módulo; una función no async o el inicializador de un campo lo cortan.
+    Una clave computada y un decorador (de campo o de parámetro) se evalúan fuera de su dueño."""
+    args = [c for c in node.named_children if c.type != "comment"]
+    arg = args[0] if args else None
+    if arg is not None and arg.type == "type_assertion":   # `await<number>(5)`
+        arg = arg.named_children[-1] if arg.named_children else None
+    if arg is None or not arg.text.startswith(b"("):     # también `await(a)(b)`, `await(a).f()`
         return None
-    child, p = node, node.parent
+    child, p, skip_fn = node, node.parent, False
     while p is not None:
-        from_key = p.child_by_field_name("name") == child or p.child_by_field_name("property") == child
+        outside = (p.child_by_field_name("name") == child or p.child_by_field_name("property") == child
+                   or child.type == "decorator")
+        if child.type == "decorator" and p.type in _PARAMS:
+            skip_fn = True                     # decorador de parámetro: fuera de su función
         if p.type == "class_static_block":
             return None
-        if p.type in _FN_LIKE and not from_key:
-            return None if any(c.type == "async" for c in p.children) else "await"
-        if p.type in _FIELDS and not from_key:
+        if p.type in _FN_LIKE:
+            if skip_fn:
+                skip_fn = False
+            elif not outside:
+                return None if any(c.type == "async" for c in p.children) else "await"
+        elif p.type in _FIELDS and not outside:
             return "await"
         child, p = p, p.parent
-    return "await"
+    # nivel superior: en un módulo (import/export) es contexto await, en un script no
+    is_module = any(c.type in ("import_statement", "export_statement") for c in child.children)
+    return None if is_module else "await"
 
 
 _CALL_NODES = {"call_expression": _callee_name, "new_expression": _new_name,
@@ -120,9 +135,10 @@ _CALL_NODES = {"call_expression": _callee_name, "new_expression": _new_name,
                "jsx_opening_element": _jsx_name, "jsx_self_closing_element": _jsx_name}
 
 
-def _member_decorators(node) -> list:
-    """Decoradores de un miembro de clase TS. tree-sitter TS los pone como hermanos previos
-    del method_definition en class_body; tsc (y `ast` en Python) los cuelga del método."""
+def _outer_decorators(node) -> list:
+    """Decoradores que tsc (y `ast` en Python) cuelgan del nodo y tree-sitter TS deja fuera:
+    los de un método son hermanos previos en class_body; los de `@D() export class C`
+    cuelgan del export_statement."""
     out = []
     if node.type == "method_definition":
         prev = node.prev_sibling
@@ -130,6 +146,9 @@ def _member_decorators(node) -> list:
             if prev.type == "decorator":
                 out.append(prev)
             prev = prev.prev_sibling
+    elif node.type in ("class_declaration", "abstract_class_declaration") \
+            and node.parent is not None and node.parent.type == "export_statement":
+        out = [c for c in node.parent.children if c.type == "decorator"]
     return out
 
 
@@ -200,8 +219,16 @@ def _fn_value(node):
 # `class C\u0032` se llama C2 para tsc; un identificador no admite otras barras
 _BS_U = chr(92) + "u"
 _ESCAPE = re.compile(r"\\u(?:\{([0-9a-fA-F]+)\}|([0-9a-fA-F]{4}))")
-# escapes de un literal string JS: \xHH, \uHHHH, \u{H…} y `\c` → c (no los de control)
-_STR_ESC = re.compile(r"\\x([0-9a-fA-F]{2})|\\u(?:\{([0-9a-fA-F]+)\}|([0-9a-fA-F]{4}))|\\([^bfnrtv0-9xu\r\n])")
+# escapes de un literal string JS: \xHH, \uHHHH, \u{H…}, continuación de línea (`\` + salto
+# → nada) y `\c` → c (no los de control)
+_STR_ESC = re.compile(r"\\x([0-9a-fA-F]{2})|\\u(?:\{([0-9a-fA-F]+)\}|([0-9a-fA-F]{4}))"
+                      "|\\\\(\r\n|[\r\n  ])|\\\\([^bfnrtv0-9xu\r\n  ])")
+
+
+def _chr(hexdigits: str) -> str:
+    """chr de un escape; fuera de rango (`\\u{110000}`, sintaxis inválida) no revienta el archivo."""
+    code = int(hexdigits, 16)
+    return chr(code) if code <= 0x10FFFF else "�"
 
 
 def _is_constructor_key(name_node) -> bool:
@@ -210,7 +237,8 @@ def _is_constructor_key(name_node) -> bool:
     if name_node.type != "string":
         return False
     inner = name_node.text.decode("utf-8", "replace")[1:-1]
-    val = _STR_ESC.sub(lambda m: m.group(4) or chr(int(m.group(1) or m.group(2) or m.group(3), 16)), inner)
+    val = _STR_ESC.sub(lambda m: "" if m.group(4) else (
+        m.group(5) or _chr(m.group(1) or m.group(2) or m.group(3))), inner)
     return val == "constructor"
 
 
@@ -227,27 +255,45 @@ def extract_from_tree_sitter(content: str, file_path: str, language: str) -> lis
     tree = _parser(grammar).parse(content.encode("utf-8"))
     lines = content.split("\n")
     caps: list[Capsule] = []
-    ids: set[str] = set()
+    cols: list[int] = []   # columna de cada cápsula, para desempatar ids
 
     def emit(name: str, kind: str, node) -> None:
         if _BS_U in name and not name.startswith(("'", '"', "[")):
-            name = _ESCAPE.sub(lambda m: chr(int(m.group(1) or m.group(2), 16)), name)
+            name = _ESCAPE.sub(lambda m: _chr(m.group(1) or m.group(2)), name)
+        decos = _outer_decorators(node)
         start = node.start_point[0] + 1
+        if kind == "class" and decos:
+            # `@D() export class C` / `export @D() class C`: como tsc, empieza en el primer
+            # modificador (el `@` o el `export`), como una clase decorada sin export
+            start = node.parent.start_point[0] + 1
+        elif (kind == "class" and node.prev_sibling is not None
+              and node.prev_sibling.type == "expression_statement" and node.prev_sibling.text == b"export"
+              and any(c.type == "decorator" for c in node.children)):
+            # `export⏎@D()⏎class C`: tree-sitter da `export` suelto (palabra reservada, nunca
+            # una expresión válida) + clase; tsc una clase exportada que empieza en `export`
+            start = node.prev_sibling.start_point[0] + 1
+        elif (node.type == "method_definition" and node.prev_sibling is not None
+              and node.prev_sibling.type in _FIELDS
+              and node.prev_sibling.text in (b"get", b"set")):
+            # `get⏎x() {}`: tree-sitter da campo `get` + método; tsc un accessor desde `get`
+            start = node.prev_sibling.start_point[0] + 1
+        elif node.type == "abstract_class_declaration":
+            # `abstract⏎class B {}`: por ASI tsc no la ve abstracta y empieza en `class`
+            tok = {c.type: c for c in node.children}
+            if "abstract" in tok and "class" in tok and tok["abstract"].end_point[0] != tok["class"].start_point[0]:
+                start = tok["class"].start_point[0] + 1
         end = node.end_point[0] + 1
         is_type = kind in _TYPE_KINDS
         ctype = "type_def" if is_type else kind
         body = "\n".join(lines[start - 1:end])
-        cid = f"{file_path}:{start}:{name}"
-        if cid in ids:   # mismo nombre en la misma línea (get/set, `[{run}, {run}]`): el índice va por id
-            cid = f"{cid}:{node.start_point[1]}"
-        ids.add(cid)
+        cols.append(node.start_point[1])
         caps.append(Capsule(
-            id=cid,
+            id=f"{file_path}:{start}:{name}",
             type=ctype, name=name, file_path=file_path,
             start_line=start, end_line=end,
             language=language, signature=f"{kind} {name}",
             # un tipo no tiene aristas: `namespace` agregaría las de los símbolos que contiene
-            content=body[:3000], calls=[] if is_type else _calls_in(node, _member_decorators(node)),
+            content=body[:3000], calls=[] if is_type else _calls_in(node, decos),
             properties={"lineas": end - start + 1},
         ))
 
@@ -285,15 +331,34 @@ def extract_from_tree_sitter(content: str, file_path: str, language: str) -> lis
             # `declare module "pkg"` nombra un paquete ajeno, no un símbolo
             if name_node is None or (kind == "namespace" and name_node.type == "string"):
                 pass
+            elif (n.type == "interface_declaration" and n.children
+                  and n.children[0].end_point[0] != name_node.start_point[0]):
+                pass   # `interface⏎I⏎{}`: por ASI tsc ve identificadores y un bloque
             elif name_node.type == "nested_identifier":
                 # `namespace A.B.C` declara A, B y C (como tsc); los segmentos son
                 # identifier aunque haya comentarios entre ellos
                 for seg in _identifiers(name_node):
                     emit(seg, kind, n)
             elif (kind == "method" and n.parent is not None and n.parent.type == "class_body"
-                  and _is_constructor_key(name_node)):
-                emit("constructor", kind, n)
+                  and _is_constructor_key(name_node)
+                  and not any(c.type in ("*", "get", "set") for c in n.children)):
+                emit("constructor", kind, n)   # `*"constructor"` o `get "constructor"` no lo son
             else:
                 emit(name_node.text.decode("utf-8", "replace"), kind, n)
         stack.extend(n.children)
+    # Mismo nombre en la misma línea (get/set, `[{run}, {run}]`, `namespace A.A`): el índice va
+    # por id. El primero en el texto conserva el id de siempre; los demás llevan su columna.
+    by_id: dict[str, list[int]] = {}
+    for i, c in enumerate(caps):
+        by_id.setdefault(c.id, []).append(i)
+    for base, idxs in by_id.items():
+        if len(idxs) > 1:
+            idxs.sort(key=lambda i: cols[i])
+            used = {base}
+            for i in idxs[1:]:
+                cid, k = f"{base}:{cols[i]}", 1
+                while cid in used or cid in by_id:
+                    cid, k = f"{base}:{cols[i]}:{k}", k + 1
+                used.add(cid)
+                caps[i].id = cid
     return caps

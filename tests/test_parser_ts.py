@@ -142,3 +142,84 @@ var o = { "constructor"() { f(); } };
              if c.type == "method"}
     assert names == {1: "constructor", 2: "constructor", 3: "constructor",
                      4: r'"co\nstructor"', 5: "['constructor']", 6: '"constructor"'}
+
+
+def test_exported_decorated_class_like_non_exported():
+    # `@Dec() export class A`: el decorador cuelga del export_statement en tree-sitter; para tsc
+    # (y para leo sin export) es de la clase: su llamada y la línea del `@`
+    src = "@Injectable()\nexport class A { m() { x(); } }\n@Dec()\nclass B {}\n" \
+          "@Dec() export default class D {}\n"
+    caps = {c.name: c for c in extract_from_tree_sitter(src, "x.ts", "typescript")}
+    assert (caps["A"].start_line, set(caps["A"].calls)) == (1, {"Injectable", "x"})
+    assert (caps["B"].start_line, set(caps["B"].calls)) == (3, {"Dec"})
+    assert (caps["D"].start_line, set(caps["D"].calls)) == (5, {"Dec"})
+    assert caps["m"].start_line == 2
+
+
+def test_abstract_then_newline_class_starts_at_class_like_tsc():
+    # `abstract⏎class B {}`: por ASI `abstract` es otra sentencia y B empieza en `class`.
+    src = "abstract\nclass B {}\nabstract class A {}\n@d() export abstract class Z {}\n"
+    lines = {c.name: c.start_line for c in extract_from_tree_sitter(src, "x.ts", "typescript")}
+    assert lines == {"B": 2, "A": 3, "Z": 4}
+
+
+def test_export_newline_decorated_class_starts_at_export_like_tsc():
+    # `export⏎@D()⏎class C`: tree-sitter lo lee como `export` suelto + clase (sin error);
+    # para tsc es una clase exportada que empieza en `export`
+    src = "export\n@D()\nclass C { m() { a(); } }\nexport\n  @E class F {}\n"
+    caps = {c.name: c for c in extract_from_tree_sitter(src, "x.ts", "typescript")}
+    assert (caps["C"].start_line, set(caps["C"].calls)) == (1, {"D", "a"})
+    assert (caps["F"].start_line, caps["m"].start_line) == (4, 3)
+
+
+def test_interface_then_newline_is_not_an_interface_like_tsc():
+    # `interface⏎I⏎{}`: por ASI son dos identificadores y un bloque, no una interfaz
+    src = "function f() {\n  interface\n  I\n  {}\n}\ninterface J {}\n"
+    names = {c.name for c in extract_from_tree_sitter(src, "x.ts", "typescript")}
+    assert names == {"f", "J"}
+
+
+@pytest.mark.parametrize("path,lang", [("x.ts", "typescript"), ("x.js", "javascript")])
+def test_accessor_keyword_on_its_own_line_like_tsc(path, lang):
+    # `get⏎x() {}` es un accessor para tsc (empieza en `get`); tree-sitter da campo + método
+    src = "class C {\n  get\n  x() { return 1 }\n  set\n  x(v) { }\n  y() {}\n}\n"
+    lines = sorted((c.name, c.start_line) for c in extract_from_tree_sitter(src, path, lang)
+                   if c.type == "method")
+    assert lines == [("x", 2), ("x", 4), ("y", 6)]
+
+
+@pytest.mark.parametrize("src,name,expected", [
+    # nivel superior de un módulo (import/export) es contexto await; el de un script no
+    ("export {};\nclass K { [await(1)]() {} }", "K", set()),
+    ("class K { [await(1)]() {} }", "K", {"await"}),
+    # el decorador de un campo o de un parámetro se evalúa fuera de su dueño
+    ("async function g(){ class D { @dec(await(3)) x = 1; } }", "g", {"dec"}),
+    ("async function g(){ class D { m(@dec(await(4)) p) {} } }", "g", {"dec"}),
+    ("class A { async m(@dec(await(1)) p) {} }", "A", {"await", "dec"}),
+    # el decorador de un método no salta la función exterior
+    ("async function g(){ class D { @dec(await(5)) m() {} } }", "g", {"dec"}),
+    # comentario entre `await` y `(`, y `await<T>(x)`
+    ("function e(){ await /* c */ (1); }", "e", {"await"}),
+    ("function e(){ await<number>(5); }", "e", {"await"}),
+])
+def test_await_context_second_review_like_tsc(src, name, expected):
+    assert _calls(name, extract_from_tree_sitter(src, "x.ts", "typescript")) == expected
+
+
+def test_constructor_key_continuation_and_accessors_like_tsc():
+    src = 'class P { "con\\\nstructor"() { a(); } }\n' \
+          'class N { *"constructor"() {} }\nclass M { get "constructor"() { return 1; } }\n' \
+          'class Q { "\\u{110000}x"() {} }\n'
+    names = {c.start_line: c.name for c in extract_from_tree_sitter(src, "x.ts", "typescript")
+             if c.type == "method"}
+    assert names[1] == "constructor"            # `\` + salto es continuación: "constructor"
+    assert names[3] == '"constructor"' and names[4] == '"constructor"'
+    assert 5 in names                           # escape fuera de rango: no revienta el archivo
+
+
+def test_three_same_name_same_line_ids_unique_and_first_keeps_id():
+    caps = extract_from_tree_sitter("namespace A.A.A { }\nconst o = { get x() { a(); }, set x(v) { b(); } };\n",
+                                    "f.ts", "typescript")
+    assert len({c.id for c in caps}) == len(caps)
+    first_get = next(c for c in caps if c.name == "x" and "a" in c.calls)
+    assert first_get.id == "f.ts:2:x"           # el primero en el texto conserva el id
