@@ -19,9 +19,20 @@ function walkFiles(dir, out) {
   }
 }
 
+// Recorridos con pila explícita: la recursión desbordaba la pila de node en archivos muy
+// anidados del repo de TypeScript (RangeError en CI). El orden no importa: son conjuntos.
+function walk(root, visit) {
+  const stack = [root];
+  while (stack.length) {
+    const n = stack.pop();
+    visit(n);
+    ts.forEachChild(n, (ch) => { stack.push(ch); });
+  }
+}
+
 function callsIn(node) {
   const out = new Set();
-  (function rec(n) {
+  walk(node, (n) => {
     if (ts.isCallExpression(n) || ts.isNewExpression(n)) {
       const c = n.expression;
       if (ts.isIdentifier(c)) out.add(c.text);
@@ -31,8 +42,7 @@ function callsIn(node) {
       const nm = ts.isIdentifier(t) ? t.text : (ts.isPropertyAccessExpression(t) ? t.name.text : "");
       if (/^[A-Z]/.test(nm)) out.add(nm);
     }
-    ts.forEachChild(n, rec);
-  })(node);
+  });
   return [...out];
 }
 
@@ -73,7 +83,7 @@ for (const f of files) {
   for (let i = sf.text.indexOf("\n"); i !== -1; i = sf.text.indexOf("\n", i + 1)) nls.push(i);
   const lineOf = (pos) => { let lo = 0, hi = nls.length; while (lo < hi) { const m = (lo + hi) >> 1; if (nls[m] < pos) lo = m + 1; else hi = m; } return lo + 1; };
   const syms = [];
-  (function rec(n) {
+  walk(sf, (n) => {
     let name = null;
     // Con cuerpo: abstract y overloads son firmas, y leo aún no las indexa.
     if (ts.isFunctionDeclaration(n) && n.name && n.body) name = n.name.text;
@@ -120,8 +130,7 @@ for (const f of files) {
       const line = lineOf(pos);
       syms.push([name, line, callsIn(n)]);
     }
-    ts.forEachChild(n, rec);
-  })(sf);
+  });
   // también sin símbolos: un archivo que tsc lee y donde leo saca algo es un símbolo de más
   result[f] = syms;
 }
