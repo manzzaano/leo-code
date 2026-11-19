@@ -91,7 +91,7 @@ Inventario completo del producto, por importancia. Cada funcionalidad se revisa 
 | # | Funcionalidad | Nota | Revisión |
 |---|---|---|---|
 | 59 | `GraphQuery.callees` (qué llama un símbolo) | `graphquery.py:589`; no es op de `graph` | |
-| 60 | Guardian sobre un diff (`python -m leo_code.core.guardian`) | usado en `guardian.yml`; no documentado para usuarios | |
+| 60 | Guardian sobre un diff (`python -m leo_code.core.guardian`) | usado en `guardian.yml`; no documentado para usuarios | 19/11 (parcial, fuera de orden): tests de `git_diff`/`guard_repo` con repo git temporal (`tests/test_guardian_git.py`, 12). `changed_symbols` arreglado: contaba las 3 líneas de contexto del hunk (editar una función marcaba a la vecina; `main..dev` 199 → 160 símbolos, 39 eran solo contexto), emparejaba por basename (mismo nombre en otra carpeta), no leía rutas que git cita (no ASCII) y tomaba una línea `++ b/…` como cabecera. Probado con 12 diffs reales (renombre, binario, borrado, sin `\n` final, espacios, permisos…). Commits `f8ae40f`, `80ff0e8`. Sin revisar: modos `--staged`/`-s`, formato y código de salida, documentación para usuarios, `--no-prefix` |
 
 ## Fuera del producto, aunque esté en el paquete
 
