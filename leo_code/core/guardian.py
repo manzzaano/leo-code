@@ -21,7 +21,7 @@ from functools import lru_cache
 from pathlib import Path
 from dataclasses import dataclass, field
 
-from leo_code.core.graphquery import GraphQuery, Cite
+from leo_code.core.graphquery import GraphQuery, Cite, _is_import
 
 
 @dataclass
@@ -342,9 +342,12 @@ class Guardian:
             for f, lines in changes.items():
                 if cf == f or cf.endswith("/" + f) or f.endswith("/" + cf):
                     lo, hi = getattr(c, "start_line", 0), getattr(c, "end_line", 0)
+                    # un import lleva el tipo de lo importado, pero no es código cambiado;
+                    # constantes y variables de módulo son nodos del grafo (augment_refs)
                     if any(lo <= ln <= hi for ln in lines) and c.name not in seen \
                             and c.type in ("function", "method", "class", "endpoint",
-                                           "component", "async_function"):
+                                           "component", "async_function", "constant",
+                                           "variable") and not _is_import(c):
                         seen.add(c.name); out.append(c.name)
                     break
         return out

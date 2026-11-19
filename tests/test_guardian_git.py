@@ -143,3 +143,20 @@ def test_changed_symbols_renombre_borrado_y_binario(repo):
     (repo / "tests" / "test_core.py").unlink()
     (repo / "logo.bin").write_bytes(b"\0\1\2")
     assert _staged(repo) == ["tested"]
+
+
+def test_changed_symbols_import_no_es_simbolo_cambiado(repo):
+    """Un import nuevo no es código cambiado: su cápsula lleva el tipo de lo importado y
+    salía como «NO test» (el test nuevo que importa `helper` marcaba `app.core.helper`)."""
+    (repo / "tests" / "test_use.py").write_text(
+        "from app.core import helper\n\n\ndef test_helper():\n    assert helper() == 1\n",
+        encoding="utf-8")
+    assert _staged(repo) == []
+
+
+def test_changed_symbols_cuenta_constantes(repo):
+    """Constantes y variables de módulo son nodos del grafo (#7 B): cambiarlas es un cambio."""
+    _change(repo, "app/core.py", "def helper():", "LIMIT = 3\n\n\ndef helper():")
+    _git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "const")
+    _change(repo, "app/core.py", "LIMIT = 3", "LIMIT = 4")
+    assert _staged(repo) == ["LIMIT"]
