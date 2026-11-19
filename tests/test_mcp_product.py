@@ -339,6 +339,9 @@ def test_codex_snippet_is_valid_toml(capsys, tmp_path):
     assert srv["command"]
     # installed binary (command = .../leo-mcp) or uvx from the repo (args end in leo-mcp)
     assert "leo-mcp" in " ".join([srv["command"], *srv["args"]])
+    # Codex corta el arranque a 10 s según su doc (30 s en su código actual); uvx en frío
+    # tarda 9,6-10,8 s en llegar a `initialize` (medido 19/11 con caché vacía).
+    assert srv["startup_timeout_sec"] >= 30
 
 
 def test_python_and_npm_versions_match():

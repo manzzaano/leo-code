@@ -364,6 +364,8 @@ def cmd_init(args) -> int:
         # json.dumps escapa como una cadena básica de TOML (rutas de Windows con \)
         print(f"command = {json.dumps(launch[0])}")
         print("args = [" + ", ".join(json.dumps(a) for a in launch[1:]) + "]")
+        # la doc de Codex da 10 s de arranque; uvx en frío tarda ~10 s en responder
+        print("startup_timeout_sec = 60")
         return 0
     std = {"command": launch[0], "args": launch[1:]}
     target, key, entry = {
