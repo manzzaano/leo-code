@@ -147,16 +147,27 @@ _gq_cache: dict[str, tuple[int, dict, GraphQuery]] = {}
 
 
 # Guardian por repo, atado al MISMO dict de cápsulas de _gq_cache: si el índice cambia de
-# generación, _repo_graph crea otro dict y el guardián se reconstruye. Construirlo en cada
-# llamada costaba 260 ms en leo-code y 11-18 s en django (augment_refs + test_closure).
+# generación, _repo_graph crea otro dict y el guardián pasa a él con Guardian.update.
+# Construirlo en cada llamada costaba 260 ms en leo-code y 11-18 s en django (augment_refs +
+# test_closure); entero tras cada edición, ~3,4 s en django.
 _guard_cache: dict[str, tuple[dict, Guardian]] = {}
+# ids que link_http_edges mutó en sitio desde el último update del guardián: puede saltarse
+# generaciones (varias ediciones sin un guard en medio)
+_guard_touched: dict[str, set] = {}
 
 
 def _guardian(repo: str, caps: dict) -> Guardian:
     hit = _guard_cache.get(repo)
-    if hit is None or hit[0] is not caps:
-        hit = None                           # soltar el viejo: dos a la vez eran el pico de RAM
-        _guard_cache.pop(repo, None)
+    if hit is not None and hit[0] is not caps:
+        try:
+            hit[1].update(caps, _guard_touched.pop(repo, ()))
+            hit = _guard_cache[repo] = (caps, hit[1])
+        except Exception:
+            log.exception("Guardian.update falló en %s: se reconstruye entero", repo)
+            hit = None
+    if hit is None:
+        _guard_cache.pop(repo, None)         # soltar el viejo: dos a la vez eran el pico de RAM
+        _guard_touched.pop(repo, None)
         hit = _guard_cache[repo] = (caps, Guardian(caps, repo))
     return hit[1]
 
@@ -166,6 +177,7 @@ def _evict_repo(repo: str) -> None:
     seguir observando su árbol ni retener sus cápsulas."""
     _gq_cache.pop(repo, None)
     _guard_cache.pop(repo, None)
+    _guard_touched.pop(repo, None)
     try:
         engine.flush_index(repo)              # no perder lo indexado de ese repo
         engine._get_indexer().stop_watch(repo)
@@ -194,6 +206,8 @@ def _repo_graph(repo: str) -> tuple[dict, GraphQuery]:
     caps = {c.id: c for c in engine._repo_caps(engine._get_indexer(), repo)}
     touched: set = set()
     link_http_edges(caps, touched)  # idempotente: no duplica aristas ya añadidas
+    if repo in _guard_cache:
+        _guard_touched.setdefault(repo, set()).update(touched)
     gq = None
     if hit:
         # tras una edición solo se re-resuelve lo afectado (django: ~0,1 s frente a ~0,9 s)

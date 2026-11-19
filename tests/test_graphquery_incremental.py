@@ -156,6 +156,23 @@ def test_aristas_http_nuevas_en_capsulas_no_editadas(repo):
     assert _snap(gq) == _snap(GraphQuery(caps))
 
 
+def test_arista_http_nueva_no_borra_a_otro_llamante(repo):
+    """La cápsula de `touched` ya trae la arista nueva cuando update calcula lo que aportaba:
+    quitar «una entrada por llamada» borraba la de otro archivo (z.py) en `callers`."""
+    root, idx, gq = repo
+    _edit(root, idx, "web.py", "def load():\n    return fetch('/api/user')\n")
+    caps = _edit(root, idx, "z.py", "def other():\n    return get_user()\n")
+    caps = _edit(root, idx, "api.py", "@app.get('/api/x')\ndef get_user():\n    return 1\n")
+    link_http_edges(caps)
+    gq = GraphQuery(caps)
+    caps = _edit(root, idx, "api.py", "@app.get('/api/user')\ndef get_user():\n    return 1\n")
+    touched = set()
+    link_http_edges(caps, touched)
+    assert touched
+    gq.update(caps, touched)
+    assert _snap(gq) == _snap(GraphQuery(caps))
+
+
 def test_diferencial_ediciones_aleatorias(repo):
     """Ediciones de cuerpo, defs, imports y clases al azar: siempre igual que desde cero."""
     root, idx, gq = repo

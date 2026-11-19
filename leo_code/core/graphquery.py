@@ -18,7 +18,7 @@ import ast
 import builtins
 import re
 import sys
-from bisect import bisect_left
+from bisect import bisect_left, bisect_right
 from collections import defaultdict, deque
 from itertools import groupby
 from collections.abc import Iterable
@@ -776,6 +776,7 @@ class GraphQuery:
         # real (296k símbolos, nombres muy repetidos) eso disparó who_calls ×54 e impact
         # ×42 y tumbó el SLA del chequeo (d). Aquí es O(1) por arista.
         self._resolved: dict[str, list] = {}   # memo de _resolve: el grafo no cambia tras construirse
+        self._targets: dict[str, list] = {}    # memo de _call_targets (test_closure: 3 M filtros en django)
         self._fams: dict[str, set] = defaultdict(set)
         for c in self.caps.values():
             if self._is_def(c):
@@ -851,9 +852,11 @@ class GraphQuery:
                 lst = table.get(k)
                 if lst is None:
                     lst = table[k] = []
-                for f, grp in groupby(gone.get(k, ()), file_of):
-                    lo = bisect_left(lst, rank[f], key=key)
-                    del lst[lo:lo + sum(1 for _ in grp)]
+                # el tramo entero del archivo, no una entrada por llamada vieja: una cápsula de
+                # `touched` ya trae en `calls` la arista nueva y contaría de más
+                for f in dict.fromkeys(map(file_of, gone.get(k, ()))):
+                    r = rank[f]
+                    del lst[bisect_left(lst, r, key=key):bisect_right(lst, r, key=key)]
                 for f, grp in groupby(add.get(k, ()), file_of):
                     lo = bisect_left(lst, rank[f], key=key)
                     lst[lo:lo] = grp
@@ -874,7 +877,7 @@ class GraphQuery:
                 self._fams[k] = fams
             else:
                 self._fams.pop(k, None)
-        self.caps, self._scope, self._resolved = caps, scope, {}
+        self.caps, self._scope, self._resolved, self._targets = caps, scope, {}, {}
         return True
 
     # ---- helpers ----
@@ -1097,25 +1100,37 @@ class GraphQuery:
         `strict`: `x.f()` con `x` desconocido solo va a métodos `f` o a funciones `f` de un
         módulo que el archivo de `c` importa; una función suelta de otro módulo no puede ser
         un atributo de `x` (sobre leo-code, cobertura de más 80→53 contra coverage.py)."""
+        resolved, groups = self._hop_groups(c, strict)
+        out = [(d, True, 1) for d in resolved]
+        for ts in groups:
+            out += [(t, False, len(ts)) for t in ts]
+        return out
+
+    def _hop_groups(self, c, strict: bool = False) -> tuple:
+        """Lo que aplana `_hops`: (defs resueltas, [defs posibles de cada llamada sin
+        resolver]). test_closure solo quiere los destinos: las tuplas eran ~1 M en django."""
         calls = getattr(c, "calls", None) or []
         forms = (c.properties or {}).get("call_forms")
         loose = [] if strict and forms is not None else None
         by_name, resolved = (calls, ()) if forms is None else self._split(c, forms, calls, loose)
-        out = [(d, True, 1) for d in resolved]
         names = dict.fromkeys(by_name)
-        for n in names:
-            if self._edge_ok(c, n):
-                ts = [t for t in self._resolve(n) if not _is_import(t) and t.type != "type_def"]
-                out += [(t, False, len(ts)) for t in ts]
+        groups = [self._call_targets(n) for n in names if self._edge_ok(c, n)]
         if loose:
             mods = self._scope.imported_files(c)
             for n in dict.fromkeys(loose):
                 if n in names or not self._edge_ok(c, n):
                     continue
-                ts = [t for t in self._resolve(n) if not _is_import(t) and t.type != "type_def"
-                      and (t.type == "method" or "class" in (t.properties or {})
-                           or _norm(t.file_path) in mods)]
-                out += [(t, False, len(ts)) for t in ts]
+                groups.append([t for t in self._call_targets(n) if t.type == "method"
+                               or "class" in (t.properties or {}) or _norm(t.file_path) in mods])
+        return resolved, groups
+
+    def _call_targets(self, name: str) -> list:
+        """Defs a las que puede ir una llamada por nombre: sin imports ni tipos. Lista compartida."""
+        out = self._targets.get(name)
+        if out is None:
+            r = self._resolve(name)
+            out = [t for t in r if not _is_import(t) and t.type != "type_def"]
+            self._targets[name] = r if len(out) == len(r) else out   # casi siempre la misma: sin copia
         return out
 
     def ctor_hops(self, c) -> list[tuple] | None:

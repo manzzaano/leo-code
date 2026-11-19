@@ -375,9 +375,12 @@ def test_guard_reuses_guardian_until_index_changes(fresh_engine, fullstack, monk
     args = {"op": "guard", "symbol": "get_session", "repo_path": str(fullstack)}
     first = mcp_server._graph(args)
     assert mcp_server._graph(args) == first and len(built) == 1
+    # índice nuevo: el guardián pasa a él con Guardian.update, no se construye otro (4b)
+    g = mcp_server._guard_cache[str(fullstack)][1]
     engine._generation[str(fullstack)] = engine.generation(str(fullstack)) + 1
-    mcp_server._graph(args)
-    assert len(built) == 2
+    assert mcp_server._graph(args) == first and len(built) == 1
+    caps, _ = mcp_server._repo_graph(str(fullstack))
+    assert mcp_server._guard_cache[str(fullstack)] == (caps, g)
 
 
 def test_guardian_viejo_se_suelta_antes_de_construir_el_nuevo(monkeypatch):

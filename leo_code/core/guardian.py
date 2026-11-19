@@ -17,7 +17,6 @@ Self-check:  python -m leo_code.core.guardian
 from __future__ import annotations
 
 import os
-from collections import deque
 from functools import lru_cache
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -91,28 +90,86 @@ def _test_file(file_path: str | None, root: str | None, cwd: str | None) -> bool
     return _is_test_path(_in_repo(file_path, root))
 
 
+def _copy(c):
+    """Copia con `calls` propia: el guardián aumenta el grafo sin tocar el directo."""
+    import copy
+    cc = copy.copy(c)
+    cc.calls = list(c.calls or [])
+    return cc
+
+
+def _key(c) -> tuple:
+    return c.file_path or "?", c.start_line or 0, c.name
+
+
 class Guardian:
     def __init__(self, capsules: dict, repo: str | None = None):
         # El guardián usa el grafo AUMENTADO con aristas de referencia/dispatch
         # (completitud: cambiar X que se invoca por dict debe marcar a quien lo despacha).
         # Sobre una COPIA de las listas `calls` para NO contaminar el grafo directo y
         # preciso que usan who_calls/trace/where (que se demuestra sound+complete vs ast).
-        import copy
         from leo_code.core.graphquery import _PyScope
-        from leo_code.core.refgraph import augment_refs
-        aug = {}
-        for k, c in (capsules or {}).items():
-            cc = copy.copy(c)
-            cc.calls = list(c.calls or [])
-            aug[k] = cc
+        from leo_code.core.refgraph import RefIndex
+        aug = {k: _copy(c) for k, c in (capsules or {}).items()}
         scope = _PyScope(aug.values())     # no mira `calls`: vale antes y después de aumentar
-        augment_refs(aug, scope)
+        self._refs = ix = RefIndex(aug, scope)
+        for c in aug.values():
+            c.calls.extend(ix.edges(c))
+        self._orig = capsules or {}        # de qué cápsulas salen las copias: update compara con ellas
+        self._repo = repo
         self.caps = aug
         self.gq = GraphQuery(aug, scope)
         self._covered: set[str] | None = None
         self._root = os.path.abspath(repo) if repo else None   # la regla de test mira la ruta DENTRO del repo, no sus carpetas padre
         # cita (archivo, línea, nombre) → su cápsula: la cobertura va por definición
-        self._at = {(c.file_path or "?", c.start_line or 0, c.name): c for c in aug.values()}
+        self._at = {_key(c): c for c in aug.values()}
+
+    def update(self, capsules: dict, touched=()) -> bool:
+        """Pasa el guardián a `capsules`, la generación siguiente del mismo repo: copias y
+        aristas de referencia nuevas solo para los archivos cambiados (cápsulas nuevas,
+        quitadas o en `touched`, ids que link_http_edges mutó en sitio) y para las cápsulas
+        que referencian un nombre que pasó de único a repetido o al revés; el grafo, con
+        `GraphQuery.update`. Queda igual que `Guardian(capsules, repo)`. Si cambia el
+        conjunto de archivos, reconstruye entero. Devuelve True si fue incremental."""
+        old, prev = self._orig, self.caps
+        changed = {c.file_path for k, c in capsules.items() if old.get(k) is not c}
+        if len(old) != len(capsules) or changed:
+            changed.update(c.file_path for k, c in old.items() if k not in capsules)
+        # cambia el conjunto de archivos → módulos y paquetes de _PyScope: entero (raro)
+        if changed and {c.file_path for c in old.values()} != {c.file_path for c in capsules.values()}:
+            self.__init__(capsules, self._repo)
+            return False
+        ix = self._refs
+        gone = [c for c in prev.values() if c.file_path in changed]
+        came = [_copy(c) for c in capsules.values() if c.file_path in changed]
+        dirty = ix.change(gone, came)
+        redo = {k for k in touched if k in capsules}
+        if dirty:
+            alias = ix.aliased_in(dirty)
+            redo.update(k for k, c in prev.items()
+                        if c.file_path not in changed and ix.uses(c, dirty, alias))
+        # Copia nueva para todo el archivo de cada cápsula a rehacer, no `calls` mutadas en
+        # sitio: GraphQuery.update quita lo que aportaba cada archivo con sus cápsulas viejas,
+        # y así `_at` se rehace por archivo con el mismo «gana la última» que en frío.
+        redo_files = changed | {capsules[k].file_path for k in redo}
+        new = {c.id: c for c in came}
+        aug, fresh = {}, []
+        for k, c in capsules.items():
+            if c.file_path in redo_files:
+                a = new.get(k) or _copy(c)
+                a.calls.extend(ix.edges(a))
+                fresh.append(a)
+            else:
+                a = prev[k]
+            aug[k] = a
+        for c in prev.values():
+            if c.file_path in redo_files and self._at.get(_key(c)) is c:
+                del self._at[_key(c)]
+        self._at.update((_key(c), c) for c in fresh)
+        self._orig, self.caps, self._covered = capsules, aug, None
+        inc = self.gq.update(aug)
+        ix.scope = self.gq._scope
+        return inc
 
     # ---- cobertura: símbolos alcanzados por algún test ----
     @staticmethod
@@ -133,17 +190,23 @@ class Guardian:
         test de un `helper` cubría a todos los `helper` del repo."""
         if self._covered is not None:
             return self._covered
-        seen: set[str] = set()
-        q: deque = deque(d for c in self.caps.values() if self._is_test(c, self._root)
-                         for d, _, _ in self.gq._hops(c, strict=True))
+        gq, seen = self.gq, set()
+        q: list = []                      # listas de destinos por visitar (pila: el orden da igual)
+        for c in self.caps.values():
+            if self._is_test(c, self._root):
+                res, groups = gq._hop_groups(c, strict=True)
+                q.append(res); q += groups
         while q:
-            d = q.popleft()
-            if d.id in seen:
-                continue
-            seen.add(d.id)
-            hops = self.gq.ctor_hops(d)   # alcanzar una clase no ejecuta todos sus métodos
-            q.extend(t for t, _, _ in (self.gq._hops(d, strict=True) if hops is None else hops)
-                     if t.id not in seen)
+            for d in q.pop():
+                if d.id in seen:
+                    continue
+                seen.add(d.id)
+                hops = gq.ctor_hops(d)    # alcanzar una clase no ejecuta todos sus métodos
+                if hops is None:
+                    res, groups = gq._hop_groups(d, strict=True)
+                    q.append(res); q += groups
+                else:
+                    q.append([t for t, _, _ in hops])
         self._covered = seen
         return seen
 

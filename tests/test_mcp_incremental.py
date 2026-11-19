@@ -38,6 +38,7 @@ def repo(tmp_path, monkeypatch):
     monkeypatch.setattr(engine, "SEMANTIC", False)
     monkeypatch.setattr(mcp_server, "_gq_cache", {})
     monkeypatch.setattr(mcp_server, "_guard_cache", {})
+    monkeypatch.setattr(mcp_server, "_guard_touched", {})
     r = tmp_path / "app"
     _write(r / "svc" / "core.py", "def helper():\n    return 1\n\ndef other():\n    return 2\n")
     _write(r / "svc" / "use.py", "from core import helper\n\ndef run():\n    helper()\n")
@@ -93,3 +94,40 @@ def test_failed_update_falls_back_to_a_fresh_graph(repo, monkeypatch):
     assert "run" in _who(repo, "other")
     caps, gq = mcp_server._repo_graph(str(repo))
     assert _snap(gq) == _snap(GraphQuery(caps))
+
+
+def _guard(repo: Path, sym: str) -> str:
+    return mcp_server._graph({"op": "guard", "symbol": sym, "repo_path": str(repo)})
+
+
+def test_guard_after_edit_updates_the_guardian(repo, monkeypatch):
+    """El guardián sigue al grafo con Guardian.update (unidad 4b): construirlo entero tras
+    cada edición costaba ~1,9 s en django."""
+    from leo_code.core.guardian import Guardian
+    _write(repo / "tests" / "test_use.py", "from use import run\n\ndef test_run():\n    run()\n")
+    assert "helper" in _guard(repo, "helper")
+    g = mcp_server._guard_cache[str(repo)][1]
+    inits = []
+    real = Guardian.__init__
+    monkeypatch.setattr(Guardian, "__init__", lambda self, *a, **k: inits.append(1) or real(self, *a, **k))
+    _edit(repo, "svc/use.py", "from core import helper, other\n\ndef run():\n    helper()\n\ndef extra():\n    other()\n")
+    out = _guard(repo, "other")
+    assert mcp_server._guard_cache[str(repo)][1] is g and inits == []
+    monkeypatch.setattr(Guardian, "__init__", real)
+    caps, _ = mcp_server._repo_graph(str(repo))
+    cold = mcp_server._relativize(Guardian(caps, str(repo)).review("other").render(), str(repo))
+    assert cold in out and "extra" in out
+
+
+def test_failed_guardian_update_rebuilds_it(repo, monkeypatch):
+    from leo_code.core.guardian import Guardian
+    _guard(repo, "helper")
+
+    def boom(self, *a):
+        self.caps = {}                            # a medias
+        raise RuntimeError("fallo a mitad")
+    monkeypatch.setattr(Guardian, "update", boom)
+    _edit(repo, "svc/use.py", "from core import other\n\ndef run():\n    other()\n")
+    out = _guard(repo, "other")
+    caps, _ = mcp_server._repo_graph(str(repo))
+    assert mcp_server._relativize(Guardian(caps, str(repo)).review("other").render(), str(repo)) in out
