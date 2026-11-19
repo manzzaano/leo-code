@@ -122,6 +122,7 @@ for (const f of files) {
     }
     ts.forEachChild(n, rec);
   })(sf);
-  if (syms.length) result[f] = syms;
+  // también sin símbolos: un archivo que tsc lee y donde leo saca algo es un símbolo de más
+  result[f] = syms;
 }
 process.stdout.write(JSON.stringify(result));
