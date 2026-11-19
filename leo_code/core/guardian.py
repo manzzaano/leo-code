@@ -304,16 +304,26 @@ class Guardian:
         import re
         import os
         changes: dict[str, set[int]] = {}   # archivo → líneas (lado nuevo) tocadas
-        cur = None
+        cur, ln = None, 0                   # ln: línea del lado nuevo dentro del hunk
         for line in diff_text.splitlines():
-            if line.startswith("+++ b/"):
+            if line.startswith("diff --git"):
+                cur = None                  # el «--- a/» que sigue no es un borrado
+            elif line.startswith("+++ b/"):
                 cur = line[6:].strip()
                 changes.setdefault(cur, set())
-            elif line.startswith("@@") and cur is not None:
-                m = re.search(r"\+(\d+)(?:,(\d+))?", line)
-                if m:
-                    start = int(m.group(1)); count = int(m.group(2) or 1)
-                    changes[cur].update(range(start, start + max(count, 1)))
+            elif cur is None:
+                continue
+            elif line.startswith("@@"):
+                m = re.search(r"\+(\d+)", line)
+                ln = int(m.group(1)) if m else 0
+            # solo + y -: el contexto del hunk (3 líneas) es de funciones vecinas sin tocar
+            elif line.startswith("+"):
+                changes[cur].add(ln); ln += 1
+            elif line.startswith("-"):
+                # un borrado no ocupa línea nueva: marca las dos que quedan a sus lados
+                changes[cur].update((ln - 1, ln))
+            elif line.startswith(" "):
+                ln += 1
         # cápsulas cuyo rango [start,end] solapa con líneas cambiadas del mismo archivo
         out: list[str] = []
         seen: set[str] = set()

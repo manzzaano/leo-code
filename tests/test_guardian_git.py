@@ -7,10 +7,9 @@ import pytest
 
 from leo_code.core.guardian import git_diff, guard_repo
 
-# más de 3 líneas entre funciones: el hunk de `git diff -U3` incluye contexto y
-# `changed_symbols` cuenta todo el hunk, así que funciones pegadas saldrían ambas como cambiadas
+# helper y tested pegadas: el hunk de `git diff -U3` trae la otra como contexto
 FILES = {
-    "app/core.py": "def helper():\n    return 1\n\n\n\n\n\ndef tested():\n    return 2\n",
+    "app/core.py": "def helper():\n    return 1\n\n\ndef tested():\n    return 2\n",
     "app/use.py": "from app.core import helper\n\n\ndef caller():\n    return helper()\n",
     "tests/test_core.py": "from app.core import tested\n\n\ndef test_tested():\n    assert tested() == 2\n",
 }
@@ -76,3 +75,30 @@ def test_guard_repo_cambio_cubierto_contra_base(repo):
     reports, _ = guard_repo(str(repo), base="HEAD~1")
     assert [r.symbol for r in reports] == ["tested"]
     assert reports[0].changed_covered
+
+
+def _guardian(repo):
+    from leo_code.core.guardian import Guardian
+    from leo_code.rag.indexer import Indexer
+    idx = Indexer()
+    idx.build(str(repo), languages=["python"], verbose=False)
+    return Guardian(dict(idx.get_capsules()), str(repo))
+
+
+def test_changed_symbols_no_cuenta_el_contexto(repo):
+    """Solo las líneas + y -: las de contexto del hunk son de funciones vecinas sin tocar."""
+    _change(repo, "app/core.py", "return 2", "return 20")
+    assert _guardian(repo).changed_symbols(git_diff(str(repo))) == ["tested"]
+
+
+def test_changed_symbols_borrado_dentro_de_una_funcion(repo):
+    _change(repo, "app/use.py", "    return helper()\n", "    x = helper()\n    return x\n")
+    _git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "dos líneas")
+    _change(repo, "app/use.py", "    x = helper()\n", "")       # solo un «-», ningún «+»
+    assert _guardian(repo).changed_symbols(git_diff(str(repo))) == ["caller"]
+
+
+def test_changed_symbols_varios_archivos(repo):
+    _change(repo, "app/core.py", "return 1", "return 10")
+    _change(repo, "app/use.py", "return helper()", "return helper() + 1")
+    assert sorted(_guardian(repo).changed_symbols(git_diff(str(repo)))) == ["caller", "helper"]
