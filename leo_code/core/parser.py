@@ -278,6 +278,32 @@ def _branch_defs(node):
             yield from _branch_defs(ch)
 
 
+def _is_type_checking(test) -> bool:
+    return (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
+        isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING")
+
+
+def _typing_only(node) -> set[int]:
+    """ids de las defs de `node` bajo `if TYPE_CHECKING:` (su cuerpo, no el `else`): en
+    ejecución no existen, solo las ve el type checker."""
+    out: set[int] = set()
+
+    def walk(n, hidden):
+        for ch in ast.iter_child_nodes(n):
+            if isinstance(ch, _DEFS):
+                if hidden:
+                    out.add(id(ch))
+            elif isinstance(ch, ast.If) and _is_type_checking(ch.test):
+                for s in ch.body:
+                    walk(ast.Module(body=[s], type_ignores=[]), True)
+                for s in ch.orelse:
+                    walk(ast.Module(body=[s], type_ignores=[]), hidden)
+            elif isinstance(ch, _BRANCHES):
+                walk(ch, hidden)
+    walk(node, False)
+    return out
+
+
 def _scope_nodes(node):
     """Hijos directos de un módulo o clase, más las defs condicionales (`try: … except
     ImportError: def f()`): medido en django, 75 defs que perdían símbolo y llamadas."""
@@ -456,6 +482,7 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
                     ))
 
             # Emitir cada método como cápsula buscable (antes solo vivían en props["metodos"]).
+            stubs = _typing_only(node)
             for m in _scope_nodes(node):
                 if not isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     continue
@@ -470,6 +497,8 @@ def extract_from_python(content: str, file_path: str) -> list[Capsule]:
                            **_resolution_props(m)}
                 if m_decos:
                     m_props["decorators"] = ", ".join(m_decos)
+                if id(m) in stubs:
+                    m_props["typing_only"] = True
                 capsules.append(Capsule(
                     id=_make_id(file_path, m.lineno, m_sig),
                     type="method", name=m.name, file_path=file_path,

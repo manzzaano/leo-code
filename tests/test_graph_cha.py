@@ -183,3 +183,33 @@ def test_with_metaclass_base_links_subclass():
                 "class Child(with_metaclass(Meta, Base)):\n    def hook(self):\n        pass\n"})
     assert _targets(g, "Base.run") == {"Base.hook", "Child.hook"}
 
+
+
+def test_type_checking_stub_does_not_hide_the_runtime_method():
+    # `if TYPE_CHECKING: def __new__` solo existe para el type checker: en ejecución la MRO
+    # sigue hasta Basic.__new__. jedi da a veces el stub y a veces Basic (sympy: Expr.__new__
+    # y AtomicExpr.__new__ → Basic) → los dos destinos
+    g = _graph({"p/o.py": UNRELATED, "p/m.py":
+                "from typing import TYPE_CHECKING\nimport typing\n\n"
+                "class Basic:\n    def __new__(cls):\n        pass\n\n"
+                "class Expr(Basic):\n    if TYPE_CHECKING:\n        def __new__(cls):\n            ...\n"
+                "    if typing.TYPE_CHECKING:\n        def hook(self):\n            ...\n"
+                "    else:\n        def hook(self):\n            pass\n\n"
+                "class Atomic(Expr):\n    def __new__(cls):\n        return Expr.__new__(cls)\n"
+                "    def go(self):\n        self.hook()\n"})
+    assert _targets(g, "Atomic.__new__") == {"Basic.__new__", "Expr.__new__"}
+    hooks = {c.start_line for c in g.caps.values() if c.name == "hook" and c.file_path == "p/m.py"}
+    caller = next(c for c in g.caps.values() if (c.properties or {}).get("qualified") == "Atomic.go")
+    # el `else` es el real; el stub del `if` se une
+    assert {d.start_line for _, ds in g._callees_of(caller) for d in ds} == hooks
+    stubs = {c.start_line for c in g.caps.values() if (c.properties or {}).get("typing_only")}
+    assert stubs == {10, 13}
+
+
+def test_dispatch_includes_stub_only_subclass():
+    # subclase de una sola base que solo declara el stub: `self.m()` en la base lo incluye
+    g = _graph({"p/o.py": UNRELATED, "p/m.py":
+                "from typing import TYPE_CHECKING\n\n"
+                "class A:\n    def run(self):\n        self.m()\n    def m(self):\n        pass\n\n"
+                "class B(A):\n    if TYPE_CHECKING:\n        def m(self):\n            ...\n"})
+    assert _targets(g, "A.run") == {"A.m", "B.m"}

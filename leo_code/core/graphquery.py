@@ -186,6 +186,9 @@ class _PyScope:
         # clase y una lista por método eran ~70k contenedores vivos más, y el GC recorriéndolos
         # se comía el presupuesto del chequeo (e).
         self.methods: dict[str, object] = {}                # "clase\0nombre" → def o tupla de defs
+        # `if TYPE_CHECKING: def m`: no existe en ejecución (la MRO sigue), pero el type checker
+        # y jedi lo dan como destino → se une al primer método real
+        self.stubs: dict[str, object] = {}
         self.classes: dict[str, list] = {}                  # clase → formas de sus bases
         pkgs = set()
         self._ingest(caps, pkgs)
@@ -262,9 +265,10 @@ class _PyScope:
                 self.binds[f][props["bind"][0]] = props["bind"]
             elif c.type not in _NOT_DEFS and c.content:
                 if "class" in props:
+                    table = self.stubs if props.get("typing_only") else self.methods
                     mk = f"{f}\0{props['class']}\0{c.name}"
-                    prev = self.methods.get(mk)
-                    self.methods[mk] = c if prev is None else (
+                    prev = table.get(mk)
+                    table[mk] = c if prev is None else (
                         prev if isinstance(prev, tuple) else (prev,)) + (c,)
                 else:
                     self.top[f][c.name].append(c)
@@ -290,6 +294,7 @@ class _PyScope:
         new.binds = defaultdict(dict, {f: d for f, d in prev.binds.items() if f not in changed})
         pre = tuple(f + "\0" for f in changed)
         new.methods = {k: v for k, v in prev.methods.items() if not k.startswith(pre)}
+        new.stubs = {k: v for k, v in prev.stubs.items() if not k.startswith(pre)}
         new.classes = {k: v for k, v in prev.classes.items() if not k.startswith(pre)}
         new._ingest(caps, set())
         if new.classes != prev.classes:
@@ -478,15 +483,19 @@ class _PyScope:
             if after not in mro:
                 return ()
             mro = mro[mro.index(after) + 1:]
+        stubs: tuple = ()
         for cls in mro:
+            st = self.stubs.get(f"{cls}\0{name}")
+            if st:
+                stubs += st if isinstance(st, tuple) else (st,)
             ms = self.methods.get(f"{cls}\0{name}")
             if ms:
-                return ms if isinstance(ms, tuple) else (ms,)
+                return (ms if isinstance(ms, tuple) else (ms,)) + stubs
             if cls[0] == "\0":
                 # ponytail: los ancestros de la base desconocida no se ven; si uno es clase del
                 # repo, la MRO real la pondría detrás (pierde precisión al cortar, no recall)
                 return None
-        return ()
+        return stubs
 
     def _dispatch(self, k: str, name: str, sup: bool):
         """`self.name()` (o `super().name()`) en la clase `k`: la clase y cada subclase.
@@ -495,8 +504,9 @@ class _PyScope:
         if self._cur is not None:
             self._seen_desc(k)
         methods, mros, bases, owners = self.methods, self._mros, self.bases, set()
+        stubs, stub_owners = self.stubs, set()
         for sub in self._desc(k):
-            if sub != k and f"{sub}\0{name}" not in methods:
+            if sub != k and f"{sub}\0{name}" not in methods and f"{sub}\0{name}" not in stubs:
                 b = bases[sub]
                 if len(b) == 1 and b[0][0] != "\0":
                     # una sola base y no redefine `name`: su MRO es [sub] + la del padre, que
@@ -508,6 +518,8 @@ class _PyScope:
                     continue        # subclase unida por nombre: su MRO tras `k` no se conoce
                 mro = mro[mro.index(k) + 1:]
             for c in mro:
+                if stubs and f"{c}\0{name}" in stubs:
+                    stub_owners.add(c)
                 if f"{c}\0{name}" in methods:
                     owners.add(c)   # el primer `name` de esta MRO
                     break
@@ -515,11 +527,11 @@ class _PyScope:
                     if sup or k in mro:
                         return None
                     break           # subclase unida por nombre: lo heredado ya lo cubre `k`
-        if not owners:
+        if not owners and not stub_owners:
             return None
         out = {}
-        for c in owners:
-            ms = methods[f"{c}\0{name}"]
+        for c, table in [(c, methods) for c in owners] + [(c, stubs) for c in stub_owners]:
+            ms = table[f"{c}\0{name}"]
             for d in ms if isinstance(ms, tuple) else (ms,):
                 out[d.id] = d
         # la def suelta si es una (lo normal), tupla si son varias: una lista por entrada de
