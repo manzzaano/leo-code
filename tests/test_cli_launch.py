@@ -95,6 +95,55 @@ def test_init_repoint_keeps_the_users_own_keys(tmp_path, monkeypatch):
     assert entry == {"command": "uvx", "args": PINNED[1:], "env": {"LEO_SEMANTIC": "1"}}
 
 
+def test_init_leaves_a_remote_entry_alone(tmp_path, monkeypatch, capsys):
+    """Fusionar `command` en una entrada http/sse no la cambia: Claude Code la sigue leyendo
+    como remota (probado con `claude mcp get`). Decir "Updated" sería mentir."""
+    import json
+    for client, rel, old in [
+        ("claude", ".mcp.json", {"type": "http", "url": "http://localhost:8000/mcp"}),
+        ("cursor", ".cursor/mcp.json", {"url": "http://localhost:8000/sse"}),
+        ("opencode", "opencode.json", {"type": "remote", "url": "http://h/mcp", "enabled": True}),
+    ]:
+        key = "mcp" if client == "opencode" else "mcpServers"
+        cfg = tmp_path / client / rel
+        cfg.parent.mkdir(parents=True)
+        text = json.dumps({key: {"leo-mcp": old}})
+        cfg.write_text(text, encoding="utf-8")
+        assert _init(tmp_path / client, client, monkeypatch, PINNED) == 0
+        assert cfg.read_text(encoding="utf-8") == text, client
+        assert "remote server" in capsys.readouterr().out
+
+
+def test_init_refuses_configs_of_the_wrong_shape(tmp_path, monkeypatch, capsys):
+    """Antes: AttributeError con traza y nada escrito. Ahora: aviso, exit 1, archivo intacto."""
+    cfg = tmp_path / ".mcp.json"
+    for text in ("[]", '{"mcpServers": null}', '{"mcpServers": []}'):
+        cfg.write_text(text, encoding="utf-8")
+        assert _init(tmp_path, "claude", monkeypatch, PINNED) == 1
+        assert cfg.read_text(encoding="utf-8") == text
+        assert "not touching it" in capsys.readouterr().err
+
+
+def test_init_reads_a_bom_and_keeps_non_ascii_text(tmp_path, monkeypatch):
+    import json
+    cfg = tmp_path / ".mcp.json"
+    cfg.write_text('﻿{"mcpServers": {"otro": {"command": "z", "env": {"N": "año"}}}}',
+                   encoding="utf-8")
+    assert _init(tmp_path, "claude", monkeypatch, PINNED) == 0
+    text = cfg.read_text(encoding="utf-8")
+    assert "año" in text and "\\u00f1" not in text
+    assert set(json.loads(text)["mcpServers"]) == {"otro", "leo-mcp"}
+
+
+def test_install_hook_refuses_hooks_of_the_wrong_shape(tmp_path, capsys):
+    target = tmp_path / "settings.json"
+    for text in ('{"hooks": []}', '{"hooks": {"PreToolUse": {}}}', '"x"'):
+        target.write_text(text, encoding="utf-8")
+        assert cli._install_hook(target, "PreToolUse", "Edit|Write", "leo_code.guard_hook") == 1
+        assert target.read_text(encoding="utf-8") == text
+        assert "not touching it" in capsys.readouterr().err
+
+
 # ---- ¿corre leo-mcp desde la caché de uv? ----
 
 def test_ephemeral_under_uv_cache_dir_even_without_archive_bucket(monkeypatch, tmp_path):

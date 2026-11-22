@@ -242,14 +242,17 @@ def _hook_python_ok(settings_text: str, module: str) -> bool | None:
 def _install_hook(target: Path, event: str, matcher: str, module: str) -> int:
     """Añade un hook de leo a un settings.json de Claude Code, sin pisar lo que haya.
     Idempotente; si el intérprete cambió de sitio, re-apunta la entrada existente."""
-    data = {}
-    if target.exists():
-        try:
-            data = json.loads(target.read_text(encoding="utf-8") or "{}")
-        except json.JSONDecodeError as e:
-            print(f"{target} is not valid JSON ({e}); not touching it.", file=sys.stderr)
-            return 1
-    entries = data.setdefault("hooks", {}).setdefault(event, [])
+    data, err = _read_config(target)
+    if not err:
+        hooks = data.setdefault("hooks", {})
+        if not isinstance(hooks, dict):
+            err = '"hooks" is not a JSON object'
+        elif not isinstance(hooks.setdefault(event, []), list):
+            err = f'"hooks.{event}" is not a list'
+    if err:
+        print(f"{target}: {err}; not touching it.", file=sys.stderr)
+        return 1
+    entries = hooks[event]
     command = _hook_command(module)
     for group in entries:
         for h in group.get("hooks", []):
@@ -295,9 +298,24 @@ def _maybe_hook(args, root: Path) -> int:
     return 0
 
 
+def _read_config(target: Path) -> tuple[dict | None, str | None]:
+    """(datos, None) o (None, motivo). Nunca reescribir una config que no entendemos:
+    se perderían otros servers o ajustes del usuario. Acepta BOM (Notepad, PowerShell 5)."""
+    if not target.exists():
+        return {}, None
+    try:
+        data = json.loads(target.read_text(encoding="utf-8-sig") or "{}")
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        return None, f"not valid JSON ({e})"
+    if not isinstance(data, dict):
+        return None, "the top level is not a JSON object"
+    return data, None
+
+
 def _write_json(target: Path, data: dict) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    # ensure_ascii=False: el texto del usuario (año, ruta con ñ) queda como lo escribió
+    target.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def _user_settings() -> Path:
@@ -373,17 +391,22 @@ def cmd_init(args) -> int:
         "cursor": (root / ".cursor" / "mcp.json", "mcpServers", std),
         "opencode": (root / "opencode.json", "mcp", {"type": "local", "command": launch, "enabled": True}),
     }[args.client]
-    data = {}
-    if target.exists():
-        try:
-            data = json.loads(target.read_text(encoding="utf-8") or "{}")
-        except json.JSONDecodeError as e:
-            # Nunca reescribir una config que no entendemos: se perderían otros servers.
-            print(f"{target} is not valid JSON ({e}); not touching it. Add manually:\n"
-                  + json.dumps({key: {"leo-mcp": entry}}, indent=2), file=sys.stderr)
-            return 1
-    servers = data.setdefault(key, {})
+    manual = json.dumps({key: {"leo-mcp": entry}}, indent=2)
+    data, err = _read_config(target)
+    if not err and not isinstance(data.setdefault(key, {}), dict):
+        err = f'"{key}" is not a JSON object'
+    if err:
+        print(f"{target}: {err}; not touching it. Add manually:\n{manual}", file=sys.stderr)
+        return 1
+    servers = data[key]
     old = servers.get("leo-mcp")
+    if isinstance(old, dict) and ("url" in old or old.get("type", "stdio") not in ("stdio", "local")):
+        # Una entrada remota (http/sse) con `command` añadido la sigue leyendo el cliente
+        # como remota (probado con Claude Code): "Updated" sería mentira. leo-mcp solo
+        # habla stdio, así que es un montaje propio del usuario (proxy, túnel): no se toca.
+        print(f"leo-mcp in {target} points to a remote server ({old.get('url', old.get('type'))});"
+              f" leaving it as is. To run it locally, replace that entry with:\n{manual}")
+        return _maybe_hook(args, root)
     # Repuntar una config vieja (p. ej. la de 0.3.0 a git+https) sin perder las claves
     # que haya puesto el usuario, como `env`.
     new = {**old, **entry} if isinstance(old, dict) else entry
