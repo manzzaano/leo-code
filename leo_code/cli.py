@@ -42,13 +42,23 @@ def _uv_cache_dir() -> str | None:
 
 
 def _ephemeral(path: str) -> bool:
-    """¿Está en la caché de uv (lo que corre `npx`/`uvx`)? La doc de uv trata esos entornos
-    como desechables: `uv cache clean` los borra.
+    """¿Está en una caché que su dueño borra (`npx`/`uvx`, `uv run --with`, `pipx run`)?
+    La doc de uv trata esos entornos como desechables (`uv cache clean`); pipx borra los de
+    `pipx run` a los 14 días de crearlos (`TEMP_VENV_EXPIRATION_THRESHOLD_DAYS`).
 
-    Primero la señal documentada (dentro de `uv cache dir`); si no, el bucket `archive-v*`
-    donde uv crea esos entornos (no documentado), que cubre `uvx --no-cache`: ahí el entorno
-    vive en un temporal fuera de `uv cache dir`.
+    Primero un `CACHEDIR.TAG` en una carpeta padre (estándar bford.info/cachedir: «esto es
+    caché»; lo escriben uv y pipx en la raíz de su caché, no en sus instalaciones de tools).
+    Luego `uv cache dir`; si no, el bucket `archive-v*` donde uv crea esos entornos (no
+    documentado), que cubre `uvx --no-cache`: ahí el entorno vive en un temporal sin etiqueta.
     """
+    d = os.path.dirname(os.path.abspath(path))
+    while True:
+        if os.path.isfile(os.path.join(d, "CACHEDIR.TAG")):
+            return True
+        parent = os.path.dirname(d)
+        if parent == d:
+            break
+        d = parent
     cache = _uv_cache_dir()
     if cache:
         p, c = (os.path.normcase(os.path.abspath(x)) for x in (path, cache))
@@ -58,6 +68,11 @@ def _ephemeral(path: str) -> bool:
         except ValueError:   # otra unidad en Windows
             pass
     return "archive-v" in path.replace("\\", "/")
+
+
+_EPHEMERAL_WHY = ("leo-mcp is running from a temporary cache (npx, uvx or pipx run)"
+                  " that uv or pipx may delete")
+_INSTALL_HINT = "`uv tool install leo-mcp` (or `pipx install leo-mcp`)"
 
 
 def _launch() -> list[str]:
@@ -187,7 +202,7 @@ def cmd_doctor(args) -> int:
     elif installed is False:
         row("guard hook", None, stale)
     elif _ephemeral(sys.executable):
-        row("guard hook", None, "not installed here (needs `uv tool install leo-mcp`, then leo-mcp init)")
+        row("guard hook", None, f"not installed here (needs {_INSTALL_HINT}, then leo-mcp init)")
     else:
         row("guard hook", None, "not installed here (run: leo-mcp init)")
     row("cache", None, str(engine._CACHE_DIR))
@@ -288,11 +303,10 @@ def _maybe_hook(args, root: Path) -> int:
     Solo Claude Code: es el único harness con PreToolUse."""
     if args.client == "claude" and not getattr(args, "no_hook", False):
         if _ephemeral(sys.executable):
-            # El hook apunta a este intérprete (ver _hook_command): desde la caché de uv
-            # fallaría en cada edición el día que uv lo borre.
-            print("Guard hook not installed: leo-mcp is running from uv's cache (npx/uvx),"
-                  " which uv may delete. To get it: `uv tool install leo-mcp`, then run"
-                  " `leo-mcp init` again.")
+            # El hook apunta a este intérprete (ver _hook_command): desde una caché
+            # fallaría en cada edición el día que uv o pipx la borren.
+            print(f"Guard hook not installed: {_EPHEMERAL_WHY}. To get it: {_INSTALL_HINT},"
+                  " then run `leo-mcp init` again.")
             return 0
         return _install_guard_hook(root)
     return 0
@@ -356,8 +370,8 @@ def _init_user(args) -> int:
     if getattr(args, "no_hook", False):
         return 0
     if _ephemeral(sys.executable):
-        print("Hooks not installed: leo-mcp is running from uv's cache (npx/uvx), which uv may"
-              " delete. To get them: `uv tool install leo-mcp`, then run `leo-mcp init --user` again.")
+        print(f"Hooks not installed: {_EPHEMERAL_WHY}. To get them: {_INSTALL_HINT},"
+              " then run `leo-mcp init --user` again.")
         return 0
     target = _user_settings()
     code = _install_hook(target, "PreToolUse", "Edit|Write", "leo_code.guard_hook")

@@ -153,6 +153,19 @@ def test_ephemeral_under_uv_cache_dir_even_without_archive_bucket(monkeypatch, t
     assert not cli._ephemeral(str(tmp_path / "proj" / ".venv" / "Scripts" / "python.exe"))
 
 
+def test_ephemeral_inside_a_tagged_cache_like_pipx_run(monkeypatch, tmp_path):
+    """`pipx run` (backend pip, el de por defecto sin uv) crea el entorno en
+    `<PIPX_HOME>/.cache/<hash>` y lo borra a los 14 días; antes init escribía ahí el MCP y
+    el hook (reproducido con pipx 1.18). La raíz lleva CACHEDIR.TAG; `pipx install` no."""
+    monkeypatch.setattr(cli, "_uv_cache_dir", lambda: None)
+    home = tmp_path / "pipx"
+    (home / ".cache" / "e039a7fa317b8c5" / "Scripts").mkdir(parents=True)
+    (home / ".cache" / "CACHEDIR.TAG").write_text("Signature: 8a477f597d28d172789f06886806bc55\n")
+    (home / "venvs" / "leo-mcp" / "Scripts").mkdir(parents=True)
+    assert cli._ephemeral(str(home / ".cache" / "e039a7fa317b8c5" / "Scripts" / "python.exe"))
+    assert not cli._ephemeral(str(home / "venvs" / "leo-mcp" / "Scripts" / "python.exe"))
+
+
 def test_ephemeral_falls_back_to_the_archive_bucket(monkeypatch):
     # `uvx --no-cache` usa un temporal fuera de `uv cache dir`; sin uv tampoco hay cache dir.
     monkeypatch.setattr(cli, "_uv_cache_dir", lambda: None)
